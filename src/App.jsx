@@ -143,6 +143,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
     {id:"log",label:"Log Position",icon:"mic"},
     {id:"strips",label:"Flight Strips",icon:"upload"},
+    {id:"rekap",label:"Rekap Strips",icon:"chart"},
     {id:"handover",label:"Handover Notes",icon:"note"},
   ]
   return (
@@ -312,48 +313,237 @@ const CabangLog = () => {
 }
 
 // ============================================================
-// CABANG: FLIGHT STRIPS
+// FPS COLOR DETECTION ENGINE
+// ============================================================
+const _rgbToHsl = (r,g,b) => {
+  r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0,l=(mx+mn)/2
+  if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);if(mx===r)h=((g-b)/d+(g<b?6:0))/6;else if(mx===g)h=((b-r)/d+2)/6;else h=((r-g)/d+4)/6}
+  return[h*360,s*100,l*100]
+}
+const _classifyPx = (r,g,b) => {
+  const[h,s,l]=_rgbToHsl(r,g,b)
+  if(l<25)return"dark"
+  if(h>=175&&h<=220&&s>=30&&l>=45&&l<=85)return"departure"
+  if(h>=38&&h<=72&&s>=40&&l>=55&&l<=92)return"arrival"
+  if(s<=12&&l>=80)return"white_cand"
+  return"other"
+}
+const _analyzeRow = (d,y,w) => {
+  const c={departure:0,arrival:0,white_cand:0,dark:0,other:0}
+  for(let x=0;x<w;x+=2){const i=(y*w+x)*4;const cls=_classifyPx(d[i],d[i+1],d[i+2]);c[cls]=(c[cls]||0)+1}
+  const t=Math.ceil(w/2),nd=t-(c.dark||0);if(nd<t*.3)return null
+  const best=[{k:"departure",n:c.departure},{k:"arrival",n:c.arrival},{k:"white_cand",n:c.white_cand}].sort((a,b)=>b.n-a.n)[0]
+  return(best.n/nd>=.30&&best.n>=10)?best.k:null
+}
+const _hasGrid = (d,sy,ey,w) => {
+  const mid=Math.floor((sy+ey)/2)
+  for(const y of[mid-2,mid,mid+2].filter(v=>v>=sy&&v<=ey)){
+    let trans=0,prev=false
+    for(let x=0;x<w;x++){const i=(y*w+x)*4;const dk=_rgbToHsl(d[i],d[i+1],d[i+2])[2]<40;if(dk&&!prev)trans++;prev=dk}
+    if(trans>=3)return true
+  }
+  return false
+}
+const _detectFPS = (imgData,w,h) => {
+  const d=imgData.data,rows=[]
+  for(let y=0;y<h;y++)rows.push(_analyzeRow(d,y,w))
+  const bands=[];let cur=null,start=0
+  for(let i=0;i<rows.length;i++){
+    if(rows[i]===cur)continue
+    if(cur)bands.push({color:cur,sy:start,ey:i-1,h:i-start})
+    cur=rows[i];start=i
+  }
+  if(cur)bands.push({color:cur,sy:start,ey:rows.length-1,h:rows.length-start})
+  const minH=h*.02,maxH=h*.35,strips={departure:0,arrival:0,overfly:0}
+  for(const b of bands){
+    if(b.h<minH||b.h>maxH)continue
+    if(b.color==="departure"||b.color==="arrival")strips[b.color]++
+    else if(b.color==="white_cand"&&_hasGrid(d,b.sy,b.ey,w))strips.overfly++
+  }
+  return strips
+}
+
+const FPS_HOURS = (()=>{const a=[];for(let h=0;h<24;h++)for(let m=0;m<60;m+=30)a.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);return a})()
+const FPS_TYPES = [
+  {key:"departure",label:"DEP",full:"Departure",sub:"Biru",color:"#0284C7",bg:"#E0F2FE",ring:"#7DD3FC",text:"#0C4A6E"},
+  {key:"arrival",label:"ARR",full:"Arrival",sub:"Kuning",color:"#CA8A04",bg:"#FEF9C3",ring:"#FDE68A",text:"#854D0E"},
+  {key:"overfly",label:"OVF",full:"Overfly",sub:"Putih",color:"#64748B",bg:"#F1F5F9",ring:"#CBD5E1",text:"#334155"},
+]
+
+// ============================================================
+// CABANG: FLIGHT STRIPS (with FPS Detection)
 // ============================================================
 const CabangStrips = () => {
   const ctx = useApp()
+  const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {units:["TWR"]}
+  const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
   const my = [...ctx.strips].reverse()
-  const [saving,setSaving] = useState(false)
-  const fileRef = useRef()
 
-  const upload = async (files) => {
+  const [preview,setPreview] = useState(null)
+  const [counts,setCounts] = useState(null)
+  const [analyzing,setAnalyzing] = useState(false)
+  const [saving,setSaving] = useState(false)
+  const [saved,setSaved] = useState(false)
+
+  const [unit,setUnit] = useState(br.units?.[0]||"TWR")
+  const unitSectors = mySectors.filter(s => s.unit === unit)
+  const [sectorIdx,setSectorIdx] = useState(0)
+  const [petugas,setPetugas] = useState(ctx.user.display_name||"")
+  const [stripDate,setStripDate] = useState(new Date().toISOString().slice(0,10))
+  const [jamMulai,setJamMulai] = useState("07:00")
+  const [jamSelesai,setJamSelesai] = useState("14:00")
+  const [notes,setNotes] = useState("")
+
+  const cvRef = useRef(null)
+  const fileRef = useRef(null)
+  const total = counts ? counts.departure + counts.arrival + counts.overfly : 0
+
+  const handleUpload = (e) => {
+    const file = e.target.files?.[0]
+    if(!file) return
+    setSaved(false); setCounts(null)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setPreview(ev.target.result)
+      const img = new Image()
+      img.onload = () => {
+        setAnalyzing(true)
+        setTimeout(() => {
+          const cv = cvRef.current; if(!cv) return
+          const sc = Math.min(1, 800/Math.max(img.width,img.height))
+          cv.width = Math.round(img.width*sc); cv.height = Math.round(img.height*sc)
+          const ctx2 = cv.getContext("2d",{willReadFrequently:true})
+          ctx2.drawImage(img,0,0,cv.width,cv.height)
+          setCounts(_detectFPS(ctx2.getImageData(0,0,cv.width,cv.height),cv.width,cv.height))
+          setAnalyzing(false)
+        },100)
+      }
+      img.src = ev.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const resetForm = () => {
+    setPreview(null); setCounts(null); setAnalyzing(false); setSaved(false); setNotes("")
+    if(fileRef.current) fileRef.current.value=""
+  }
+
+  const handleSave = async () => {
+    if(saving) return
     setSaving(true)
-    const rows = Array.from(files).map(f => ({
+    const row = {
       branch_code: ctx.user.branch_code,
-      unit: "TWR",
+      unit,
+      sector: unitSectors[sectorIdx]?.name || "Sector 1",
       shift: getShift(),
-      strip_date: new Date().toISOString().split("T")[0],
-      file_name: f.name,
-      traffic_count: Math.floor(Math.random()*30)+5,
+      strip_date: stripDate,
+      file_name: fileRef.current?.files?.[0]?.name || "strip_foto",
+      traffic_count: total,
+      departure_count: counts?.departure || 0,
+      arrival_count: counts?.arrival || 0,
+      overfly_count: counts?.overfly || 0,
+      petugas,
+      jam_mulai: jamMulai,
+      jam_selesai: jamSelesai,
+      notes,
       ocr_status: "processed",
       uploaded_by: ctx.user.id
-    }))
-    const { error } = await supabase.from("flight_strips").insert(rows)
-    if (error) alert("Error: "+error.message)
-    else await ctx.reload()
+    }
+    const { error } = await supabase.from("flight_strips").insert(row)
+    if(error) alert("Error: "+error.message)
+    else { await ctx.reload(); setSaved(true) }
     setSaving(false)
   }
 
+  const selSt = {width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13,outline:"none"}
+
   return (
     <div className="page-content">
-      <Header title="Flight Strips" sub="Upload foto strip"/>
-      <div className="panel"><div className="panel-header"><h2 className="panel-title">Upload Strip</h2></div>
+      <Header title="Flight Strips" sub={"Upload & deteksi FPS — "+ctx.user.branch_code}/>
+      <canvas ref={cvRef} style={{display:"none"}}/>
+
+      {/* Upload Panel */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="upload" s={16}/> Upload Foto Strip</h2></div>
         <div className="panel-body">
-          <div className="drop-zone" onClick={() => fileRef.current?.click()}>
-            <I n="upload" s={40}/><p className="drop-title">{saving?"Mengupload...":"Klik untuk upload foto strip"}</p>
-            <p className="drop-hint">JPG, PNG, PDF</p>
-            <input ref={fileRef} type="file" multiple accept="image/*,.pdf" style={{display:"none"}} onChange={e => upload(e.target.files)}/>
-          </div>
+          {!preview ? (
+            <div className="drop-zone" onClick={() => fileRef.current?.click()}>
+              <I n="upload" s={40}/>
+              <p className="drop-title">Klik atau tap untuk upload foto FPS</p>
+              <p className="drop-hint">Otomatis deteksi strip biru (DEP), kuning (ARR), putih (OVF)</p>
+              <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleUpload}/>
+            </div>
+          ) : (
+            <div style={{position:"relative"}}>
+              <img src={preview} alt="FPS" style={{width:"100%",borderRadius:10,maxHeight:260,objectFit:"cover",display:"block",border:"1px solid var(--border)"}}/>
+              {analyzing && (
+                <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.7)",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                  <span className="login-spinner"/><p style={{color:"#fff",marginTop:12,fontSize:13}}>Mendeteksi flight strips...</p>
+                </div>
+              )}
+              <button onClick={resetForm} style={{position:"absolute",top:8,right:8,width:28,height:28,borderRadius:"50%",background:"rgba(0,0,0,.5)",border:"none",color:"#fff",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Detection Result + Form */}
+      {counts && !analyzing && (
+        <div className="panel" style={{animation:"fadeIn .3s ease"}}>
+          <div className="panel-header"><h2 className="panel-title"><I n="plane" s={16}/> Hasil Deteksi</h2><span className="panel-counter">Total: {total}</span></div>
+          <div className="panel-body">
+
+            {/* Result cards */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
+              {FPS_TYPES.map(t => (
+                <div key={t.key} style={{background:t.bg,borderRadius:10,padding:"14px 8px",textAlign:"center",border:`1.5px solid ${t.ring}`}}>
+                  <div style={{fontSize:28,fontWeight:800,color:t.color,lineHeight:1}}>{counts[t.key]}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:t.text,marginTop:6}}>{t.full}</div>
+                  <div style={{fontSize:9,color:t.text+"88"}}>{t.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Ratio bar */}
+            {total>0 && <div style={{display:"flex",height:6,borderRadius:3,overflow:"hidden",gap:2,marginBottom:20}}>
+              {FPS_TYPES.map(t => {const p=(counts[t.key]/total)*100;return p>0?<div key={t.key} style={{width:p+"%",background:t.color,borderRadius:3,transition:"width .5s"}}/>:null})}
+            </div>}
+
+            {total===0 && <div className="empty-state" style={{padding:"12px 0"}}><p style={{color:"#f59e0b"}}>Tidak ada FPS terdeteksi — pastikan foto menampilkan strip berwarna dengan jelas.</p></div>}
+
+            {/* Form fields */}
+            <div className="form-grid">
+              <div className="field"><label>Petugas / Controller</label><input value={petugas} onChange={e => setPetugas(e.target.value)} placeholder="Nama lengkap"/></div>
+              <div className="field"><label>Unit</label><select value={unit} onChange={e => {setUnit(e.target.value);setSectorIdx(0)}} style={selSt}>{(br.units||["TWR"]).map(u => <option key={u}>{u}</option>)}</select></div>
+              <div className="field"><label>Sektor</label><select value={sectorIdx} onChange={e => setSectorIdx(+e.target.value)} style={selSt}>{unitSectors.length>0?unitSectors.map((s,i) => <option key={i} value={i}>{s.name}</option>):<option>-</option>}</select></div>
+              <div className="field"><label>Tanggal</label><input type="date" value={stripDate} onChange={e => setStripDate(e.target.value)}/></div>
+              <div className="field"><label>Jam Mulai</label><select value={jamMulai} onChange={e => setJamMulai(e.target.value)} style={selSt}>{FPS_HOURS.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
+              <div className="field"><label>Jam Selesai</label><select value={jamSelesai} onChange={e => setJamSelesai(e.target.value)} style={selSt}>{FPS_HOURS.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
+            </div>
+            <div className="field" style={{marginTop:8}}><label>Catatan (opsional)</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Cuaca, traffic, koordinasi khusus..."/></div>
+
+            <button className={"btn "+(saved?"btn-success":"btn-primary")} onClick={handleSave} disabled={saving||saved||!petugas.trim()} style={{marginTop:16,width:"100%"}}>
+              <I n={saved?"shield":"upload"} s={16}/> {saving?"Menyimpan...":saved?"✓ Tersimpan":"Simpan Data Strip"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* History table */}
       {my.length > 0 && <div className="panel">
-        <div className="panel-header"><h2 className="panel-title">Terupload</h2><span className="panel-counter">{my.length}</span></div>
-        <div className="panel-body"><div className="table-wrap"><table className="data-table"><thead><tr><th>File</th><th>Unit</th><th>Shift</th><th>Tanggal</th><th>Traffic</th><th>Status</th></tr></thead>
-        <tbody>{my.map(s => <tr key={s.id}><td><strong>{s.file_name||"Strip"}</strong></td><td>{s.unit}</td><td>{s.shift}</td><td>{fmtD(s.strip_date)}</td><td><strong>{s.traffic_count}</strong></td><td><span className="status-badge status-on">{s.ocr_status}</span></td></tr>)}</tbody></table></div></div>
+        <div className="panel-header"><h2 className="panel-title">Riwayat Upload</h2><span className="panel-counter">{my.length}</span></div>
+        <div className="panel-body"><div className="table-wrap"><table className="data-table"><thead><tr><th>Tanggal</th><th>Jam</th><th>Petugas</th><th>Unit</th><th>Sektor</th><th style={{textAlign:"center",color:"#0284C7"}}>DEP</th><th style={{textAlign:"center",color:"#CA8A04"}}>ARR</th><th style={{textAlign:"center",color:"#64748B"}}>OVF</th><th style={{textAlign:"center"}}>Total</th></tr></thead>
+        <tbody>{my.map(s => <tr key={s.id}>
+          <td>{fmtD(s.strip_date)}</td>
+          <td style={{color:"var(--fg-muted)"}}>{s.jam_mulai||"-"}{s.jam_selesai?("–"+s.jam_selesai):""}</td>
+          <td><strong>{s.petugas||"-"}</strong></td>
+          <td><span className="unit-tag">{s.unit}</span></td>
+          <td>{s.sector||"-"}</td>
+          <td style={{textAlign:"center",color:"#0284C7",fontWeight:700}}>{s.departure_count||0}</td>
+          <td style={{textAlign:"center",color:"#CA8A04",fontWeight:700}}>{s.arrival_count||0}</td>
+          <td style={{textAlign:"center",color:"#64748B",fontWeight:700}}>{s.overfly_count||0}</td>
+          <td style={{textAlign:"center",fontWeight:800}}>{s.traffic_count}</td>
+        </tr>)}</tbody></table></div></div>
       </div>}
     </div>
   )
@@ -411,6 +601,156 @@ const CabangHandover = () => {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ============================================================
+// CABANG: REKAP FLIGHT STRIPS
+// ============================================================
+const CabangRekap = () => {
+  const ctx = useApp()
+  const myStrips = ctx.strips.filter(s => s.branch_code === ctx.user.branch_code)
+  const [period,setPeriod] = useState("month")
+  const [filterPetugas,setFilterPetugas] = useState("")
+  const [filterUnit,setFilterUnit] = useState("")
+  const [chartMode,setChartMode] = useState("bar")
+
+  const filtered = myStrips.filter(s => {
+    const d = (new Date()-new Date(s.strip_date))/864e5
+    const pOk = period==="today" ? new Date(s.strip_date).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
+    const petOk = !filterPetugas || (s.petugas||"").toLowerCase().includes(filterPetugas.toLowerCase())
+    const unitOk = !filterUnit || (s.unit||"").toLowerCase().includes(filterUnit.toLowerCase())
+    return pOk && petOk && unitOk
+  }).sort((a,b) => (b.strip_date+""+(b.jam_mulai||"")).localeCompare(a.strip_date+""+(a.jam_mulai||"")))
+
+  const totals = filtered.reduce((a,r) => ({dep:a.dep+(r.departure_count||0),arr:a.arr+(r.arrival_count||0),ovf:a.ovf+(r.overfly_count||0),tc:a.tc+(r.traffic_count||0)}),{dep:0,arr:0,ovf:0,tc:0})
+
+  // Group by date for chart
+  const byDate = {}
+  filtered.forEach(r => {
+    if(!byDate[r.strip_date]) byDate[r.strip_date] = {dep:0,arr:0,ovf:0}
+    byDate[r.strip_date].dep += r.departure_count||0
+    byDate[r.strip_date].arr += r.arrival_count||0
+    byDate[r.strip_date].ovf += r.overfly_count||0
+  })
+  const dates = Object.keys(byDate).sort()
+  const chartMax = Math.max(1,...dates.map(d => byDate[d].dep+byDate[d].arr+byDate[d].ovf))
+
+  const exportCSV = () => {
+    const head = ["Tanggal","Jam Mulai","Jam Selesai","Petugas","Unit","Sektor","DEP","ARR","OVF","Total","Catatan"]
+    const rows = filtered.map(r => [r.strip_date,r.jam_mulai||"",r.jam_selesai||"",r.petugas||"",r.unit||"",r.sector||"",r.departure_count||0,r.arrival_count||0,r.overfly_count||0,r.traffic_count||0,`"${(r.notes||"").replace(/"/g,'""')}"`])
+    const csv = [head.join(","),...rows.map(r => r.join(","))].join("\n")
+    const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"})
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob)
+    a.download = `rekap_fps_${ctx.user.branch_code}_${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(a.href)
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="Rekap Flight Strips" sub={"Data traffic — "+ctx.user.branch_code}/>
+
+      {/* Filter bar */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+        <div className="filter-bar" style={{margin:0}}>{[["today","Hari Ini"],["week","7 Hari"],["month","30 Hari"]].map(([k,v]) => <button key={k} className={"filter-btn"+(period===k?" filter-btn-active":"")} onClick={() => setPeriod(k)}>{v}</button>)}</div>
+        <input value={filterPetugas} onChange={e => setFilterPetugas(e.target.value)} placeholder="Filter petugas..." className="filter-input" style={{flex:1,minWidth:100,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}/>
+        <input value={filterUnit} onChange={e => setFilterUnit(e.target.value)} placeholder="Unit..." className="filter-input" style={{width:80,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}/>
+      </div>
+
+      {/* Summary stats */}
+      <div className="stats-grid">
+        <Stat icon="plane" label="Total FPS" value={totals.tc} sub={filtered.length+" record"} color="#10b981"/>
+        <Stat icon="upload" label="Departure" value={totals.dep} color="#0284C7"/>
+        <Stat icon="download" label="Arrival" value={totals.arr} color="#CA8A04"/>
+        <Stat icon="radar" label="Overfly" value={totals.ovf} color="#64748B"/>
+      </div>
+
+      {/* Chart */}
+      {dates.length>0 && <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title"><I n="chart" s={16}/> Grafik</h2>
+          <div style={{display:"flex",gap:4}}>
+            {[["bar","Bar"],["line","Trend"]].map(([k,v]) => <button key={k} className={"filter-btn"+(chartMode===k?" filter-btn-active":"")} onClick={() => setChartMode(k)} style={{padding:"4px 12px",fontSize:11}}>{v}</button>)}
+          </div>
+        </div>
+        <div className="panel-body">
+          <svg viewBox={`0 0 680 ${chartMode==="line"?200:240}`} width="100%" style={{display:"block"}}>
+            {chartMode==="bar" ? (
+              <>
+                {/* Bar chart */}
+                {[0,.25,.5,.75,1].map(f => {const y=20+(1-f)*180;return <g key={f}><line x1="46" y1={y} x2="664" y2={y} stroke="var(--border)" strokeWidth=".5"/><text x="42" y={y+4} textAnchor="end" fontSize="10" fill="var(--fg-muted)">{Math.round(chartMax*f)}</text></g>})}
+                {dates.map((d,i) => {
+                  const gw=Math.min(54,(618/dates.length)-8),bw=Math.max(3,(gw-4)/3),gap=(618-gw*dates.length)/(dates.length+1)
+                  const x0=46+gap+i*(gw+gap)
+                  const vals=[byDate[d].dep,byDate[d].arr,byDate[d].ovf],cols=["#0284C7","#CA8A04","#64748B"]
+                  return <g key={d}>
+                    {vals.map((v,j) => {const bh=(v/chartMax)*180;return <rect key={j} x={x0+j*(bw+1)} y={20+180-bh} width={bw} height={Math.max(0,bh)} fill={cols[j]} rx="2" opacity=".85"/>})}
+                    <text x={x0+gw/2} y={225} textAnchor="middle" fontSize="9" fill="var(--fg-muted)" transform={`rotate(-25,${x0+gw/2},225)`}>{d.slice(5)}</text>
+                  </g>
+                })}
+              </>
+            ) : (
+              <>
+                {/* Line chart */}
+                {[0,.25,.5,.75,1].map(f => {const y=16+(1-f)*150;return <line key={f} x1="46" y1={y} x2="664" y2={y} stroke="var(--border)" strokeWidth=".5"/>})}
+                {(() => {
+                  const pts=dates.map((d,i) => ({x:46+(dates.length===1?309:(i/(dates.length-1))*618),y:16+(1-(byDate[d].dep+byDate[d].arr+byDate[d].ovf)/chartMax)*150,v:byDate[d].dep+byDate[d].arr+byDate[d].ovf,d}))
+                  const pathD=pts.map((p,i) => `${i===0?"M":"L"}${p.x},${p.y}`).join(" ")
+                  return <>
+                    <path d={`${pathD} L${pts[pts.length-1].x},166 L${pts[0].x},166 Z`} fill="#0284C7" opacity=".1"/>
+                    <path d={pathD} fill="none" stroke="#0284C7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    {pts.map((p,i) => <g key={i}><circle cx={p.x} cy={p.y} r="4" fill="var(--card)" stroke="#0284C7" strokeWidth="2"/><text x={p.x} y={p.y-10} textAnchor="middle" fontSize="10" fontWeight="600" fill="#0284C7">{p.v}</text><text x={p.x} y={185} textAnchor="middle" fontSize="9" fill="var(--fg-muted)">{p.d.slice(5)}</text></g>)}
+                  </>
+                })()}
+              </>
+            )}
+          </svg>
+          {/* Legend */}
+          <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:8}}>
+            {FPS_TYPES.map(t => <div key={t.key} style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--fg-muted)"}}><div style={{width:10,height:10,borderRadius:2,background:t.color}}/>{t.full}</div>)}
+          </div>
+        </div>
+      </div>}
+
+      {/* Data Table */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Data Detail</h2><span className="panel-counter">{filtered.length}</span></div>
+        <div className="panel-body">
+          {filtered.length===0 ? <div className="empty-state"><p>Tidak ada data untuk filter ini</p></div> :
+          <div className="table-wrap"><table className="data-table"><thead><tr>
+            <th>Tanggal</th><th>Jam</th><th>Petugas</th><th>Unit</th><th>Sektor</th>
+            <th style={{textAlign:"center",color:"#0284C7"}}>DEP</th>
+            <th style={{textAlign:"center",color:"#CA8A04"}}>ARR</th>
+            <th style={{textAlign:"center",color:"#64748B"}}>OVF</th>
+            <th style={{textAlign:"center"}}>Total</th><th>Catatan</th>
+          </tr></thead>
+          <tbody>{filtered.map(s => <tr key={s.id}>
+            <td style={{whiteSpace:"nowrap"}}>{fmtD(s.strip_date)}</td>
+            <td style={{whiteSpace:"nowrap",color:"var(--fg-muted)",fontSize:12}}>{s.jam_mulai||"-"}{s.jam_selesai?(" – "+s.jam_selesai):""}</td>
+            <td><strong>{s.petugas||"-"}</strong></td>
+            <td><span className="unit-tag">{s.unit}</span></td>
+            <td>{s.sector||"-"}</td>
+            <td style={{textAlign:"center",color:"#0284C7",fontWeight:700}}>{s.departure_count||0}</td>
+            <td style={{textAlign:"center",color:"#CA8A04",fontWeight:700}}>{s.arrival_count||0}</td>
+            <td style={{textAlign:"center",color:"#64748B",fontWeight:700}}>{s.overfly_count||0}</td>
+            <td style={{textAlign:"center",fontWeight:800}}>{s.traffic_count}</td>
+            <td style={{fontSize:11,color:"var(--fg-muted)",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.notes||"-"}</td>
+          </tr>)}</tbody>
+          <tfoot><tr style={{fontWeight:700}}>
+            <td colSpan={5} style={{textAlign:"right",color:"var(--fg-muted)"}}>TOTAL</td>
+            <td style={{textAlign:"center",color:"#0284C7"}}>{totals.dep}</td>
+            <td style={{textAlign:"center",color:"#CA8A04"}}>{totals.arr}</td>
+            <td style={{textAlign:"center",color:"#64748B"}}>{totals.ovf}</td>
+            <td style={{textAlign:"center"}}>{totals.tc}</td>
+            <td></td>
+          </tr></tfoot>
+          </table></div>}
+        </div>
+      </div>
+
+      {/* Export */}
+      {filtered.length>0 && <button className="btn btn-primary" onClick={exportCSV} style={{marginTop:4}}><I n="download" s={16}/> Export CSV</button>}
     </div>
   )
 }
@@ -659,7 +999,7 @@ export default function App() {
 
   const pageMap = user.role === "admin"
     ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
-    : {dashboard:CabangDash,log:CabangLog,strips:CabangStrips,handover:CabangHandover}
+    : {dashboard:CabangDash,log:CabangLog,strips:CabangStrips,rekap:CabangRekap,handover:CabangHandover}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
