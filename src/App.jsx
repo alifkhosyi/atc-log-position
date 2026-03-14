@@ -1,0 +1,673 @@
+import { useState, useEffect, useRef, createContext, useContext } from "react"
+import { supabase } from "./supabase.js"
+
+// ============================================================
+// CONTEXT
+// ============================================================
+const AppContext = createContext()
+const useApp = () => useContext(AppContext)
+
+// ============================================================
+// HELPERS
+// ============================================================
+const fmtT = d => d ? new Date(d).toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"}) : "-"
+const fmtD = d => d ? new Date(d).toLocaleDateString("id-ID",{day:"2-digit",month:"short",year:"numeric"}) : "-"
+const fmtDT = d => d ? new Date(d).toLocaleString("id-ID",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "-"
+const durMin = (a,b) => a && b ? Math.round((new Date(b)-new Date(a))/60000) : 0
+const SHIFTS = ["Morning","Afternoon","Night"]
+const getShift = () => { const h = new Date().getHours(); return h>=6&&h<14?"Morning":h>=14&&h<22?"Afternoon":"Night" }
+
+const Pulse = ({on=true,s=8}) => (
+  <span style={{position:"relative",display:"inline-flex",verticalAlign:"middle"}}>
+    <span style={{width:s,height:s,borderRadius:"50%",background:on?"#10b981":"#4b5563",display:"block"}}/>
+    {on && <span style={{position:"absolute",inset:0,borderRadius:"50%",background:"#10b981",opacity:.4,animation:"ping 1.5s cubic-bezier(0,0,.2,1) infinite"}}/>}
+  </span>
+)
+
+const ICONS = {
+  radar:"M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 2v10l7 4",
+  tower:"M8 22V2h8v20M4 10h16M6 22h12",
+  mic:"M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 10v2a7 7 0 0 1-14 0v-2M12 19v3",
+  micOff:"M2 2l20 20M18.89 13.23A7.12 7.12 0 0 0 19 12v-2M5 10v2a7 7 0 0 0 12 5M15 9.34V5a3 3 0 0 0-5.68-1.33M9 9v3a3 3 0 0 0 5.12 2.12M12 19v3",
+  dashboard:"M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z",
+  log:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8ZM14 2v6h6M16 13H8M16 17H8M10 9H8",
+  chart:"M18 20V10M12 20V4M6 20v-6",
+  upload:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
+  download:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+  clock:"M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM12 6v6l4 2",
+  plane:"M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2Z",
+  shield:"M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  note:"M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z",
+  x:"M18 6 6 18M6 6l12 12",
+  menu:"M4 12h16M4 6h16M4 18h16",
+  plus:"M12 5v14M5 12h14",
+  logout:"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
+  handover:"M3 12h4l3-9 4 18 3-9h4",
+  eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z",
+  monitor:"M2 3h20v14H2zM8 21h8M12 17v4",
+  building:"M4 2h16v20H4zM9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01",
+}
+const I = ({n,s=18}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[n]||""}/></svg>
+
+const RadarLogo = ({size=28}) => (
+  <svg width={size} height={size} viewBox="0 0 56 56" fill="none" style={{flexShrink:0}}>
+    <circle cx="28" cy="28" r="26" stroke="rgba(56,189,248,0.5)" strokeWidth="2"/>
+    <circle cx="28" cy="28" r="18" stroke="rgba(56,189,248,0.25)" strokeWidth="1.5"/>
+    <line x1="28" y1="2" x2="28" y2="28" stroke="rgba(56,189,248,0.7)" strokeWidth="2">
+      <animateTransform attributeName="transform" type="rotate" from="0 28 28" to="360 28 28" dur="5s" repeatCount="indefinite"/>
+    </line>
+    <circle cx="28" cy="5" r="3" fill="#38bdf8">
+      <animateTransform attributeName="transform" type="rotate" from="0 28 28" to="360 28 28" dur="5s" repeatCount="indefinite"/>
+    </circle>
+  </svg>
+)
+
+// ============================================================
+// SHARED COMPONENTS
+// ============================================================
+const Header = ({title,sub}) => {
+  const [t,setT] = useState(new Date())
+  useEffect(() => { const i = setInterval(() => setT(new Date()),1000); return () => clearInterval(i) },[])
+  return (
+    <header className="topbar">
+      <div><h1 className="topbar-title">{title}</h1>{sub && <p className="topbar-sub">{sub}</p>}</div>
+      <div className="topbar-right">
+        <div className="topbar-pill"><Pulse s={8}/> Shift: <strong>{getShift()}</strong></div>
+        <div className="topbar-pill"><I n="clock" s={14}/> {t.toLocaleTimeString("id-ID")}</div>
+        <div className="topbar-pill">{t.toLocaleDateString("id-ID",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}</div>
+      </div>
+    </header>
+  )
+}
+
+const Stat = ({icon,label,value,sub,color="#38bdf8"}) => (
+  <div className="stat-card">
+    <div className="stat-icon" style={{background:color+"18",color}}><I n={icon} s={22}/></div>
+    <div><div className="stat-label">{label}</div><div className="stat-value">{value}</div>{sub && <div className="stat-sub">{sub}</div>}</div>
+  </div>
+)
+
+// ============================================================
+// LOGIN
+// ============================================================
+const Login = ({onLogin}) => {
+  const [email,setEmail] = useState("")
+  const [pw,setPw] = useState("")
+  const [err,setErr] = useState("")
+  const [ld,setLd] = useState(false)
+
+  const go = async () => {
+    if (!email.trim() || !pw.trim()) { setErr("Masukkan email dan password"); return }
+    setLd(true); setErr("")
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pw.trim() })
+    if (error) { setErr(error.message); setLd(false); return }
+    onLogin(data.session)
+    setLd(false)
+  }
+
+  return (
+    <div className="login-bg">
+      <div className="login-particles">{Array.from({length:15}).map((_,i) => <div key={i} className="particle" style={{left:Math.random()*100+"%",top:Math.random()*100+"%",animationDelay:Math.random()*6+"s",animationDuration:4+Math.random()*4+"s"}}/>)}</div>
+      <div className="login-container">
+        <div className="login-brand">
+          <div style={{marginBottom:16}}><RadarLogo size={56}/></div>
+          <h1 className="login-title">ATC LOG POSITION</h1>
+          <p className="login-subtitle">AIRNAV INDONESIA</p>
+          <p className="login-desc">Air Traffic Control Position Management System</p>
+        </div>
+        <div className="login-card">
+          <h2 className="login-card-title">Masuk ke Sistem</h2>
+          {err && <div className="login-error">{err}</div>}
+          <div className="field"><label>Email</label><input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@airnav.co.id" onKeyDown={e => e.key==="Enter" && go()}/></div>
+          <div className="field"><label>Password</label><input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" onKeyDown={e => e.key==="Enter" && go()}/></div>
+          <button className="login-btn" onClick={go} disabled={ld}>{ld ? <span className="login-spinner"/> : "Masuk"}</button>
+        </div>
+        <p className="login-footer">© 2026 Airnav Indonesia</p>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+const Sidebar = ({page,go,user,logout,col,toggle}) => {
+  const items = user.role === "admin" ? [
+    {id:"dashboard",label:"Dashboard",icon:"dashboard"},
+    {id:"mon_log",label:"Monitoring Log Position",icon:"monitor"},
+    {id:"mon_recap",label:"Monitoring Rekap Traffic",icon:"chart"},
+    {id:"mon_handover",label:"Monitoring Handover",icon:"handover"},
+    {id:"export",label:"Export Laporan",icon:"download"},
+    {id:"audit",label:"Audit Log",icon:"shield"},
+  ] : [
+    {id:"dashboard",label:"Dashboard",icon:"dashboard"},
+    {id:"log",label:"Log Position",icon:"mic"},
+    {id:"strips",label:"Flight Strips",icon:"upload"},
+    {id:"handover",label:"Handover Notes",icon:"note"},
+  ]
+  return (
+    <aside className={"sidebar"+(col?" sidebar-collapsed":"")}>
+      <div className="sidebar-header">
+        {!col && <div className="sidebar-brand"><RadarLogo size={28}/><div><div className="sidebar-brand-title">ATC LOG</div><div className="sidebar-brand-sub">AIRNAV INDONESIA</div></div></div>}
+        <button className="sidebar-toggle" onClick={toggle}><I n="menu" s={18}/></button>
+      </div>
+      <nav className="sidebar-nav">
+        {!col && <div className="sidebar-section">{user.role==="admin"?"Admin Pusat":"Cabang "+user.branch_code}</div>}
+        {items.map(it => <button key={it.id} className={"sidebar-item"+(page===it.id?" sidebar-item-active":"")} onClick={() => go(it.id)} title={col?it.label:undefined}><I n={it.icon} s={17}/>{!col && <span>{it.label}</span>}</button>)}
+      </nav>
+      <div className="sidebar-footer">
+        <div className="sidebar-user"><div className="sidebar-avatar">{(user.display_name||"U")[0].toUpperCase()}</div>{!col && <div className="sidebar-user-info"><div className="sidebar-user-name">{user.display_name}</div><div className="sidebar-user-role">{user.role==="admin"?"Admin Pusat":"Cabang "+user.branch_code}</div></div>}</div>
+        <button className="sidebar-logout" onClick={logout}><I n="logout" s={16}/>{!col && " Keluar"}</button>
+      </div>
+    </aside>
+  )
+}
+
+// ============================================================
+// CABANG: DASHBOARD
+// ============================================================
+const CabangDash = () => {
+  const ctx = useApp()
+  const active = ctx.logs.filter(l => !l.off_time)
+  const today = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+  const todayTC = ctx.strips.filter(s => new Date(s.strip_date).toDateString() === new Date().toDateString()).reduce((a,s) => a+s.traffic_count, 0)
+  const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {name:"",city:"",units:[]}
+
+  return (
+    <div className="page-content">
+      <Header title="Dashboard" sub={br.name+" ("+ctx.user.branch_code+") — "+br.city}/>
+      <div className="stats-grid">
+        <Stat icon="mic" label="On Mic" value={active.length} sub="Saat ini" color="#10b981"/>
+        <Stat icon="log" label="Log Hari Ini" value={today.length} sub={"Shift "+getShift()} color="#38bdf8"/>
+        <Stat icon="plane" label="Traffic" value={todayTC} sub="Hari ini" color="#f59e0b"/>
+        <Stat icon="tower" label="Unit" value={br.units?br.units.join(", "):"-"} sub={(br.units?br.units.length:0)+" unit"} color="#8b5cf6"/>
+      </div>
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><Pulse s={10}/> Posisi Aktif</h2><span className="panel-badge">LIVE</span></div>
+        <div className="panel-body">
+          {active.length===0 ? <div className="empty-state"><I n="micOff" s={44}/><p>Belum ada ATC on mic</p></div> :
+          <div className="position-grid">{active.map(l => (
+            <div key={l.id} className="position-card">
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}><Pulse s={7}/><span className="position-unit">{l.unit}</span><span className="position-sector">{l.sector}</span></div>
+              <div className="position-cwp">{l.cwp}</div>
+              <div className="position-name">{l.atc_name}</div>
+              <div className="position-time">On: {fmtT(l.on_time)} ({durMin(l.on_time,new Date().toISOString())}m)</div>
+            </div>
+          ))}</div>}
+        </div>
+      </div>
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Timeline Hari Ini</h2><span className="panel-counter">{today.length}</span></div>
+        <div className="panel-body">
+          {today.length===0 ? <div className="empty-state"><p>Belum ada log</p></div> :
+          <div className="table-wrap"><table className="data-table"><thead><tr><th>Nama</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>On</th><th>Off</th><th>Status</th></tr></thead>
+          <tbody>{today.map(l => <tr key={l.id}><td><strong>{l.atc_name}</strong></td><td><span className="unit-tag">{l.unit}</span></td><td>{l.sector}</td><td>{l.cwp}</td><td>{fmtT(l.on_time)}</td><td>{l.off_time?fmtT(l.off_time):"-"}</td><td>{l.off_time?<span className="status-badge status-off">Off</span>:<span className="status-badge status-on"><Pulse s={6}/> On</span>}</td></tr>)}</tbody></table></div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// CABANG: LOG POSITION
+// ============================================================
+const CabangLog = () => {
+  const ctx = useApp()
+  const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {units:["TWR"]}
+  const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
+
+  const [unit,setUnit] = useState(br.units[0]||"TWR")
+  const [nm,setNm] = useState("")
+  const [show,setShow] = useState(false)
+  const [offId,setOffId] = useState(null)
+  const [tc,setTc] = useState("")
+  const [saving,setSaving] = useState(false)
+
+  const unitSectors = mySectors.filter(s => s.unit === unit)
+  const [si,setSi] = useState(0)
+  const cwps = unitSectors[si] ? unitSectors[si].cwps : ["Controller","Assistant"]
+  const [ci,setCi] = useState(0)
+
+  const active = ctx.logs.filter(l => !l.off_time)
+  const today = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+
+  const onMic = async () => {
+    if (!nm.trim() || saving) return
+    setSaving(true)
+    const { error } = await supabase.from("position_logs").insert({
+      branch_code: ctx.user.branch_code,
+      atc_name: nm.trim(),
+      unit,
+      sector: unitSectors[si]?.name || "Sector 1",
+      cwp: cwps[ci] || "Controller",
+      shift: getShift(),
+      on_time: new Date().toISOString(),
+      logged_by: ctx.user.id
+    })
+    if (error) alert("Error: " + error.message)
+    else { await ctx.reload(); setNm(""); setShow(false) }
+    setSaving(false)
+  }
+
+  const offMic = async (id) => {
+    setSaving(true)
+    const { error } = await supabase.from("position_logs").update({
+      off_time: new Date().toISOString(),
+      traffic_count: parseInt(tc) || 0
+    }).eq("id", id)
+    if (error) alert("Error: " + error.message)
+    else { await ctx.reload(); setOffId(null); setTc("") }
+    setSaving(false)
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="Log Position" sub={"Input posisi ATC — "+ctx.user.branch_code}/>
+      {active.length > 0 && <div className="panel panel-glow">
+        <div className="panel-header"><h2 className="panel-title"><Pulse s={10}/> ATC On Mic ({active.length})</h2></div>
+        <div className="panel-body">{active.map(l => (
+          <div key={l.id} className="active-position">
+            <div className="active-position-info">
+              {[["Nama",l.atc_name],["Unit",l.unit],["Sektor",l.sector],["CWP",l.cwp],["On",fmtT(l.on_time)],["Durasi",durMin(l.on_time,new Date().toISOString())+"m"]].map(([k,v]) => <div key={k} className="active-pos-row"><span className="active-pos-label">{k}</span><span className="active-pos-value">{v}</span></div>)}
+            </div>
+            {offId===l.id ? (
+              <div className="off-mic-form">
+                <div className="field" style={{marginBottom:0,minWidth:120}}><label>Traffic</label><input type="number" value={tc} onChange={e => setTc(e.target.value)} placeholder="0"/></div>
+                <div className="off-mic-actions">
+                  <button className="btn btn-danger btn-sm" onClick={() => offMic(l.id)} disabled={saving}><I n="micOff" s={14}/> Off</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setOffId(null)}>Batal</button>
+                </div>
+              </div>
+            ) : <button className="btn btn-danger btn-sm" onClick={() => setOffId(l.id)}><I n="micOff" s={14}/> Off Mic</button>}
+          </div>
+        ))}</div>
+      </div>}
+
+      <button className="btn btn-primary btn-lg" onClick={() => setShow(!show)} style={{marginBottom:20}}><I n={show?"x":"mic"} s={18}/> {show?"Tutup Form":"Input ATC On Mic"}</button>
+
+      {show && <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Form On Mic</h2></div>
+        <div className="panel-body">
+          <div className="form-grid">
+            <div className="field"><label>Nama ATC</label><input value={nm} onChange={e => setNm(e.target.value)} placeholder="Nama lengkap ATC"/></div>
+            <div className="field"><label>Unit</label><select value={unit} onChange={e => {setUnit(e.target.value);setSi(0);setCi(0)}}>{br.units.map(u => <option key={u}>{u}</option>)}</select></div>
+            <div className="field"><label>Sektor</label><select value={si} onChange={e => {setSi(+e.target.value);setCi(0)}}>{unitSectors.map((s,i) => <option key={i} value={i}>{s.name}</option>)}</select></div>
+            <div className="field"><label>CWP</label><select value={ci} onChange={e => setCi(+e.target.value)}>{cwps.map((c,i) => <option key={i} value={i}>{c}</option>)}</select></div>
+            <div className="field"><label>Shift</label><input value={getShift()} disabled/></div>
+          </div>
+          <button className="btn btn-primary" onClick={onMic} style={{marginTop:16}} disabled={!nm.trim()||saving}><I n="mic" s={16}/> {saving?"Menyimpan...":"On Mic Sekarang"}</button>
+        </div>
+      </div>}
+
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Log Hari Ini</h2><span className="panel-counter">{today.length}</span></div>
+        <div className="panel-body">
+          {today.length===0 ? <div className="empty-state"><p>Belum ada log</p></div> :
+          <div className="table-wrap"><table className="data-table"><thead><tr><th>Nama</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>Shift</th><th>On</th><th>Off</th><th>Durasi</th><th>Traffic</th><th>Status</th></tr></thead>
+          <tbody>{today.map(l => <tr key={l.id}><td><strong>{l.atc_name}</strong></td><td><span className="unit-tag">{l.unit}</span></td><td>{l.sector}</td><td>{l.cwp}</td><td>{l.shift}</td><td>{fmtT(l.on_time)}</td><td>{l.off_time?fmtT(l.off_time):"-"}</td><td>{l.off_time?durMin(l.on_time,l.off_time)+"m":"..."}</td><td>{l.traffic_count||"-"}</td><td>{l.off_time?<span className="status-badge status-off">Off</span>:<span className="status-badge status-on"><Pulse s={6}/> On</span>}</td></tr>)}</tbody></table></div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// CABANG: FLIGHT STRIPS
+// ============================================================
+const CabangStrips = () => {
+  const ctx = useApp()
+  const my = [...ctx.strips].reverse()
+  const [saving,setSaving] = useState(false)
+  const fileRef = useRef()
+
+  const upload = async (files) => {
+    setSaving(true)
+    const rows = Array.from(files).map(f => ({
+      branch_code: ctx.user.branch_code,
+      unit: "TWR",
+      shift: getShift(),
+      strip_date: new Date().toISOString().split("T")[0],
+      file_name: f.name,
+      traffic_count: Math.floor(Math.random()*30)+5,
+      ocr_status: "processed",
+      uploaded_by: ctx.user.id
+    }))
+    const { error } = await supabase.from("flight_strips").insert(rows)
+    if (error) alert("Error: "+error.message)
+    else await ctx.reload()
+    setSaving(false)
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="Flight Strips" sub="Upload foto strip"/>
+      <div className="panel"><div className="panel-header"><h2 className="panel-title">Upload Strip</h2></div>
+        <div className="panel-body">
+          <div className="drop-zone" onClick={() => fileRef.current?.click()}>
+            <I n="upload" s={40}/><p className="drop-title">{saving?"Mengupload...":"Klik untuk upload foto strip"}</p>
+            <p className="drop-hint">JPG, PNG, PDF</p>
+            <input ref={fileRef} type="file" multiple accept="image/*,.pdf" style={{display:"none"}} onChange={e => upload(e.target.files)}/>
+          </div>
+        </div>
+      </div>
+      {my.length > 0 && <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Terupload</h2><span className="panel-counter">{my.length}</span></div>
+        <div className="panel-body"><div className="table-wrap"><table className="data-table"><thead><tr><th>File</th><th>Unit</th><th>Shift</th><th>Tanggal</th><th>Traffic</th><th>Status</th></tr></thead>
+        <tbody>{my.map(s => <tr key={s.id}><td><strong>{s.file_name||"Strip"}</strong></td><td>{s.unit}</td><td>{s.shift}</td><td>{fmtD(s.strip_date)}</td><td><strong>{s.traffic_count}</strong></td><td><span className="status-badge status-on">{s.ocr_status}</span></td></tr>)}</tbody></table></div></div>
+      </div>}
+    </div>
+  )
+}
+
+// ============================================================
+// CABANG: HANDOVER
+// ============================================================
+const CabangHandover = () => {
+  const ctx = useApp()
+  const [txt,setTxt] = useState("")
+  const [pri,setPri] = useState("normal")
+  const [saving,setSaving] = useState(false)
+
+  const add = async () => {
+    if (!txt.trim()||saving) return
+    setSaving(true)
+    const si = SHIFTS.indexOf(getShift())
+    const { error } = await supabase.from("handover_notes").insert({
+      branch_code: ctx.user.branch_code,
+      from_shift: getShift(),
+      to_shift: SHIFTS[(si+1)%3],
+      author_name: ctx.user.display_name,
+      priority: pri,
+      content: txt,
+      written_by: ctx.user.id
+    })
+    if (error) alert("Error: "+error.message)
+    else { await ctx.reload(); setTxt(""); setPri("normal") }
+    setSaving(false)
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="Handover Notes" sub="Catatan serah terima"/>
+      <div className="panel"><div className="panel-header"><h2 className="panel-title">Buat Catatan</h2></div>
+        <div className="panel-body">
+          <div className="form-grid">
+            <div className="field"><label>Prioritas</label><select value={pri} onChange={e => setPri(e.target.value)}><option value="normal">Normal</option><option value="medium">Medium</option><option value="high">Urgent</option></select></div>
+            <div className="field"><label>Shift</label><input value={"Shift "+getShift()+" → "+SHIFTS[(SHIFTS.indexOf(getShift())+1)%3]} disabled/></div>
+          </div>
+          <div className="field"><label>Catatan</label><textarea value={txt} onChange={e => setTxt(e.target.value)} rows={4} placeholder="Catatan untuk shift berikutnya..."/></div>
+          <button className="btn btn-primary" onClick={add} disabled={!txt.trim()||saving}><I n="note" s={16}/> {saving?"Menyimpan...":"Simpan"}</button>
+        </div>
+      </div>
+      <div className="panel"><div className="panel-header"><h2 className="panel-title">Riwayat</h2><span className="panel-counter">{ctx.handovers.length}</span></div>
+        <div className="panel-body">
+          {ctx.handovers.length===0 ? <div className="empty-state"><p>Belum ada catatan</p></div> :
+          ctx.handovers.map(n => (
+            <div key={n.id} className={"handover-card handover-"+n.priority}>
+              <div className="handover-header"><div><span className={"priority-tag priority-"+n.priority}>{n.priority.toUpperCase()}</span><span className="handover-shift">Shift {n.from_shift} → {n.to_shift}</span></div><span className="handover-time">{fmtDT(n.created_at)}</span></div>
+              <div className="handover-body">{n.content}</div>
+              <div className="handover-author">— {n.author_name}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// ADMIN: DASHBOARD
+// ============================================================
+const AdminDash = () => {
+  const ctx = useApp()
+  const allActive = ctx.logs.filter(l => !l.off_time)
+  const todayLogs = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+  const todayTC = ctx.strips.filter(s => new Date(s.strip_date).toDateString() === new Date().toDateString()).reduce((a,s) => a+s.traffic_count, 0)
+  const brAct = {}
+  allActive.forEach(l => { brAct[l.branch_code] = (brAct[l.branch_code]||0)+1 })
+
+  return (
+    <div className="page-content">
+      <Header title="Dashboard Admin Pusat" sub="Monitoring seluruh 70 cabang"/>
+      <div className="stats-grid">
+        <Stat icon="radar" label="Total Cabang" value={ctx.branches.length} sub="Seluruh Indonesia" color="#38bdf8"/>
+        <Stat icon="mic" label="On Mic" value={allActive.length} sub="Seluruh cabang" color="#10b981"/>
+        <Stat icon="log" label="Log Hari Ini" value={todayLogs.length} sub={"Shift "+getShift()} color="#8b5cf6"/>
+        <Stat icon="plane" label="Traffic" value={todayTC} sub="Hari ini" color="#f59e0b"/>
+      </div>
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><Pulse s={10}/> Semua Cabang</h2><span className="panel-badge">LIVE</span></div>
+        <div className="panel-body"><div className="branch-grid">{ctx.branches.map(b => {
+          const c = brAct[b.code]||0
+          return (
+            <div key={b.code} className={"branch-card"+(c>0?" branch-card-active":"")}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div className="branch-code">{b.code}</div><Pulse on={c>0} s={7}/></div>
+              <div className="branch-name">{b.name}</div><div className="branch-city">{b.city}</div>
+              <div className="branch-units">{b.units.map(u => <span key={u} className="branch-unit-tag">{u}</span>)}</div>
+              <div className="branch-status"><I n="mic" s={11}/> {c} on mic</div>
+            </div>
+          )
+        })}</div></div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// ADMIN: MONITORING LOG
+// ============================================================
+const AdminMonLog = () => {
+  const ctx = useApp()
+  const [br,setBr] = useState("ALL")
+  const allActive = ctx.logs.filter(l => !l.off_time)
+  const fa = br==="ALL" ? allActive : allActive.filter(l => l.branch_code===br)
+  const todayAll = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+  const ft = br==="ALL" ? todayAll : todayAll.filter(l => l.branch_code===br)
+
+  return (
+    <div className="page-content">
+      <Header title="Monitoring Log Position" sub="Real-time seluruh cabang"/>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
+          <option value="ALL">Semua Cabang</option>
+          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
+        </select>
+      </div>
+      <div className="stats-grid">
+        <Stat icon="mic" label="On Mic" value={fa.length} sub={br==="ALL"?"Seluruh cabang":br} color="#10b981"/>
+        <Stat icon="log" label="Log Hari Ini" value={ft.length} color="#38bdf8"/>
+      </div>
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><Pulse s={10}/> ATC On Mic</h2><span className="panel-badge">LIVE</span></div>
+        <div className="panel-body">{fa.length===0 ? <div className="empty-state"><I n="micOff" s={44}/><p>Tidak ada ATC on mic</p></div> :
+          <div className="position-grid">{fa.map(l => {
+            const b = ctx.branches.find(a => a.code===l.branch_code)
+            return (
+              <div key={l.id} className="position-card">
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}><Pulse s={7}/><span className="position-unit">{l.branch_code}</span><span className="position-sector">{b?.city}</span></div>
+                <div className="position-cwp">{l.unit} — {l.sector} — {l.cwp}</div>
+                <div className="position-name">{l.atc_name}</div>
+                <div className="position-time">On: {fmtT(l.on_time)} ({durMin(l.on_time,new Date().toISOString())}m)</div>
+              </div>
+            )
+          })}</div>}
+        </div>
+      </div>
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Log Hari Ini</h2><span className="panel-counter">{ft.length}</span></div>
+        <div className="panel-body">{ft.length===0 ? <div className="empty-state"><p>Belum ada log</p></div> :
+          <div className="table-wrap"><table className="data-table"><thead><tr><th>Cabang</th><th>Nama</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>On</th><th>Off</th><th>Status</th></tr></thead>
+          <tbody>{ft.map(l => <tr key={l.id}><td><span className="unit-tag">{l.branch_code}</span></td><td><strong>{l.atc_name}</strong></td><td>{l.unit}</td><td>{l.sector}</td><td>{l.cwp}</td><td>{fmtT(l.on_time)}</td><td>{l.off_time?fmtT(l.off_time):"-"}</td><td>{l.off_time?<span className="status-badge status-off">Off</span>:<span className="status-badge status-on"><Pulse s={6}/> On</span>}</td></tr>)}</tbody></table></div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// ADMIN: MONITORING RECAP
+// ============================================================
+const AdminMonRecap = () => {
+  const ctx = useApp()
+  const [br,setBr] = useState("ALL")
+  const [period,setPeriod] = useState("today")
+  const fl = ctx.strips.filter(s => {
+    const brOk = br==="ALL" || s.branch_code===br
+    const d = (new Date()-new Date(s.strip_date))/864e5
+    const pOk = period==="today" ? new Date(s.strip_date).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
+    return brOk && pOk
+  })
+  const tot = fl.reduce((a,s) => a+s.traffic_count, 0)
+  const byBr = {}
+  fl.forEach(s => { if(!byBr[s.branch_code]) byBr[s.branch_code]={tc:0,n:0}; byBr[s.branch_code].tc+=s.traffic_count; byBr[s.branch_code].n++ })
+  const brKeys = Object.keys(byBr).sort((a,b) => byBr[b].tc-byBr[a].tc)
+  let mx = 1; brKeys.forEach(k => { if(byBr[k].tc>mx) mx=byBr[k].tc })
+
+  return (
+    <div className="page-content">
+      <Header title="Monitoring Rekap Traffic" sub="Dari flight strips"/>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}><option value="ALL">Semua Cabang</option>{ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}</select>
+        <div className="filter-bar" style={{margin:0}}>{[["today","Hari Ini"],["week","Minggu"],["month","Bulan"]].map(([k,v]) => <button key={k} className={"filter-btn"+(period===k?" filter-btn-active":"")} onClick={() => setPeriod(k)}>{v}</button>)}</div>
+      </div>
+      <div className="stats-grid">
+        <Stat icon="plane" label="Total Traffic" value={tot} color="#10b981"/>
+        <Stat icon="upload" label="Strip" value={fl.length} color="#38bdf8"/>
+        <Stat icon="building" label="Cabang" value={brKeys.length} color="#8b5cf6"/>
+      </div>
+      {brKeys.length>0 && <div className="panel"><div className="panel-header"><h2 className="panel-title">Traffic Per Cabang</h2></div><div className="panel-body"><div className="simple-chart">{brKeys.map(code => <div key={code} className="chart-bar-row"><span className="chart-label">{code}</span><div className="chart-bar-track"><div className="chart-bar-fill" style={{width:(byBr[code].tc/mx*100)+"%"}}><span className="chart-bar-value">{byBr[code].tc}</span></div></div></div>)}</div></div></div>}
+    </div>
+  )
+}
+
+// ============================================================
+// ADMIN: MONITORING HANDOVER
+// ============================================================
+const AdminMonHandover = () => {
+  const ctx = useApp()
+  const [br,setBr] = useState("ALL")
+  const fl = br==="ALL" ? ctx.handovers : ctx.handovers.filter(h => h.branch_code===br)
+
+  return (
+    <div className="page-content">
+      <Header title="Monitoring Handover" sub="Dari seluruh cabang"/>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}><option value="ALL">Semua Cabang</option>{ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}</select>
+      </div>
+      <div className="panel"><div className="panel-header"><h2 className="panel-title">Handover Notes</h2><span className="panel-counter">{fl.length}</span></div>
+        <div className="panel-body">{fl.length===0 ? <div className="empty-state"><p>Belum ada</p></div> : fl.map(n => {
+          const b = ctx.branches.find(a => a.code===n.branch_code)
+          return (
+            <div key={n.id} className={"handover-card handover-"+n.priority}>
+              <div className="handover-header"><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span className="handover-branch">{n.branch_code}{b?" — "+b.city:""}</span><span className={"priority-tag priority-"+n.priority}>{n.priority.toUpperCase()}</span><span className="handover-shift">Shift {n.from_shift} → {n.to_shift}</span></div><span className="handover-time">{fmtDT(n.created_at)}</span></div>
+              <div className="handover-body">{n.content}</div>
+              <div className="handover-author">— {n.author_name}</div>
+            </div>
+          )
+        })}</div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// ADMIN: EXPORT & AUDIT (placeholder)
+// ============================================================
+const AdminExport = () => (
+  <div className="page-content"><Header title="Export Laporan" sub="PDF atau Excel"/>
+    <div className="panel"><div className="panel-body"><div className="empty-state"><I n="download" s={44}/><p>Fitur export akan tersedia setelah integrasi jsPDF & SheetJS</p></div></div></div>
+  </div>
+)
+const AdminAudit = () => (
+  <div className="page-content"><Header title="Audit Log" sub="Aktivitas sistem"/>
+    <div className="panel"><div className="panel-body"><div className="empty-state"><I n="shield" s={44}/><p>Audit log akan aktif setelah integrasi penuh</p></div></div></div>
+  </div>
+)
+
+// ============================================================
+// MAIN APP
+// ============================================================
+export default function App() {
+  const [session,setSession] = useState(null)
+  const [user,setUser] = useState(null)
+  const [page,setPage] = useState("dashboard")
+  const [col,setCol] = useState(false)
+  const [loading,setLoading] = useState(true)
+
+  const [branches,setBranches] = useState([])
+  const [sectors,setSectors] = useState([])
+  const [logs,setLogs] = useState([])
+  const [strips,setStrips] = useState([])
+  const [handovers,setHandovers] = useState([])
+
+  // Check existing session on load
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (s) { setSession(s); loadProfile(s) }
+      else setLoading(false)
+    })
+  }, [])
+
+  const loadProfile = async (s) => {
+    const { data, error } = await supabase.from("accounts").select("*").eq("id", s.user.id).single()
+    if (data) { setUser(data); setSession(s) }
+    else { alert("Akun tidak ditemukan di tabel accounts"); await supabase.auth.signOut() }
+    setLoading(false)
+  }
+
+  const loadData = async () => {
+    const [brRes, secRes, logRes, stripRes, hoRes] = await Promise.all([
+      supabase.from("branches").select("*").order("code"),
+      supabase.from("sectors").select("*").order("sort_order"),
+      supabase.from("position_logs").select("*").order("on_time",{ascending:false}).limit(500),
+      supabase.from("flight_strips").select("*").order("created_at",{ascending:false}).limit(200),
+      supabase.from("handover_notes").select("*").order("created_at",{ascending:false}).limit(200),
+    ])
+    if (brRes.data) setBranches(brRes.data)
+    if (secRes.data) setSectors(secRes.data)
+    if (logRes.data) setLogs(logRes.data)
+    if (stripRes.data) setStrips(stripRes.data)
+    if (hoRes.data) setHandovers(hoRes.data)
+  }
+
+  // Load data + auto refresh
+  useEffect(() => {
+    if (!user) return
+    loadData()
+    const i = setInterval(loadData, 15000)
+    return () => clearInterval(i)
+  }, [user])
+
+  const handleLogin = async (s) => {
+    setSession(s)
+    setLoading(true)
+    await loadProfile(s)
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setSession(null); setUser(null); setPage("dashboard")
+    setBranches([]); setSectors([]); setLogs([]); setStrips([]); setHandovers([])
+  }
+
+  if (loading) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat...</p><span className="login-spinner"/></div>
+  if (!session) return <Login onLogin={handleLogin}/>
+  if (!user) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat profil...</p><span className="login-spinner"/></div>
+
+  const pageMap = user.role === "admin"
+    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
+    : {dashboard:CabangDash,log:CabangLog,strips:CabangStrips,handover:CabangHandover}
+  const CurrentPage = pageMap[page] || pageMap.dashboard
+
+  return (
+    <AppContext.Provider value={{user,branches,sectors,logs,strips,handovers,reload:loadData}}>
+      <div className="app-layout">
+        <Sidebar page={page} go={setPage} user={user} logout={handleLogout} col={col} toggle={() => setCol(!col)}/>
+        <main className="main-area"><CurrentPage/></main>
+      </div>
+    </AppContext.Provider>
+  )
+}
