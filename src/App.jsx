@@ -137,8 +137,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
     {id:"mon_log",label:"Monitoring Log Position",icon:"monitor"},
     {id:"mon_recap",label:"Monitoring Rekap Traffic",icon:"chart"},
-    {id:"mon_checklist",label:"Monitoring Checklist",icon:"checklist"},
-    {id:"mon_handover",label:"Monitoring Handover Notes",icon:"handover"},
+    {id:"mon_handover",label:"Monitoring Handover/Takeover",icon:"checklist"},
     {id:"export",label:"Export Laporan",icon:"download"},
     {id:"audit",label:"Audit Log",icon:"shield"},
   ] : [
@@ -146,8 +145,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"log",label:"Log Position",icon:"mic"},
     {id:"strips",label:"Flight Strips",icon:"upload"},
     {id:"rekap",label:"Rekap Strips",icon:"chart"},
-    {id:"handover",label:"Handover Checklist",icon:"checklist"},
-    {id:"handover_notes",label:"Handover Notes",icon:"note"},
+    {id:"handover",label:"Handover/Takeover",icon:"checklist"},
   ]
   return (
     <aside className={"sidebar"+(col?" sidebar-collapsed":"")}>
@@ -553,7 +551,7 @@ const CabangStrips = () => {
 }
 
 // ============================================================
-// CABANG: HANDOVER CHECKLIST (NEW)
+// CABANG: HANDOVER/TAKEOVER (Checklist + Notes in 1 page)
 // ============================================================
 const CHECKLIST_ITEMS = [
   {key:"traffic_situation",label:"Traffic Situation"},
@@ -568,10 +566,11 @@ const STATUS_CLR = {"OK":{bg:"#dcfce7",fg:"#166534",bd:"#86efac"},"Not OK":{bg:"
 
 const CabangHandover = () => {
   const ctx = useApp()
-  const [showForm,setShowForm] = useState(false)
-  const [saving,setSaving] = useState(false)
-  const [expandedId,setExpandedId] = useState(null)
 
+  // ── Checklist state ──
+  const [showForm,setShowForm] = useState(false)
+  const [savingCL,setSavingCL] = useState(false)
+  const [expandedId,setExpandedId] = useState(null)
   const initForm = () => ({
     checklist_date:new Date().toISOString().split("T")[0],
     checklist_time:new Date().toTimeString().slice(0,5),
@@ -586,42 +585,67 @@ const CabangHandover = () => {
   })
   const [f,setF] = useState(initForm())
   const set = (k,v) => setF(p => ({...p,[k]:v}))
-
   const myChecklists = ctx.handoverChecklists.filter(c => c.branch_id === ctx.user.id)
 
-  const submit = async () => {
+  const submitCL = async () => {
     if(!f.manager_on_duty.trim()||!f.incoming_personnel.trim()||!f.outgoing_personnel.trim()){alert("Mohon isi Manager on Duty, Incoming & Outgoing Personnel");return}
-    setSaving(true)
+    setSavingCL(true)
     const {error} = await supabase.from("handover_checklists").insert({...f, branch_id:ctx.user.id, created_by:ctx.user.id})
     if(error) alert("Error: "+error.message)
     else {setF(initForm());setShowForm(false);await ctx.reload()}
-    setSaving(false)
+    setSavingCL(false)
   }
-
-  const del = async (id) => {
+  const delCL = async (id) => {
     if(!confirm("Hapus checklist ini?"))return
     await supabase.from("handover_checklists").delete().eq("id",id)
     await ctx.reload()
   }
 
+  // ── Notes state ──
+  const [txt,setTxt] = useState("")
+  const [pri,setPri] = useState("normal")
+  const [savingN,setSavingN] = useState(false)
+  const addNote = async () => {
+    if (!txt.trim()||savingN) return
+    setSavingN(true)
+    const si = SHIFTS.indexOf(getShift())
+    const { error } = await supabase.from("handover_notes").insert({
+      branch_code: ctx.user.branch_code,
+      from_shift: getShift(),
+      to_shift: SHIFTS[(si+1)%3],
+      author_name: ctx.user.display_name,
+      priority: pri,
+      content: txt,
+      written_by: ctx.user.id
+    })
+    if (error) alert("Error: "+error.message)
+    else { await ctx.reload(); setTxt(""); setPri("normal") }
+    setSavingN(false)
+  }
+
   return (
     <div className="page-content">
-      <Header title="Handover/Takeover Checklist" sub={"Format resmi serah terima — "+ctx.user.branch_code}/>
+      <Header title="Handover/Takeover" sub={"Checklist & catatan serah terima — "+ctx.user.branch_code}/>
 
-      {!showForm && <button className="btn btn-primary btn-lg" onClick={() => setShowForm(true)} style={{marginBottom:20}}><I n="plus" s={16}/> Buat Checklist Baru</button>}
+      {/* ═══════════════════════════════════════════ */}
+      {/* SECTION 1: HANDOVER/TAKEOVER CHECKLIST      */}
+      {/* ═══════════════════════════════════════════ */}
+      <div style={{marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <h2 style={{margin:0,fontSize:16,fontWeight:700,color:"var(--fg)",display:"flex",alignItems:"center",gap:8}}><I n="checklist" s={18}/> Handover/Takeover Checklist</h2>
+          {!showForm && <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}><I n="plus" s={14}/> Buat Checklist</button>}
+        </div>
+      </div>
 
       {showForm && <div className="panel" style={{animation:"fadeIn .3s ease"}}>
-        <div className="panel-header"><h2 className="panel-title"><I n="checklist" s={16}/> Handover/Takeover Checklist</h2></div>
+        <div className="panel-header"><h2 className="panel-title"><I n="checklist" s={16}/> Form Checklist Baru</h2></div>
         <div className="panel-body">
-          {/* Header fields */}
           <div className="form-grid">
             <div className="field"><label>Date</label><input type="date" value={f.checklist_date} onChange={e => set("checklist_date",e.target.value)}/></div>
             <div className="field"><label>Time</label><input type="time" value={f.checklist_time} onChange={e => set("checklist_time",e.target.value)}/></div>
             <div className="field"><label>Manager on Duty</label><input value={f.manager_on_duty} onChange={e => set("manager_on_duty",e.target.value)} placeholder="Nama MOD..."/></div>
             <div className="field"><label>Shift</label><select value={f.shift} onChange={e => set("shift",e.target.value)}><option value="">Pilih...</option><option value="Pagi">Pagi</option><option value="Siang">Siang</option><option value="Malam">Malam</option></select></div>
           </div>
-
-          {/* Checklist table */}
           <div style={{overflowX:"auto",margin:"20px 0"}}>
             <table className="data-table" style={{minWidth:560}}>
               <thead><tr><th style={{width:36}}>No</th><th style={{width:160}}>Item</th><th style={{width:220}}>Status</th><th>Catatan</th></tr></thead>
@@ -643,8 +667,6 @@ const CabangHandover = () => {
               ))}</tbody>
             </table>
           </div>
-
-          {/* Signatures */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,padding:"20px 0",borderTop:"2px solid var(--border)"}}>
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Incoming Personnel</div>
@@ -655,16 +677,13 @@ const CabangHandover = () => {
               <input value={f.outgoing_personnel} onChange={e => set("outgoing_personnel",e.target.value)} placeholder="Nama outgoing..." style={{padding:"10px",borderRadius:4,border:"1px solid var(--border)",borderBottom:"2px solid var(--fg)",fontSize:14,fontWeight:600,textAlign:"center",width:"100%",background:"var(--card)",color:"var(--fg)"}}/>
             </div>
           </div>
-
-          {/* Buttons */}
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:12}}>
             <button className="btn btn-ghost" onClick={() => {setShowForm(false);setF(initForm())}}>Batal</button>
-            <button className="btn btn-primary" onClick={submit} disabled={saving}><I n="checklist" s={16}/> {saving?"Menyimpan...":"Simpan Checklist"}</button>
+            <button className="btn btn-primary" onClick={submitCL} disabled={savingCL}><I n="checklist" s={16}/> {savingCL?"Menyimpan...":"Simpan Checklist"}</button>
           </div>
         </div>
       </div>}
 
-      {/* List */}
       <div className="panel">
         <div className="panel-header"><h2 className="panel-title">Riwayat Checklist</h2><span className="panel-counter">{myChecklists.length}</span></div>
         <div className="panel-body">
@@ -681,7 +700,7 @@ const CabangHandover = () => {
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span className="handover-time">{cl.checklist_time||""}</span>
-                  <button className="btn btn-ghost btn-sm" onClick={e => {e.stopPropagation();del(cl.id)}} style={{color:"#ef4444",fontSize:11,padding:"2px 8px"}}>Hapus</button>
+                  <button className="btn btn-ghost btn-sm" onClick={e => {e.stopPropagation();delCL(cl.id)}} style={{color:"#ef4444",fontSize:11,padding:"2px 8px"}}>Hapus</button>
                 </div>
               </div>
               {expandedId===cl.id && (
@@ -706,40 +725,14 @@ const CabangHandover = () => {
           ))}
         </div>
       </div>
-    </div>
-  )
-}
 
-// ============================================================
-// CABANG: HANDOVER NOTES (existing, preserved)
-// ============================================================
-const CabangHandoverNotes = () => {
-  const ctx = useApp()
-  const [txt,setTxt] = useState("")
-  const [pri,setPri] = useState("normal")
-  const [saving,setSaving] = useState(false)
+      {/* ═══════════════════════════════════════════ */}
+      {/* SECTION 2: HANDOVER NOTES                   */}
+      {/* ═══════════════════════════════════════════ */}
+      <div style={{marginTop:32,marginBottom:16}}>
+        <h2 style={{margin:0,fontSize:16,fontWeight:700,color:"var(--fg)",display:"flex",alignItems:"center",gap:8}}><I n="note" s={18}/> Handover Notes</h2>
+      </div>
 
-  const add = async () => {
-    if (!txt.trim()||saving) return
-    setSaving(true)
-    const si = SHIFTS.indexOf(getShift())
-    const { error } = await supabase.from("handover_notes").insert({
-      branch_code: ctx.user.branch_code,
-      from_shift: getShift(),
-      to_shift: SHIFTS[(si+1)%3],
-      author_name: ctx.user.display_name,
-      priority: pri,
-      content: txt,
-      written_by: ctx.user.id
-    })
-    if (error) alert("Error: "+error.message)
-    else { await ctx.reload(); setTxt(""); setPri("normal") }
-    setSaving(false)
-  }
-
-  return (
-    <div className="page-content">
-      <Header title="Handover Notes" sub="Catatan serah terima"/>
       <div className="panel"><div className="panel-header"><h2 className="panel-title">Buat Catatan</h2></div>
         <div className="panel-body">
           <div className="form-grid">
@@ -747,10 +740,10 @@ const CabangHandoverNotes = () => {
             <div className="field"><label>Shift</label><input value={"Shift "+getShift()+" → "+SHIFTS[(SHIFTS.indexOf(getShift())+1)%3]} disabled/></div>
           </div>
           <div className="field"><label>Catatan</label><textarea value={txt} onChange={e => setTxt(e.target.value)} rows={4} placeholder="Catatan untuk shift berikutnya..."/></div>
-          <button className="btn btn-primary" onClick={add} disabled={!txt.trim()||saving}><I n="note" s={16}/> {saving?"Menyimpan...":"Simpan"}</button>
+          <button className="btn btn-primary" onClick={addNote} disabled={!txt.trim()||savingN}><I n="note" s={16}/> {savingN?"Menyimpan...":"Simpan"}</button>
         </div>
       </div>
-      <div className="panel"><div className="panel-header"><h2 className="panel-title">Riwayat</h2><span className="panel-counter">{ctx.handovers.length}</span></div>
+      <div className="panel"><div className="panel-header"><h2 className="panel-title">Riwayat Notes</h2><span className="panel-counter">{ctx.handovers.length}</span></div>
         <div className="panel-body">
           {ctx.handovers.length===0 ? <div className="empty-state"><p>Belum ada catatan</p></div> :
           ctx.handovers.map(n => (
@@ -1044,60 +1037,67 @@ const AdminMonRecap = () => {
 }
 
 // ============================================================
-// ADMIN: MONITORING HANDOVER CHECKLIST (NEW)
+// ADMIN: MONITORING HANDOVER/TAKEOVER (Checklist + Notes)
 // ============================================================
-const AdminMonChecklist = () => {
+const AdminMonHandover = () => {
   const ctx = useApp()
   const [br,setBr] = useState("ALL")
   const [filterDate,setFilterDate] = useState("")
+  const [expandedId,setExpandedId] = useState(null)
 
-  const fl = ctx.handoverChecklists.filter(c => {
+  // Checklist filter
+  const clList = ctx.handoverChecklists.filter(c => {
     const brOk = br==="ALL" || c.branch_id===br
     const dOk = !filterDate || c.checklist_date===filterDate
     return brOk && dOk
   })
-  const [expandedId,setExpandedId] = useState(null)
 
-  // Map branch_id to account info
-  const accts = ctx.branches // fallback: we'll use branch_code matching
+  // Notes filter
+  const noteList = br==="ALL" ? ctx.handovers : ctx.handovers.filter(h => h.branch_code===br)
+
   const getAcctName = (bid) => {
-    // Try to find a branch whose id matches, but since accounts table isn't in ctx,
-    // we show branch_id short form. Admin can cross-reference.
     const found = ctx.branches.find(b => b.id === bid)
     return found ? found.code+" — "+found.city : bid?.slice(0,8)+"..."
   }
 
   return (
     <div className="page-content">
-      <Header title="Monitoring Handover Checklist" sub="Dari seluruh cabang"/>
+      <Header title="Monitoring Handover/Takeover" sub="Checklist & catatan dari seluruh cabang"/>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
         <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
           <option value="ALL">Semua Cabang</option>
-          {/* Get unique branch_ids from checklists */}
-          {[...new Set(ctx.handoverChecklists.map(c => c.branch_id))].map(bid => <option key={bid} value={bid}>{getAcctName(bid)}</option>)}
+          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
         </select>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="br-select"/>
         {filterDate && <button className="btn btn-ghost btn-sm" onClick={() => setFilterDate("")}>✕ Reset</button>}
       </div>
 
       <div className="stats-grid">
-        <Stat icon="checklist" label="Total Checklist" value={fl.length} color="#8b5cf6"/>
-        <Stat icon="shield" label="Not OK Items" value={fl.reduce((a,c) => a+CHECKLIST_ITEMS.filter(it => c[it.key+"_status"]==="Not OK").length,0)} color="#ef4444" sub="Perlu perhatian"/>
+        <Stat icon="checklist" label="Total Checklist" value={clList.length} color="#8b5cf6"/>
+        <Stat icon="shield" label="Not OK Items" value={clList.reduce((a,c) => a+CHECKLIST_ITEMS.filter(it => c[it.key+"_status"]==="Not OK").length,0)} color="#ef4444" sub="Perlu perhatian"/>
+        <Stat icon="note" label="Handover Notes" value={noteList.length} color="#38bdf8"/>
+      </div>
+
+      {/* ═══════════════════════════════════════════ */}
+      {/* SECTION 1: CHECKLISTS                       */}
+      {/* ═══════════════════════════════════════════ */}
+      <div style={{marginBottom:8,marginTop:8}}>
+        <h2 style={{margin:0,fontSize:16,fontWeight:700,color:"var(--fg)",display:"flex",alignItems:"center",gap:8}}><I n="checklist" s={18}/> Handover/Takeover Checklists</h2>
       </div>
 
       <div className="panel">
-        <div className="panel-header"><h2 className="panel-title">Handover Checklists</h2><span className="panel-counter">{fl.length}</span></div>
+        <div className="panel-header"><h2 className="panel-title">Checklists</h2><span className="panel-counter">{clList.length}</span></div>
         <div className="panel-body">
-          {fl.length===0 ? <div className="empty-state"><I n="checklist" s={44}/><p>Tidak ada checklist ditemukan</p></div> :
-          fl.map(cl => {
+          {clList.length===0 ? <div className="empty-state"><I n="checklist" s={44}/><p>Tidak ada checklist ditemukan</p></div> :
+          clList.map(cl => {
             const notOk = CHECKLIST_ITEMS.filter(it => cl[it.key+"_status"]==="Not OK").length
             return (
               <div key={cl.id} className={"handover-card "+(notOk>0?"handover-high":"handover-normal")} style={{cursor:"pointer"}} onClick={() => setExpandedId(expandedId===cl.id?null:cl.id)}>
                 <div className="handover-header">
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                     <span style={{fontSize:14}}>{expandedId===cl.id?"▾":"▸"}</span>
-                    <span className="handover-branch" style={{background:"#f5f3ff",color:"#6d28d9",padding:"2px 10px",borderRadius:12,fontSize:12,fontWeight:700}}>{getAcctName(cl.branch_id)}</span>
+                    <span style={{background:"#f5f3ff",color:"#6d28d9",padding:"2px 10px",borderRadius:12,fontSize:12,fontWeight:700}}>{getAcctName(cl.branch_id)}</span>
                     <strong>{fmtD(cl.checklist_date)}</strong>
                     {cl.shift && <span className="priority-tag priority-normal">{cl.shift}</span>}
                     {notOk>0 && <span className="priority-tag priority-high">⚠ {notOk} Not OK</span>}
@@ -1132,27 +1132,16 @@ const AdminMonChecklist = () => {
           })}
         </div>
       </div>
-    </div>
-  )
-}
 
-// ============================================================
-// ADMIN: MONITORING HANDOVER NOTES
-// ============================================================
-const AdminMonHandover = () => {
-  const ctx = useApp()
-  const [br,setBr] = useState("ALL")
-  const fl = br==="ALL" ? ctx.handovers : ctx.handovers.filter(h => h.branch_code===br)
-
-  return (
-    <div className="page-content">
-      <Header title="Monitoring Handover Notes" sub="Dari seluruh cabang"/>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
-        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}><option value="ALL">Semua Cabang</option>{ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}</select>
+      {/* ═══════════════════════════════════════════ */}
+      {/* SECTION 2: HANDOVER NOTES                   */}
+      {/* ═══════════════════════════════════════════ */}
+      <div style={{marginTop:32,marginBottom:16}}>
+        <h2 style={{margin:0,fontSize:16,fontWeight:700,color:"var(--fg)",display:"flex",alignItems:"center",gap:8}}><I n="note" s={18}/> Handover Notes</h2>
       </div>
-      <div className="panel"><div className="panel-header"><h2 className="panel-title">Handover Notes</h2><span className="panel-counter">{fl.length}</span></div>
-        <div className="panel-body">{fl.length===0 ? <div className="empty-state"><p>Belum ada</p></div> : fl.map(n => {
+
+      <div className="panel"><div className="panel-header"><h2 className="panel-title">Notes</h2><span className="panel-counter">{noteList.length}</span></div>
+        <div className="panel-body">{noteList.length===0 ? <div className="empty-state"><p>Belum ada catatan</p></div> : noteList.map(n => {
           const b = ctx.branches.find(a => a.code===n.branch_code)
           return (
             <div key={n.id} className={"handover-card handover-"+n.priority}>
@@ -1255,8 +1244,8 @@ export default function App() {
   if (!user) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat profil...</p><span className="login-spinner"/></div>
 
   const pageMap = user.role === "admin"
-    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_checklist:AdminMonChecklist,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
-    : {dashboard:CabangDash,log:CabangLog,strips:CabangStrips,rekap:CabangRekap,handover:CabangHandover,handover_notes:CabangHandoverNotes}
+    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
+    : {dashboard:CabangDash,log:CabangLog,strips:CabangStrips,rekap:CabangRekap,handover:CabangHandover}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
