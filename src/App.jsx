@@ -787,41 +787,325 @@ const AdminMonLog = () => {
 }
 
 // ============================================================
-// ADMIN: MONITORING REKAP TRAFFIC
+// ADMIN: MONITORING REKAP TRAFFIC (detailed per cabang)
 // ============================================================
 const AdminMonRecap = () => {
   const ctx = useApp()
   const [br,setBr] = useState("ALL")
   const [period,setPeriod] = useState("today")
-  const trafficLogs = ctx.logs.filter(l => {
-    if(!l.off_time) return false
-    const tc = (l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)
-    if(tc===0) return false
-    const brOk = br==="ALL" || l.branch_code===br
+  const [expandBr,setExpandBr] = useState(null) // drill-down into a branch
+
+  // Helper: calc traffic total for a log
+  const tc = l => (l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)
+
+  // All traffic logs (off-mic with traffic data)
+  const allTraffic = ctx.logs.filter(l => {
+    if(!l.off_time || tc(l)===0) return false
     const d = (new Date()-new Date(l.on_time))/864e5
-    const pOk = period==="today" ? new Date(l.on_time).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
-    return brOk && pOk
+    return period==="today" ? new Date(l.on_time).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
   })
-  const tot = trafficLogs.reduce((a,l) => a+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0), 0)
+
+  // Filtered by branch
+  const filtered = br==="ALL" ? allTraffic : allTraffic.filter(l => l.branch_code===br)
+
+  // Global totals
+  const totDep = filtered.reduce((a,l) => a+(l.departure_count||0),0)
+  const totArr = filtered.reduce((a,l) => a+(l.arrival_count||0),0)
+  const totOvf = filtered.reduce((a,l) => a+(l.overfly_count||0),0)
+  const totAll = totDep+totArr+totOvf
+
+  // Per-branch breakdown
   const byBr = {}
-  trafficLogs.forEach(l => { if(!byBr[l.branch_code]) byBr[l.branch_code]={tc:0,n:0}; byBr[l.branch_code].tc+=(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0); byBr[l.branch_code].n++ })
-  const brKeys = Object.keys(byBr).sort((a,b) => byBr[b].tc-byBr[a].tc)
-  let mx = 1; brKeys.forEach(k => { if(byBr[k].tc>mx) mx=byBr[k].tc })
+  allTraffic.forEach(l => {
+    if(!byBr[l.branch_code]) byBr[l.branch_code] = {dep:0,arr:0,ovf:0,tc:0,n:0,logs:[]}
+    byBr[l.branch_code].dep += l.departure_count||0
+    byBr[l.branch_code].arr += l.arrival_count||0
+    byBr[l.branch_code].ovf += l.overfly_count||0
+    byBr[l.branch_code].tc += tc(l)
+    byBr[l.branch_code].n++
+    byBr[l.branch_code].logs.push(l)
+  })
+  const brKeys = Object.keys(byBr).sort((a,b) => byBr[b].tc - byBr[a].tc)
+  const brMax = Math.max(1,...brKeys.map(k => byBr[k].tc))
+
+  // Per-sector breakdown (for selected branch or all)
+  const bySector = {}
+  filtered.forEach(l => {
+    const sk = (br==="ALL" ? l.branch_code+" › " : "") + l.unit+" — "+l.sector
+    if(!bySector[sk]) bySector[sk] = {dep:0,arr:0,ovf:0}
+    bySector[sk].dep += l.departure_count||0
+    bySector[sk].arr += l.arrival_count||0
+    bySector[sk].ovf += l.overfly_count||0
+  })
+  const secKeys = Object.keys(bySector).sort((a,b) => {
+    const ta = bySector[a].dep+bySector[a].arr+bySector[a].ovf
+    const tb = bySector[b].dep+bySector[b].arr+bySector[b].ovf
+    return tb-ta
+  })
+  const secMax = Math.max(1,...secKeys.map(k => bySector[k].dep+bySector[k].arr+bySector[k].ovf))
+
+  // Daily trend (for selected or all)
+  const byDate = {}
+  filtered.forEach(l => {
+    const dt = new Date(l.on_time).toISOString().slice(0,10)
+    if(!byDate[dt]) byDate[dt] = {dep:0,arr:0,ovf:0}
+    byDate[dt].dep += l.departure_count||0
+    byDate[dt].arr += l.arrival_count||0
+    byDate[dt].ovf += l.overfly_count||0
+  })
+  const dates = Object.keys(byDate).sort()
+  const chartMax = Math.max(1,...dates.map(d => byDate[d].dep+byDate[d].arr+byDate[d].ovf))
+
+  // Export CSV
+  const exportCSV = () => {
+    const head = ["Cabang","Tanggal","On","Off","Controller","Unit","Sektor","Shift","DEP","ARR","OVF","Total"]
+    const rows = filtered.sort((a,b) => new Date(b.on_time)-new Date(a.on_time)).map(l => {
+      const dt=new Date(l.on_time).toISOString().slice(0,10)
+      return [l.branch_code,dt,fmtT(l.on_time),fmtT(l.off_time),l.atc_name||"",l.unit||"",l.sector||"",l.shift||"",l.departure_count||0,l.arrival_count||0,l.overfly_count||0,tc(l)]
+    })
+    const csv = [head.join(","),...rows.map(r => r.join(","))].join("\n")
+    const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"})
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob)
+    a.download = `monitoring_traffic_${br}_${period}_${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(a.href)
+  }
+
+  // Drill-down: detail for expanded branch
+  const renderBranchDetail = (code) => {
+    const d = byBr[code]
+    if(!d) return null
+    const b = ctx.branches.find(x => x.code===code)
+    // Sector breakdown for this branch
+    const brSec = {}
+    d.logs.forEach(l => {
+      const sk = l.unit+" — "+l.sector
+      if(!brSec[sk]) brSec[sk] = {dep:0,arr:0,ovf:0,controllers:new Set()}
+      brSec[sk].dep += l.departure_count||0
+      brSec[sk].arr += l.arrival_count||0
+      brSec[sk].ovf += l.overfly_count||0
+      brSec[sk].controllers.add(l.atc_name)
+    })
+    const bsKeys = Object.keys(brSec).sort((a,b) => (brSec[b].dep+brSec[b].arr+brSec[b].ovf)-(brSec[a].dep+brSec[a].arr+brSec[a].ovf))
+    const bsMax = Math.max(1,...bsKeys.map(k => brSec[k].dep+brSec[k].arr+brSec[k].ovf))
+
+    return (
+      <div style={{padding:"12px 0 4px",borderTop:"1px solid var(--border)",animation:"fadeIn .2s ease"}}>
+        <div style={{display:"flex",gap:16,fontSize:12,color:"var(--fg-muted)",marginBottom:12,flexWrap:"wrap"}}>
+          <span><strong>Bandara:</strong> {b?.name||code}</span>
+          <span><strong>Kota:</strong> {b?.city||"-"}</span>
+          <span><strong>Unit:</strong> {b?.units?.join(", ")||"-"}</span>
+          <span><strong>Laporan:</strong> {d.n} controller off-mic</span>
+        </div>
+
+        {/* DEP/ARR/OVF summary cards */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
+          {[["DEP",d.dep,"#0284C7","#E0F2FE"],["ARR",d.arr,"#CA8A04","#FEF9C3"],["OVF",d.ovf,"#64748B","#F1F5F9"]].map(([lbl,val,clr,bg]) => (
+            <div key={lbl} style={{background:bg,borderRadius:8,padding:"10px 8px",textAlign:"center",border:`1px solid ${clr}22`}}>
+              <div style={{fontSize:22,fontWeight:800,color:clr,lineHeight:1}}>{val}</div>
+              <div style={{fontSize:10,fontWeight:700,color:clr,marginTop:4}}>{lbl}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Per-sector bar chart */}
+        {bsKeys.length>0 && <>
+          <div style={{fontSize:12,fontWeight:700,color:"var(--fg)",marginBottom:8}}>Traffic Per Sektor</div>
+          <div className="simple-chart" style={{marginBottom:16}}>{bsKeys.map(sk => {
+            const t = brSec[sk].dep+brSec[sk].arr+brSec[sk].ovf
+            return (
+              <div key={sk} className="chart-bar-row">
+                <span className="chart-label" style={{minWidth:120}}>{sk}</span>
+                <div className="chart-bar-track">
+                  <div style={{display:"flex",height:"100%",borderRadius:4,overflow:"hidden",width:(t/bsMax*100)+"%"}}>
+                    {brSec[sk].dep>0 && <div style={{width:(brSec[sk].dep/t*100)+"%",background:"#0284C7",height:"100%"}}/>}
+                    {brSec[sk].arr>0 && <div style={{width:(brSec[sk].arr/t*100)+"%",background:"#CA8A04",height:"100%"}}/>}
+                    {brSec[sk].ovf>0 && <div style={{width:(brSec[sk].ovf/t*100)+"%",background:"#64748B",height:"100%"}}/>}
+                  </div>
+                  <span className="chart-bar-value">{t}</span>
+                </div>
+              </div>
+            )
+          })}</div>
+          <div style={{display:"flex",gap:12,marginBottom:12,fontSize:10,color:"var(--fg-muted)"}}>
+            {[["DEP","#0284C7"],["ARR","#CA8A04"],["OVF","#64748B"]].map(([l,c]) => <div key={l} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:8,height:8,borderRadius:2,background:c}}/>{l}</div>)}
+          </div>
+        </>}
+
+        {/* Detail log table */}
+        <div style={{fontSize:12,fontWeight:700,color:"var(--fg)",marginBottom:8}}>Log Detail</div>
+        <div className="table-wrap"><table className="data-table" style={{fontSize:12}}><thead><tr>
+          <th>Tanggal</th><th>On–Off</th><th>Controller</th><th>Unit</th><th>Sektor</th><th>Shift</th>
+          <th style={{textAlign:"center",color:"#0284C7"}}>DEP</th>
+          <th style={{textAlign:"center",color:"#CA8A04"}}>ARR</th>
+          <th style={{textAlign:"center",color:"#64748B"}}>OVF</th>
+          <th style={{textAlign:"center"}}>Total</th>
+        </tr></thead>
+        <tbody>{d.logs.sort((a,b) => new Date(b.on_time)-new Date(a.on_time)).map(l => (
+          <tr key={l.id}>
+            <td style={{whiteSpace:"nowrap"}}>{fmtD(l.on_time)}</td>
+            <td style={{whiteSpace:"nowrap",color:"var(--fg-muted)"}}>{fmtT(l.on_time)}–{fmtT(l.off_time)}</td>
+            <td><strong>{l.atc_name}</strong></td>
+            <td><span className="unit-tag">{l.unit}</span></td>
+            <td>{l.sector}</td>
+            <td>{l.shift}</td>
+            <td style={{textAlign:"center",color:"#0284C7",fontWeight:700}}>{l.departure_count||0}</td>
+            <td style={{textAlign:"center",color:"#CA8A04",fontWeight:700}}>{l.arrival_count||0}</td>
+            <td style={{textAlign:"center",color:"#64748B",fontWeight:700}}>{l.overfly_count||0}</td>
+            <td style={{textAlign:"center",fontWeight:800}}>{tc(l)}</td>
+          </tr>
+        ))}</tbody>
+        <tfoot><tr style={{fontWeight:700}}>
+          <td colSpan={6} style={{textAlign:"right",color:"var(--fg-muted)"}}>TOTAL</td>
+          <td style={{textAlign:"center",color:"#0284C7"}}>{d.dep}</td>
+          <td style={{textAlign:"center",color:"#CA8A04"}}>{d.arr}</td>
+          <td style={{textAlign:"center",color:"#64748B"}}>{d.ovf}</td>
+          <td style={{textAlign:"center"}}>{d.tc}</td>
+        </tr></tfoot>
+        </table></div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-content">
-      <Header title="Monitoring Rekap Traffic" sub="Dari laporan off-mic controller"/>
+      <Header title="Monitoring Rekap Traffic" sub="Detail traffic seluruh cabang"/>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
-        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}><option value="ALL">Semua Cabang</option>{ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}</select>
+        <select className="br-select" value={br} onChange={e => {setBr(e.target.value);setExpandBr(null)}}><option value="ALL">Semua Cabang</option>{ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}</select>
         <div className="filter-bar" style={{margin:0}}>{[["today","Hari Ini"],["week","Minggu"],["month","Bulan"]].map(([k,v]) => <button key={k} className={"filter-btn"+(period===k?" filter-btn-active":"")} onClick={() => setPeriod(k)}>{v}</button>)}</div>
       </div>
+
+      {/* Global Stats */}
       <div className="stats-grid">
-        <Stat icon="plane" label="Total Traffic" value={tot} color="#10b981"/>
-        <Stat icon="log" label="Laporan" value={trafficLogs.length} color="#38bdf8"/>
-        <Stat icon="building" label="Cabang" value={brKeys.length} color="#8b5cf6"/>
+        <Stat icon="plane" label="Total Traffic" value={totAll} color="#10b981"/>
+        <Stat icon="upload" label="Departure" value={totDep} color="#0284C7"/>
+        <Stat icon="download" label="Arrival" value={totArr} color="#CA8A04"/>
+        <Stat icon="radar" label="Overfly" value={totOvf} color="#64748B"/>
       </div>
-      {brKeys.length>0 && <div className="panel"><div className="panel-header"><h2 className="panel-title">Traffic Per Cabang</h2></div><div className="panel-body"><div className="simple-chart">{brKeys.map(code => <div key={code} className="chart-bar-row"><span className="chart-label">{code}</span><div className="chart-bar-track"><div className="chart-bar-fill" style={{width:(byBr[code].tc/mx*100)+"%"}}><span className="chart-bar-value">{byBr[code].tc}</span></div></div></div>)}</div></div></div>}
+
+      {/* Traffic per Cabang — expandable cards */}
+      {br==="ALL" && brKeys.length>0 && <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="building" s={16}/> Traffic Per Cabang</h2><span className="panel-counter">{brKeys.length} cabang</span></div>
+        <div className="panel-body">
+          {brKeys.map(code => {
+            const d = byBr[code], b = ctx.branches.find(x => x.code===code)
+            const isExp = expandBr===code
+            return (
+              <div key={code} className={"handover-card handover-normal"} style={{cursor:"pointer",marginBottom:6}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0"}} onClick={() => setExpandBr(isExp?null:code)}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <span style={{fontSize:14}}>{isExp?"▾":"▸"}</span>
+                    <span className="unit-tag" style={{fontWeight:700}}>{code}</span>
+                    <span style={{fontSize:13,color:"var(--fg)"}}>{b?.city||""}</span>
+                    <span style={{fontSize:12,color:"var(--fg-muted)"}}>{d.n} laporan</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,fontSize:12,fontWeight:700}}>
+                    <span style={{color:"#0284C7"}}>{d.dep} <span style={{fontWeight:400,fontSize:10}}>DEP</span></span>
+                    <span style={{color:"#CA8A04"}}>{d.arr} <span style={{fontWeight:400,fontSize:10}}>ARR</span></span>
+                    <span style={{color:"#64748B"}}>{d.ovf} <span style={{fontWeight:400,fontSize:10}}>OVF</span></span>
+                    <span style={{color:"var(--fg)",fontSize:14,marginLeft:4}}>{d.tc}</span>
+                  </div>
+                </div>
+                {/* Bar */}
+                <div style={{height:4,borderRadius:2,overflow:"hidden",display:"flex",gap:1,marginBottom:isExp?0:0}}>
+                  {d.dep>0 && <div style={{width:(d.dep/d.tc*100)+"%",background:"#0284C7",borderRadius:2}}/>}
+                  {d.arr>0 && <div style={{width:(d.arr/d.tc*100)+"%",background:"#CA8A04",borderRadius:2}}/>}
+                  {d.ovf>0 && <div style={{width:(d.ovf/d.tc*100)+"%",background:"#64748B",borderRadius:2}}/>}
+                </div>
+                {isExp && renderBranchDetail(code)}
+              </div>
+            )
+          })}
+        </div>
+      </div>}
+
+      {/* When specific branch is selected — show full detail directly */}
+      {br!=="ALL" && <>
+        {/* Sector breakdown */}
+        {secKeys.length>0 && <div className="panel">
+          <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Traffic Per Sektor</h2></div>
+          <div className="panel-body">
+            <div className="simple-chart">{secKeys.map(sk => {
+              const t = bySector[sk].dep+bySector[sk].arr+bySector[sk].ovf
+              return (
+                <div key={sk} className="chart-bar-row">
+                  <span className="chart-label" style={{minWidth:120}}>{sk}</span>
+                  <div className="chart-bar-track">
+                    <div style={{display:"flex",height:"100%",borderRadius:4,overflow:"hidden",width:(t/secMax*100)+"%"}}>
+                      {bySector[sk].dep>0 && <div style={{width:(bySector[sk].dep/t*100)+"%",background:"#0284C7",height:"100%"}}/>}
+                      {bySector[sk].arr>0 && <div style={{width:(bySector[sk].arr/t*100)+"%",background:"#CA8A04",height:"100%"}}/>}
+                      {bySector[sk].ovf>0 && <div style={{width:(bySector[sk].ovf/t*100)+"%",background:"#64748B",height:"100%"}}/>}
+                    </div>
+                    <span className="chart-bar-value">{t}</span>
+                  </div>
+                </div>
+              )
+            })}</div>
+            <div style={{display:"flex",gap:12,marginTop:8,fontSize:10,color:"var(--fg-muted)"}}>
+              {[["DEP","#0284C7"],["ARR","#CA8A04"],["OVF","#64748B"]].map(([l,c]) => <div key={l} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:8,height:8,borderRadius:2,background:c}}/>{l}</div>)}
+            </div>
+          </div>
+        </div>}
+
+        {/* Daily trend chart */}
+        {dates.length>1 && <div className="panel">
+          <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Trend Harian</h2></div>
+          <div className="panel-body">
+            <svg viewBox="0 0 680 200" width="100%" style={{display:"block"}}>
+              {[0,.25,.5,.75,1].map(f => {const y=16+(1-f)*150;return <line key={f} x1="46" y1={y} x2="664" y2={y} stroke="var(--border)" strokeWidth=".5"/>})}
+              {(() => {
+                const pts=dates.map((d,i) => ({x:46+(dates.length===1?309:(i/(dates.length-1))*618),y:16+(1-(byDate[d].dep+byDate[d].arr+byDate[d].ovf)/chartMax)*150,v:byDate[d].dep+byDate[d].arr+byDate[d].ovf,d}))
+                const pathD=pts.map((p,i) => `${i===0?"M":"L"}${p.x},${p.y}`).join(" ")
+                return <>
+                  <path d={`${pathD} L${pts[pts.length-1].x},166 L${pts[0].x},166 Z`} fill="#0284C7" opacity=".1"/>
+                  <path d={pathD} fill="none" stroke="#0284C7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  {pts.map((p,i) => <g key={i}><circle cx={p.x} cy={p.y} r="4" fill="var(--card)" stroke="#0284C7" strokeWidth="2"/><text x={p.x} y={p.y-10} textAnchor="middle" fontSize="10" fontWeight="600" fill="#0284C7">{p.v}</text><text x={p.x} y={185} textAnchor="middle" fontSize="9" fill="var(--fg-muted)">{p.d.slice(5)}</text></g>)}
+                </>
+              })()}
+            </svg>
+          </div>
+        </div>}
+
+        {/* Full data table */}
+        <div className="panel">
+          <div className="panel-header"><h2 className="panel-title">Log Detail</h2><span className="panel-counter">{filtered.length}</span></div>
+          <div className="panel-body">
+            {filtered.length===0 ? <div className="empty-state"><p>Tidak ada data</p></div> :
+            <div className="table-wrap"><table className="data-table" style={{fontSize:12}}><thead><tr>
+              <th>Tanggal</th><th>On–Off</th><th>Controller</th><th>Unit</th><th>Sektor</th><th>Shift</th>
+              <th style={{textAlign:"center",color:"#0284C7"}}>DEP</th>
+              <th style={{textAlign:"center",color:"#CA8A04"}}>ARR</th>
+              <th style={{textAlign:"center",color:"#64748B"}}>OVF</th>
+              <th style={{textAlign:"center"}}>Total</th>
+            </tr></thead>
+            <tbody>{filtered.sort((a,b) => new Date(b.on_time)-new Date(a.on_time)).map(l => (
+              <tr key={l.id}>
+                <td style={{whiteSpace:"nowrap"}}>{fmtD(l.on_time)}</td>
+                <td style={{whiteSpace:"nowrap",color:"var(--fg-muted)"}}>{fmtT(l.on_time)}–{fmtT(l.off_time)}</td>
+                <td><strong>{l.atc_name}</strong></td>
+                <td><span className="unit-tag">{l.unit}</span></td>
+                <td>{l.sector}</td>
+                <td>{l.shift}</td>
+                <td style={{textAlign:"center",color:"#0284C7",fontWeight:700}}>{l.departure_count||0}</td>
+                <td style={{textAlign:"center",color:"#CA8A04",fontWeight:700}}>{l.arrival_count||0}</td>
+                <td style={{textAlign:"center",color:"#64748B",fontWeight:700}}>{l.overfly_count||0}</td>
+                <td style={{textAlign:"center",fontWeight:800}}>{tc(l)}</td>
+              </tr>
+            ))}</tbody>
+            <tfoot><tr style={{fontWeight:700}}>
+              <td colSpan={6} style={{textAlign:"right",color:"var(--fg-muted)"}}>TOTAL</td>
+              <td style={{textAlign:"center",color:"#0284C7"}}>{totDep}</td>
+              <td style={{textAlign:"center",color:"#CA8A04"}}>{totArr}</td>
+              <td style={{textAlign:"center",color:"#64748B"}}>{totOvf}</td>
+              <td style={{textAlign:"center"}}>{totAll}</td>
+            </tr></tfoot>
+            </table></div>}
+          </div>
+        </div>
+      </>}
+
+      {/* Export */}
+      {filtered.length>0 && <button className="btn btn-primary" onClick={exportCSV} style={{marginTop:4}}><I n="download" s={16}/> Export CSV</button>}
     </div>
   )
 }
