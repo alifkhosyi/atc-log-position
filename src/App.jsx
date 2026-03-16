@@ -43,6 +43,7 @@ const ICONS = {
   plus:"M12 5v14M5 12h14",
   logout:"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   handover:"M3 12h4l3-9 4 18 3-9h4",
+  checklist:"M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11",
   eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z",
   monitor:"M2 3h20v14H2zM8 21h8M12 17v4",
   building:"M4 2h16v20H4zM9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01",
@@ -136,7 +137,8 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
     {id:"mon_log",label:"Monitoring Log Position",icon:"monitor"},
     {id:"mon_recap",label:"Monitoring Rekap Traffic",icon:"chart"},
-    {id:"mon_handover",label:"Monitoring Handover",icon:"handover"},
+    {id:"mon_checklist",label:"Monitoring Checklist",icon:"checklist"},
+    {id:"mon_handover",label:"Monitoring Handover Notes",icon:"handover"},
     {id:"export",label:"Export Laporan",icon:"download"},
     {id:"audit",label:"Audit Log",icon:"shield"},
   ] : [
@@ -144,7 +146,8 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"log",label:"Log Position",icon:"mic"},
     {id:"strips",label:"Flight Strips",icon:"upload"},
     {id:"rekap",label:"Rekap Strips",icon:"chart"},
-    {id:"handover",label:"Handover Notes",icon:"note"},
+    {id:"handover",label:"Handover Checklist",icon:"checklist"},
+    {id:"handover_notes",label:"Handover Notes",icon:"note"},
   ]
   return (
     <aside className={"sidebar"+(col?" sidebar-collapsed":"")}>
@@ -550,9 +553,167 @@ const CabangStrips = () => {
 }
 
 // ============================================================
-// CABANG: HANDOVER
+// CABANG: HANDOVER CHECKLIST (NEW)
 // ============================================================
+const CHECKLIST_ITEMS = [
+  {key:"traffic_situation",label:"Traffic Situation"},
+  {key:"conflict_solution",label:"Conflict & Solution"},
+  {key:"weather",label:"Weather"},
+  {key:"facilities",label:"Facilities"},
+  {key:"coordination",label:"Coordination"},
+  {key:"others",label:"Others"},
+]
+const STATUS_OPTS = ["OK","Not OK","N/A"]
+const STATUS_CLR = {"OK":{bg:"#dcfce7",fg:"#166534",bd:"#86efac"},"Not OK":{bg:"#fef2f2",fg:"#991b1b",bd:"#fca5a5"},"N/A":{bg:"#f1f5f9",fg:"#6b7280",bd:"#d1d5db"}}
+
 const CabangHandover = () => {
+  const ctx = useApp()
+  const [showForm,setShowForm] = useState(false)
+  const [saving,setSaving] = useState(false)
+  const [expandedId,setExpandedId] = useState(null)
+
+  const initForm = () => ({
+    checklist_date:new Date().toISOString().split("T")[0],
+    checklist_time:new Date().toTimeString().slice(0,5),
+    manager_on_duty:"",shift:"",
+    traffic_situation_status:"OK",traffic_situation_notes:"",
+    conflict_solution_status:"OK",conflict_solution_notes:"",
+    weather_status:"OK",weather_notes:"",
+    facilities_status:"OK",facilities_notes:"",
+    coordination_status:"OK",coordination_notes:"",
+    others_status:"N/A",others_notes:"",
+    incoming_personnel:"",outgoing_personnel:"",
+  })
+  const [f,setF] = useState(initForm())
+  const set = (k,v) => setF(p => ({...p,[k]:v}))
+
+  const myChecklists = ctx.handoverChecklists.filter(c => c.branch_id === ctx.user.id)
+
+  const submit = async () => {
+    if(!f.manager_on_duty.trim()||!f.incoming_personnel.trim()||!f.outgoing_personnel.trim()){alert("Mohon isi Manager on Duty, Incoming & Outgoing Personnel");return}
+    setSaving(true)
+    const {error} = await supabase.from("handover_checklists").insert({...f, branch_id:ctx.user.id, created_by:ctx.user.id})
+    if(error) alert("Error: "+error.message)
+    else {setF(initForm());setShowForm(false);await ctx.reload()}
+    setSaving(false)
+  }
+
+  const del = async (id) => {
+    if(!confirm("Hapus checklist ini?"))return
+    await supabase.from("handover_checklists").delete().eq("id",id)
+    await ctx.reload()
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="Handover/Takeover Checklist" sub={"Format resmi serah terima — "+ctx.user.branch_code}/>
+
+      {!showForm && <button className="btn btn-primary btn-lg" onClick={() => setShowForm(true)} style={{marginBottom:20}}><I n="plus" s={16}/> Buat Checklist Baru</button>}
+
+      {showForm && <div className="panel" style={{animation:"fadeIn .3s ease"}}>
+        <div className="panel-header"><h2 className="panel-title"><I n="checklist" s={16}/> Handover/Takeover Checklist</h2></div>
+        <div className="panel-body">
+          {/* Header fields */}
+          <div className="form-grid">
+            <div className="field"><label>Date</label><input type="date" value={f.checklist_date} onChange={e => set("checklist_date",e.target.value)}/></div>
+            <div className="field"><label>Time</label><input type="time" value={f.checklist_time} onChange={e => set("checklist_time",e.target.value)}/></div>
+            <div className="field"><label>Manager on Duty</label><input value={f.manager_on_duty} onChange={e => set("manager_on_duty",e.target.value)} placeholder="Nama MOD..."/></div>
+            <div className="field"><label>Shift</label><select value={f.shift} onChange={e => set("shift",e.target.value)}><option value="">Pilih...</option><option value="Pagi">Pagi</option><option value="Siang">Siang</option><option value="Malam">Malam</option></select></div>
+          </div>
+
+          {/* Checklist table */}
+          <div style={{overflowX:"auto",margin:"20px 0"}}>
+            <table className="data-table" style={{minWidth:560}}>
+              <thead><tr><th style={{width:36}}>No</th><th style={{width:160}}>Item</th><th style={{width:220}}>Status</th><th>Catatan</th></tr></thead>
+              <tbody>{CHECKLIST_ITEMS.map((it,idx) => (
+                <tr key={it.key}>
+                  <td style={{textAlign:"center",color:"var(--fg-muted)"}}>{idx+1}</td>
+                  <td><strong>{it.label}</strong></td>
+                  <td>
+                    <div style={{display:"flex",gap:4}}>
+                      {STATUS_OPTS.map(st => {
+                        const active = f[it.key+"_status"]===st
+                        const c = STATUS_CLR[st]
+                        return <button key={st} type="button" onClick={() => set(it.key+"_status",st)} style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${active?c.bd:"var(--border)"}`,background:active?c.bg:"transparent",color:active?c.fg:"var(--fg-muted)",fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}>{st}</button>
+                      })}
+                    </div>
+                  </td>
+                  <td><input value={f[it.key+"_notes"]} onChange={e => set(it.key+"_notes",e.target.value)} placeholder="Opsional..." style={{width:"100%",padding:"6px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}/></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+
+          {/* Signatures */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,padding:"20px 0",borderTop:"2px solid var(--border)"}}>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Incoming Personnel</div>
+              <input value={f.incoming_personnel} onChange={e => set("incoming_personnel",e.target.value)} placeholder="Nama incoming..." style={{padding:"10px",borderRadius:4,border:"1px solid var(--border)",borderBottom:"2px solid var(--fg)",fontSize:14,fontWeight:600,textAlign:"center",width:"100%",background:"var(--card)",color:"var(--fg)"}}/>
+            </div>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Outgoing Personnel</div>
+              <input value={f.outgoing_personnel} onChange={e => set("outgoing_personnel",e.target.value)} placeholder="Nama outgoing..." style={{padding:"10px",borderRadius:4,border:"1px solid var(--border)",borderBottom:"2px solid var(--fg)",fontSize:14,fontWeight:600,textAlign:"center",width:"100%",background:"var(--card)",color:"var(--fg)"}}/>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:12}}>
+            <button className="btn btn-ghost" onClick={() => {setShowForm(false);setF(initForm())}}>Batal</button>
+            <button className="btn btn-primary" onClick={submit} disabled={saving}><I n="checklist" s={16}/> {saving?"Menyimpan...":"Simpan Checklist"}</button>
+          </div>
+        </div>
+      </div>}
+
+      {/* List */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Riwayat Checklist</h2><span className="panel-counter">{myChecklists.length}</span></div>
+        <div className="panel-body">
+          {myChecklists.length===0 ? <div className="empty-state"><I n="checklist" s={44}/><p>Belum ada checklist</p></div> :
+          myChecklists.map(cl => (
+            <div key={cl.id} className="handover-card handover-normal" style={{cursor:"pointer"}} onClick={() => setExpandedId(expandedId===cl.id?null:cl.id)}>
+              <div className="handover-header">
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <span style={{fontSize:14}}>{expandedId===cl.id?"▾":"▸"}</span>
+                  <strong>{fmtD(cl.checklist_date)}</strong>
+                  {cl.shift && <span className="priority-tag priority-normal">{cl.shift}</span>}
+                  <span style={{color:"var(--fg-muted)",fontSize:12}}>MOD: {cl.manager_on_duty}</span>
+                  {CHECKLIST_ITEMS.some(it => cl[it.key+"_status"]==="Not OK") && <span className="priority-tag priority-high">⚠ Not OK</span>}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span className="handover-time">{cl.checklist_time||""}</span>
+                  <button className="btn btn-ghost btn-sm" onClick={e => {e.stopPropagation();del(cl.id)}} style={{color:"#ef4444",fontSize:11,padding:"2px 8px"}}>Hapus</button>
+                </div>
+              </div>
+              {expandedId===cl.id && (
+                <div style={{padding:"12px 0 4px",borderTop:"1px solid var(--border)"}}>
+                  <table className="data-table" style={{fontSize:12}}>
+                    <thead><tr><th>Item</th><th>Status</th><th>Catatan</th></tr></thead>
+                    <tbody>{CHECKLIST_ITEMS.map(it => (
+                      <tr key={it.key}>
+                        <td>{it.label}</td>
+                        <td><span style={{display:"inline-block",padding:"2px 10px",borderRadius:12,fontSize:11,fontWeight:600,background:STATUS_CLR[cl[it.key+"_status"]]?.bg||"#f1f5f9",color:STATUS_CLR[cl[it.key+"_status"]]?.fg||"#6b7280"}}>{cl[it.key+"_status"]}</span></td>
+                        <td style={{color:"var(--fg-muted)"}}>{cl[it.key+"_notes"]||"—"}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                  <div style={{display:"flex",gap:24,marginTop:12,padding:12,background:"var(--bg)",borderRadius:8}}>
+                    <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase"}}>Incoming</div><div style={{fontSize:14,fontWeight:700,marginTop:4,paddingTop:4,borderTop:"1.5px solid var(--fg)",display:"inline-block",minWidth:100}}>{cl.incoming_personnel}</div></div>
+                    <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase"}}>Outgoing</div><div style={{fontSize:14,fontWeight:700,marginTop:4,paddingTop:4,borderTop:"1.5px solid var(--fg)",display:"inline-block",minWidth:100}}>{cl.outgoing_personnel}</div></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// CABANG: HANDOVER NOTES (existing, preserved)
+// ============================================================
+const CabangHandoverNotes = () => {
   const ctx = useApp()
   const [txt,setTxt] = useState("")
   const [pri,setPri] = useState("normal")
@@ -883,7 +1044,100 @@ const AdminMonRecap = () => {
 }
 
 // ============================================================
-// ADMIN: MONITORING HANDOVER
+// ADMIN: MONITORING HANDOVER CHECKLIST (NEW)
+// ============================================================
+const AdminMonChecklist = () => {
+  const ctx = useApp()
+  const [br,setBr] = useState("ALL")
+  const [filterDate,setFilterDate] = useState("")
+
+  const fl = ctx.handoverChecklists.filter(c => {
+    const brOk = br==="ALL" || c.branch_id===br
+    const dOk = !filterDate || c.checklist_date===filterDate
+    return brOk && dOk
+  })
+  const [expandedId,setExpandedId] = useState(null)
+
+  // Map branch_id to account info
+  const accts = ctx.branches // fallback: we'll use branch_code matching
+  const getAcctName = (bid) => {
+    // Try to find a branch whose id matches, but since accounts table isn't in ctx,
+    // we show branch_id short form. Admin can cross-reference.
+    const found = ctx.branches.find(b => b.id === bid)
+    return found ? found.code+" — "+found.city : bid?.slice(0,8)+"..."
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="Monitoring Handover Checklist" sub="Dari seluruh cabang"/>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
+          <option value="ALL">Semua Cabang</option>
+          {/* Get unique branch_ids from checklists */}
+          {[...new Set(ctx.handoverChecklists.map(c => c.branch_id))].map(bid => <option key={bid} value={bid}>{getAcctName(bid)}</option>)}
+        </select>
+        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="br-select"/>
+        {filterDate && <button className="btn btn-ghost btn-sm" onClick={() => setFilterDate("")}>✕ Reset</button>}
+      </div>
+
+      <div className="stats-grid">
+        <Stat icon="checklist" label="Total Checklist" value={fl.length} color="#8b5cf6"/>
+        <Stat icon="shield" label="Not OK Items" value={fl.reduce((a,c) => a+CHECKLIST_ITEMS.filter(it => c[it.key+"_status"]==="Not OK").length,0)} color="#ef4444" sub="Perlu perhatian"/>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Handover Checklists</h2><span className="panel-counter">{fl.length}</span></div>
+        <div className="panel-body">
+          {fl.length===0 ? <div className="empty-state"><I n="checklist" s={44}/><p>Tidak ada checklist ditemukan</p></div> :
+          fl.map(cl => {
+            const notOk = CHECKLIST_ITEMS.filter(it => cl[it.key+"_status"]==="Not OK").length
+            return (
+              <div key={cl.id} className={"handover-card "+(notOk>0?"handover-high":"handover-normal")} style={{cursor:"pointer"}} onClick={() => setExpandedId(expandedId===cl.id?null:cl.id)}>
+                <div className="handover-header">
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontSize:14}}>{expandedId===cl.id?"▾":"▸"}</span>
+                    <span className="handover-branch" style={{background:"#f5f3ff",color:"#6d28d9",padding:"2px 10px",borderRadius:12,fontSize:12,fontWeight:700}}>{getAcctName(cl.branch_id)}</span>
+                    <strong>{fmtD(cl.checklist_date)}</strong>
+                    {cl.shift && <span className="priority-tag priority-normal">{cl.shift}</span>}
+                    {notOk>0 && <span className="priority-tag priority-high">⚠ {notOk} Not OK</span>}
+                  </div>
+                  <span style={{color:"var(--fg-muted)",fontSize:12}}>MOD: {cl.manager_on_duty}</span>
+                </div>
+                {expandedId===cl.id && (
+                  <div style={{padding:"12px 0 4px",borderTop:"1px solid var(--border)"}}>
+                    <div style={{display:"flex",gap:16,fontSize:12,color:"var(--fg-muted)",marginBottom:8}}>
+                      <span><strong>Waktu:</strong> {cl.checklist_time}</span>
+                      <span><strong>MOD:</strong> {cl.manager_on_duty}</span>
+                      <span><strong>Shift:</strong> {cl.shift}</span>
+                    </div>
+                    <table className="data-table" style={{fontSize:12}}>
+                      <thead><tr><th>Item</th><th>Status</th><th>Catatan</th></tr></thead>
+                      <tbody>{CHECKLIST_ITEMS.map(it => (
+                        <tr key={it.key}>
+                          <td>{it.label}</td>
+                          <td><span style={{display:"inline-block",padding:"2px 10px",borderRadius:12,fontSize:11,fontWeight:600,background:STATUS_CLR[cl[it.key+"_status"]]?.bg||"#f1f5f9",color:STATUS_CLR[cl[it.key+"_status"]]?.fg||"#6b7280"}}>{cl[it.key+"_status"]}</span></td>
+                          <td style={{color:"var(--fg-muted)"}}>{cl[it.key+"_notes"]||"—"}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                    <div style={{display:"flex",gap:24,marginTop:12,padding:12,background:"var(--bg)",borderRadius:8}}>
+                      <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase"}}>Incoming</div><div style={{fontSize:14,fontWeight:700,marginTop:4,paddingTop:4,borderTop:"1.5px solid var(--fg)",display:"inline-block",minWidth:100}}>{cl.incoming_personnel}</div></div>
+                      <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase"}}>Outgoing</div><div style={{fontSize:14,fontWeight:700,marginTop:4,paddingTop:4,borderTop:"1.5px solid var(--fg)",display:"inline-block",minWidth:100}}>{cl.outgoing_personnel}</div></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// ADMIN: MONITORING HANDOVER NOTES
 // ============================================================
 const AdminMonHandover = () => {
   const ctx = useApp()
@@ -892,7 +1146,7 @@ const AdminMonHandover = () => {
 
   return (
     <div className="page-content">
-      <Header title="Monitoring Handover" sub="Dari seluruh cabang"/>
+      <Header title="Monitoring Handover Notes" sub="Dari seluruh cabang"/>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
         <select className="br-select" value={br} onChange={e => setBr(e.target.value)}><option value="ALL">Semua Cabang</option>{ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}</select>
@@ -942,6 +1196,7 @@ export default function App() {
   const [logs,setLogs] = useState([])
   const [strips,setStrips] = useState([])
   const [handovers,setHandovers] = useState([])
+  const [handoverChecklists,setHandoverChecklists] = useState([])
 
   // Check existing session on load
   useEffect(() => {
@@ -959,18 +1214,20 @@ export default function App() {
   }
 
   const loadData = async () => {
-    const [brRes, secRes, logRes, stripRes, hoRes] = await Promise.all([
+    const [brRes, secRes, logRes, stripRes, hoRes, hcRes] = await Promise.all([
       supabase.from("branches").select("*").order("code"),
       supabase.from("sectors").select("*").order("sort_order"),
       supabase.from("position_logs").select("*").order("on_time",{ascending:false}).limit(500),
       supabase.from("flight_strips").select("*").order("created_at",{ascending:false}).limit(200),
       supabase.from("handover_notes").select("*").order("created_at",{ascending:false}).limit(200),
+      supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
     ])
     if (brRes.data) setBranches(brRes.data)
     if (secRes.data) setSectors(secRes.data)
     if (logRes.data) setLogs(logRes.data)
     if (stripRes.data) setStrips(stripRes.data)
     if (hoRes.data) setHandovers(hoRes.data)
+    if (hcRes.data) setHandoverChecklists(hcRes.data)
   }
 
   // Load data + auto refresh
@@ -990,7 +1247,7 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     setSession(null); setUser(null); setPage("dashboard")
-    setBranches([]); setSectors([]); setLogs([]); setStrips([]); setHandovers([])
+    setBranches([]); setSectors([]); setLogs([]); setStrips([]); setHandovers([]); setHandoverChecklists([])
   }
 
   if (loading) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat...</p><span className="login-spinner"/></div>
@@ -998,12 +1255,12 @@ export default function App() {
   if (!user) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat profil...</p><span className="login-spinner"/></div>
 
   const pageMap = user.role === "admin"
-    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
-    : {dashboard:CabangDash,log:CabangLog,strips:CabangStrips,rekap:CabangRekap,handover:CabangHandover}
+    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_checklist:AdminMonChecklist,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
+    : {dashboard:CabangDash,log:CabangLog,strips:CabangStrips,rekap:CabangRekap,handover:CabangHandover,handover_notes:CabangHandoverNotes}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
-    <AppContext.Provider value={{user,branches,sectors,logs,strips,handovers,reload:loadData}}>
+    <AppContext.Provider value={{user,branches,sectors,logs,strips,handovers,handoverChecklists,reload:loadData}}>
       <div className="app-layout">
         <Sidebar page={page} go={setPage} user={user} logout={handleLogout} col={col} toggle={() => setCol(!col)}/>
         <main className="main-area"><CurrentPage/></main>
