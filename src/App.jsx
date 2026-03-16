@@ -143,8 +143,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
   ] : [
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
     {id:"log",label:"Log Position",icon:"mic"},
-    {id:"strips",label:"Flight Strips",icon:"upload"},
-    {id:"rekap",label:"Rekap Strips",icon:"chart"},
+    {id:"rekap",label:"Rekap Traffic",icon:"chart"},
     {id:"handover",label:"Handover/Takeover",icon:"checklist"},
   ]
   return (
@@ -172,7 +171,7 @@ const CabangDash = () => {
   const ctx = useApp()
   const active = ctx.logs.filter(l => !l.off_time)
   const today = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
-  const todayTC = ctx.strips.filter(s => new Date(s.strip_date).toDateString() === new Date().toDateString()).reduce((a,s) => a+s.traffic_count, 0)
+  const todayTC = today.filter(l => l.off_time).reduce((a,l) => a+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0), 0)
   const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {name:"",city:"",units:[]}
 
   return (
@@ -222,7 +221,9 @@ const CabangLog = () => {
   const [nm,setNm] = useState("")
   const [show,setShow] = useState(false)
   const [offId,setOffId] = useState(null)
-  const [tc,setTc] = useState("")
+  const [dep,setDep] = useState("")
+  const [arr,setArr] = useState("")
+  const [ovf,setOvf] = useState("")
   const [saving,setSaving] = useState(false)
 
   const unitSectors = mySectors.filter(s => s.unit === unit)
@@ -251,38 +252,64 @@ const CabangLog = () => {
     setSaving(false)
   }
 
-  const offMic = async (id) => {
+  const offMic = async (id, isController) => {
     setSaving(true)
-    const { error } = await supabase.from("position_logs").update({
-      off_time: new Date().toISOString(),
-      traffic_count: parseInt(tc) || 0
-    }).eq("id", id)
+    const updateData = { off_time: new Date().toISOString() }
+    if (isController) {
+      const d = parseInt(dep)||0, a = parseInt(arr)||0, o = parseInt(ovf)||0
+      updateData.departure_count = d
+      updateData.arrival_count = a
+      updateData.overfly_count = o
+      updateData.traffic_count = d + a + o
+    }
+    const { error } = await supabase.from("position_logs").update(updateData).eq("id", id)
     if (error) alert("Error: " + error.message)
-    else { await ctx.reload(); setOffId(null); setTc("") }
+    else { await ctx.reload(); setOffId(null); setDep(""); setArr(""); setOvf("") }
     setSaving(false)
   }
+
+  const isControllerCwp = (cwp) => (cwp||"").toLowerCase().includes("controller")
 
   return (
     <div className="page-content">
       <Header title="Log Position" sub={"Input posisi ATC — "+ctx.user.branch_code}/>
       {active.length > 0 && <div className="panel panel-glow">
         <div className="panel-header"><h2 className="panel-title"><Pulse s={10}/> ATC On Mic ({active.length})</h2></div>
-        <div className="panel-body">{active.map(l => (
+        <div className="panel-body">{active.map(l => {
+          const isCtr = isControllerCwp(l.cwp)
+          return (
           <div key={l.id} className="active-position">
             <div className="active-position-info">
               {[["Nama",l.atc_name],["Unit",l.unit],["Sektor",l.sector],["CWP",l.cwp],["On",fmtT(l.on_time)],["Durasi",durMin(l.on_time,new Date().toISOString())+"m"]].map(([k,v]) => <div key={k} className="active-pos-row"><span className="active-pos-label">{k}</span><span className="active-pos-value">{v}</span></div>)}
             </div>
             {offId===l.id ? (
               <div className="off-mic-form">
-                <div className="field" style={{marginBottom:0,minWidth:120}}><label>Traffic</label><input type="number" value={tc} onChange={e => setTc(e.target.value)} placeholder="0"/></div>
-                <div className="off-mic-actions">
-                  <button className="btn btn-danger btn-sm" onClick={() => offMic(l.id)} disabled={saving}><I n="micOff" s={14}/> Off</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setOffId(null)}>Batal</button>
-                </div>
+                {isCtr ? (
+                  <>
+                    <div style={{width:"100%",marginBottom:8}}>
+                      <div style={{fontSize:11,fontWeight:600,color:"var(--fg-muted)",marginBottom:6}}>Laporan Traffic — {l.sector}</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                        <div className="field" style={{marginBottom:0}}><label style={{fontSize:11,color:"#0284C7"}}>DEP</label><input type="number" value={dep} onChange={e => setDep(e.target.value)} placeholder="0" min="0" style={{textAlign:"center"}}/></div>
+                        <div className="field" style={{marginBottom:0}}><label style={{fontSize:11,color:"#CA8A04"}}>ARR</label><input type="number" value={arr} onChange={e => setArr(e.target.value)} placeholder="0" min="0" style={{textAlign:"center"}}/></div>
+                        <div className="field" style={{marginBottom:0}}><label style={{fontSize:11,color:"#64748B"}}>OVF</label><input type="number" value={ovf} onChange={e => setOvf(e.target.value)} placeholder="0" min="0" style={{textAlign:"center"}}/></div>
+                      </div>
+                      {(dep||arr||ovf) && <div style={{fontSize:12,fontWeight:700,color:"var(--fg)",marginTop:6,textAlign:"center"}}>Total: {(parseInt(dep)||0)+(parseInt(arr)||0)+(parseInt(ovf)||0)}</div>}
+                    </div>
+                    <div className="off-mic-actions">
+                      <button className="btn btn-danger btn-sm" onClick={() => offMic(l.id, true)} disabled={saving}><I n="micOff" s={14}/> Off + Lapor</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => {setOffId(null);setDep("");setArr("");setOvf("")}}>Batal</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="off-mic-actions">
+                    <button className="btn btn-danger btn-sm" onClick={() => offMic(l.id, false)} disabled={saving}><I n="micOff" s={14}/> Off Mic</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setOffId(null)}>Batal</button>
+                  </div>
+                )}
               </div>
             ) : <button className="btn btn-danger btn-sm" onClick={() => setOffId(l.id)}><I n="micOff" s={14}/> Off Mic</button>}
           </div>
-        ))}</div>
+        )})}</div>
       </div>}
 
       <button className="btn btn-primary btn-lg" onClick={() => setShow(!show)} style={{marginBottom:20}}><I n={show?"x":"mic"} s={18}/> {show?"Tutup Form":"Input ATC On Mic"}</button>
@@ -305,250 +332,14 @@ const CabangLog = () => {
         <div className="panel-header"><h2 className="panel-title">Log Hari Ini</h2><span className="panel-counter">{today.length}</span></div>
         <div className="panel-body">
           {today.length===0 ? <div className="empty-state"><p>Belum ada log</p></div> :
-          <div className="table-wrap"><table className="data-table"><thead><tr><th>Nama</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>Shift</th><th>On</th><th>Off</th><th>Durasi</th><th>Traffic</th><th>Status</th></tr></thead>
-          <tbody>{today.map(l => <tr key={l.id}><td><strong>{l.atc_name}</strong></td><td><span className="unit-tag">{l.unit}</span></td><td>{l.sector}</td><td>{l.cwp}</td><td>{l.shift}</td><td>{fmtT(l.on_time)}</td><td>{l.off_time?fmtT(l.off_time):"-"}</td><td>{l.off_time?durMin(l.on_time,l.off_time)+"m":"..."}</td><td>{l.traffic_count||"-"}</td><td>{l.off_time?<span className="status-badge status-off">Off</span>:<span className="status-badge status-on"><Pulse s={6}/> On</span>}</td></tr>)}</tbody></table></div>}
+          <div className="table-wrap"><table className="data-table"><thead><tr><th>Nama</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>Shift</th><th>On</th><th>Off</th><th>Durasi</th><th>DEP</th><th>ARR</th><th>OVF</th><th>Status</th></tr></thead>
+          <tbody>{today.map(l => <tr key={l.id}><td><strong>{l.atc_name}</strong></td><td><span className="unit-tag">{l.unit}</span></td><td>{l.sector}</td><td>{l.cwp}</td><td>{l.shift}</td><td>{fmtT(l.on_time)}</td><td>{l.off_time?fmtT(l.off_time):"-"}</td><td>{l.off_time?durMin(l.on_time,l.off_time)+"m":"..."}</td><td style={{textAlign:"center",color:"#0284C7"}}>{l.departure_count||"-"}</td><td style={{textAlign:"center",color:"#CA8A04"}}>{l.arrival_count||"-"}</td><td style={{textAlign:"center",color:"#64748B"}}>{l.overfly_count||"-"}</td><td>{l.off_time?<span className="status-badge status-off">Off</span>:<span className="status-badge status-on"><Pulse s={6}/> On</span>}</td></tr>)}</tbody></table></div>}
         </div>
       </div>
     </div>
   )
 }
 
-// ============================================================
-// FPS COLOR DETECTION ENGINE
-// ============================================================
-const _rgbToHsl = (r,g,b) => {
-  r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0,l=(mx+mn)/2
-  if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);if(mx===r)h=((g-b)/d+(g<b?6:0))/6;else if(mx===g)h=((b-r)/d+2)/6;else h=((r-g)/d+4)/6}
-  return[h*360,s*100,l*100]
-}
-const _classifyPx = (r,g,b) => {
-  const[h,s,l]=_rgbToHsl(r,g,b)
-  if(l<25)return"dark"
-  if(h>=175&&h<=220&&s>=30&&l>=45&&l<=85)return"departure"
-  if(h>=38&&h<=72&&s>=40&&l>=55&&l<=92)return"arrival"
-  if(s<=12&&l>=80)return"white_cand"
-  return"other"
-}
-const _analyzeRow = (d,y,w) => {
-  const c={departure:0,arrival:0,white_cand:0,dark:0,other:0}
-  for(let x=0;x<w;x+=2){const i=(y*w+x)*4;const cls=_classifyPx(d[i],d[i+1],d[i+2]);c[cls]=(c[cls]||0)+1}
-  const t=Math.ceil(w/2),nd=t-(c.dark||0);if(nd<t*.3)return null
-  const best=[{k:"departure",n:c.departure},{k:"arrival",n:c.arrival},{k:"white_cand",n:c.white_cand}].sort((a,b)=>b.n-a.n)[0]
-  return(best.n/nd>=.30&&best.n>=10)?best.k:null
-}
-const _hasGrid = (d,sy,ey,w) => {
-  const mid=Math.floor((sy+ey)/2)
-  for(const y of[mid-2,mid,mid+2].filter(v=>v>=sy&&v<=ey)){
-    let trans=0,prev=false
-    for(let x=0;x<w;x++){const i=(y*w+x)*4;const dk=_rgbToHsl(d[i],d[i+1],d[i+2])[2]<40;if(dk&&!prev)trans++;prev=dk}
-    if(trans>=3)return true
-  }
-  return false
-}
-const _detectFPS = (imgData,w,h) => {
-  const d=imgData.data,rows=[]
-  for(let y=0;y<h;y++)rows.push(_analyzeRow(d,y,w))
-  const bands=[];let cur=null,start=0
-  for(let i=0;i<rows.length;i++){
-    if(rows[i]===cur)continue
-    if(cur)bands.push({color:cur,sy:start,ey:i-1,h:i-start})
-    cur=rows[i];start=i
-  }
-  if(cur)bands.push({color:cur,sy:start,ey:rows.length-1,h:rows.length-start})
-  const minH=h*.02,maxH=h*.35,strips={departure:0,arrival:0,overfly:0}
-  for(const b of bands){
-    if(b.h<minH||b.h>maxH)continue
-    if(b.color==="departure"||b.color==="arrival")strips[b.color]++
-    else if(b.color==="white_cand"&&_hasGrid(d,b.sy,b.ey,w))strips.overfly++
-  }
-  return strips
-}
-
-const FPS_HOURS = (()=>{const a=[];for(let h=0;h<24;h++)for(let m=0;m<60;m+=30)a.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);return a})()
-const FPS_TYPES = [
-  {key:"departure",label:"DEP",full:"Departure",sub:"Biru",color:"#0284C7",bg:"#E0F2FE",ring:"#7DD3FC",text:"#0C4A6E"},
-  {key:"arrival",label:"ARR",full:"Arrival",sub:"Kuning",color:"#CA8A04",bg:"#FEF9C3",ring:"#FDE68A",text:"#854D0E"},
-  {key:"overfly",label:"OVF",full:"Overfly",sub:"Putih",color:"#64748B",bg:"#F1F5F9",ring:"#CBD5E1",text:"#334155"},
-]
-
-// ============================================================
-// CABANG: FLIGHT STRIPS (with FPS Detection)
-// ============================================================
-const CabangStrips = () => {
-  const ctx = useApp()
-  const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {units:["TWR"]}
-  const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
-  const my = [...ctx.strips].reverse()
-
-  const [preview,setPreview] = useState(null)
-  const [counts,setCounts] = useState(null)
-  const [analyzing,setAnalyzing] = useState(false)
-  const [saving,setSaving] = useState(false)
-  const [saved,setSaved] = useState(false)
-
-  const [unit,setUnit] = useState(br.units?.[0]||"TWR")
-  const unitSectors = mySectors.filter(s => s.unit === unit)
-  const [sectorIdx,setSectorIdx] = useState(0)
-  const [petugas,setPetugas] = useState(ctx.user.display_name||"")
-  const [stripDate,setStripDate] = useState(new Date().toISOString().slice(0,10))
-  const [jamMulai,setJamMulai] = useState("07:00")
-  const [jamSelesai,setJamSelesai] = useState("14:00")
-  const [notes,setNotes] = useState("")
-
-  const cvRef = useRef(null)
-  const fileRef = useRef(null)
-  const total = counts ? counts.departure + counts.arrival + counts.overfly : 0
-
-  const handleUpload = (e) => {
-    const file = e.target.files?.[0]
-    if(!file) return
-    setSaved(false); setCounts(null)
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      setPreview(ev.target.result)
-      const img = new Image()
-      img.onload = () => {
-        setAnalyzing(true)
-        setTimeout(() => {
-          const cv = cvRef.current; if(!cv) return
-          const sc = Math.min(1, 800/Math.max(img.width,img.height))
-          cv.width = Math.round(img.width*sc); cv.height = Math.round(img.height*sc)
-          const ctx2 = cv.getContext("2d",{willReadFrequently:true})
-          ctx2.drawImage(img,0,0,cv.width,cv.height)
-          setCounts(_detectFPS(ctx2.getImageData(0,0,cv.width,cv.height),cv.width,cv.height))
-          setAnalyzing(false)
-        },100)
-      }
-      img.src = ev.target.result
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const resetForm = () => {
-    setPreview(null); setCounts(null); setAnalyzing(false); setSaved(false); setNotes("")
-    if(fileRef.current) fileRef.current.value=""
-  }
-
-  const handleSave = async () => {
-    if(saving) return
-    setSaving(true)
-    const row = {
-      branch_code: ctx.user.branch_code,
-      unit,
-      sector: unitSectors[sectorIdx]?.name || "Sector 1",
-      shift: getShift(),
-      strip_date: stripDate,
-      file_name: fileRef.current?.files?.[0]?.name || "strip_foto",
-      traffic_count: total,
-      departure_count: counts?.departure || 0,
-      arrival_count: counts?.arrival || 0,
-      overfly_count: counts?.overfly || 0,
-      petugas,
-      jam_mulai: jamMulai,
-      jam_selesai: jamSelesai,
-      notes,
-      ocr_status: "processed",
-      uploaded_by: ctx.user.id
-    }
-    const { error } = await supabase.from("flight_strips").insert(row)
-    if(error) alert("Error: "+error.message)
-    else { await ctx.reload(); setSaved(true) }
-    setSaving(false)
-  }
-
-  const selSt = {width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13,outline:"none"}
-
-  return (
-    <div className="page-content">
-      <Header title="Flight Strips" sub={"Upload & deteksi FPS — "+ctx.user.branch_code}/>
-      <canvas ref={cvRef} style={{display:"none"}}/>
-
-      {/* Upload Panel */}
-      <div className="panel">
-        <div className="panel-header"><h2 className="panel-title"><I n="upload" s={16}/> Upload Foto Strip</h2></div>
-        <div className="panel-body">
-          {!preview ? (
-            <div className="drop-zone" onClick={() => fileRef.current?.click()}>
-              <I n="upload" s={40}/>
-              <p className="drop-title">Klik atau tap untuk upload foto FPS</p>
-              <p className="drop-hint">Otomatis deteksi strip biru (DEP), kuning (ARR), putih (OVF)</p>
-              <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handleUpload}/>
-            </div>
-          ) : (
-            <div style={{position:"relative"}}>
-              <img src={preview} alt="FPS" style={{width:"100%",borderRadius:10,maxHeight:260,objectFit:"cover",display:"block",border:"1px solid var(--border)"}}/>
-              {analyzing && (
-                <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.7)",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-                  <span className="login-spinner"/><p style={{color:"#fff",marginTop:12,fontSize:13}}>Mendeteksi flight strips...</p>
-                </div>
-              )}
-              <button onClick={resetForm} style={{position:"absolute",top:8,right:8,width:28,height:28,borderRadius:"50%",background:"rgba(0,0,0,.5)",border:"none",color:"#fff",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Detection Result + Form */}
-      {counts && !analyzing && (
-        <div className="panel" style={{animation:"fadeIn .3s ease"}}>
-          <div className="panel-header"><h2 className="panel-title"><I n="plane" s={16}/> Hasil Deteksi</h2><span className="panel-counter">Total: {total}</span></div>
-          <div className="panel-body">
-
-            {/* Result cards */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
-              {FPS_TYPES.map(t => (
-                <div key={t.key} style={{background:t.bg,borderRadius:10,padding:"14px 8px",textAlign:"center",border:`1.5px solid ${t.ring}`}}>
-                  <div style={{fontSize:28,fontWeight:800,color:t.color,lineHeight:1}}>{counts[t.key]}</div>
-                  <div style={{fontSize:11,fontWeight:700,color:t.text,marginTop:6}}>{t.full}</div>
-                  <div style={{fontSize:9,color:t.text+"88"}}>{t.sub}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Ratio bar */}
-            {total>0 && <div style={{display:"flex",height:6,borderRadius:3,overflow:"hidden",gap:2,marginBottom:20}}>
-              {FPS_TYPES.map(t => {const p=(counts[t.key]/total)*100;return p>0?<div key={t.key} style={{width:p+"%",background:t.color,borderRadius:3,transition:"width .5s"}}/>:null})}
-            </div>}
-
-            {total===0 && <div className="empty-state" style={{padding:"12px 0"}}><p style={{color:"#f59e0b"}}>Tidak ada FPS terdeteksi — pastikan foto menampilkan strip berwarna dengan jelas.</p></div>}
-
-            {/* Form fields */}
-            <div className="form-grid">
-              <div className="field"><label>Petugas / Controller</label><input value={petugas} onChange={e => setPetugas(e.target.value)} placeholder="Nama lengkap"/></div>
-              <div className="field"><label>Unit</label><select value={unit} onChange={e => {setUnit(e.target.value);setSectorIdx(0)}} style={selSt}>{(br.units||["TWR"]).map(u => <option key={u}>{u}</option>)}</select></div>
-              <div className="field"><label>Sektor</label><select value={sectorIdx} onChange={e => setSectorIdx(+e.target.value)} style={selSt}>{unitSectors.length>0?unitSectors.map((s,i) => <option key={i} value={i}>{s.name}</option>):<option>-</option>}</select></div>
-              <div className="field"><label>Tanggal</label><input type="date" value={stripDate} onChange={e => setStripDate(e.target.value)}/></div>
-              <div className="field"><label>Jam Mulai</label><select value={jamMulai} onChange={e => setJamMulai(e.target.value)} style={selSt}>{FPS_HOURS.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
-              <div className="field"><label>Jam Selesai</label><select value={jamSelesai} onChange={e => setJamSelesai(e.target.value)} style={selSt}>{FPS_HOURS.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
-            </div>
-            <div className="field" style={{marginTop:8}}><label>Catatan (opsional)</label><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Cuaca, traffic, koordinasi khusus..."/></div>
-
-            <button className={"btn "+(saved?"btn-success":"btn-primary")} onClick={handleSave} disabled={saving||saved||!petugas.trim()} style={{marginTop:16,width:"100%"}}>
-              <I n={saved?"shield":"upload"} s={16}/> {saving?"Menyimpan...":saved?"✓ Tersimpan":"Simpan Data Strip"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* History table */}
-      {my.length > 0 && <div className="panel">
-        <div className="panel-header"><h2 className="panel-title">Riwayat Upload</h2><span className="panel-counter">{my.length}</span></div>
-        <div className="panel-body"><div className="table-wrap"><table className="data-table"><thead><tr><th>Tanggal</th><th>Jam</th><th>Petugas</th><th>Unit</th><th>Sektor</th><th style={{textAlign:"center",color:"#0284C7"}}>DEP</th><th style={{textAlign:"center",color:"#CA8A04"}}>ARR</th><th style={{textAlign:"center",color:"#64748B"}}>OVF</th><th style={{textAlign:"center"}}>Total</th></tr></thead>
-        <tbody>{my.map(s => <tr key={s.id}>
-          <td>{fmtD(s.strip_date)}</td>
-          <td style={{color:"var(--fg-muted)"}}>{s.jam_mulai||"-"}{s.jam_selesai?("–"+s.jam_selesai):""}</td>
-          <td><strong>{s.petugas||"-"}</strong></td>
-          <td><span className="unit-tag">{s.unit}</span></td>
-          <td>{s.sector||"-"}</td>
-          <td style={{textAlign:"center",color:"#0284C7",fontWeight:700}}>{s.departure_count||0}</td>
-          <td style={{textAlign:"center",color:"#CA8A04",fontWeight:700}}>{s.arrival_count||0}</td>
-          <td style={{textAlign:"center",color:"#64748B",fontWeight:700}}>{s.overfly_count||0}</td>
-          <td style={{textAlign:"center",fontWeight:800}}>{s.traffic_count}</td>
-        </tr>)}</tbody></table></div></div>
-      </div>}
-    </div>
-  )
-}
 
 // ============================================================
 // CABANG: HANDOVER/TAKEOVER (Checklist + Notes in 1 page)
@@ -760,110 +551,104 @@ const CabangHandover = () => {
 }
 
 // ============================================================
-// CABANG: REKAP FLIGHT STRIPS
+// CABANG: REKAP TRAFFIC (from position_logs off-mic reports)
 // ============================================================
 const CabangRekap = () => {
   const ctx = useApp()
-  const myStrips = ctx.strips.filter(s => s.branch_code === ctx.user.branch_code)
+  // Only logs with traffic data (controller off-mic reports)
+  const myLogs = ctx.logs.filter(l => l.branch_code === ctx.user.branch_code && l.off_time && ((l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)) > 0)
   const [period,setPeriod] = useState("month")
-  const [filterPetugas,setFilterPetugas] = useState("")
-  const [filterUnit,setFilterUnit] = useState("")
-  const [chartMode,setChartMode] = useState("bar")
+  const [filterName,setFilterName] = useState("")
+  const [filterSector,setFilterSector] = useState("")
 
-  const filtered = myStrips.filter(s => {
-    const d = (new Date()-new Date(s.strip_date))/864e5
-    const pOk = period==="today" ? new Date(s.strip_date).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
-    const petOk = !filterPetugas || (s.petugas||"").toLowerCase().includes(filterPetugas.toLowerCase())
-    const unitOk = !filterUnit || (s.unit||"").toLowerCase().includes(filterUnit.toLowerCase())
-    return pOk && petOk && unitOk
-  }).sort((a,b) => (b.strip_date+""+(b.jam_mulai||"")).localeCompare(a.strip_date+""+(a.jam_mulai||"")))
+  const filtered = myLogs.filter(l => {
+    const d = (new Date()-new Date(l.on_time))/864e5
+    const pOk = period==="today" ? new Date(l.on_time).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
+    const nmOk = !filterName || (l.atc_name||"").toLowerCase().includes(filterName.toLowerCase())
+    const secOk = !filterSector || (l.sector||"").toLowerCase().includes(filterSector.toLowerCase())
+    return pOk && nmOk && secOk
+  }).sort((a,b) => new Date(b.on_time)-new Date(a.on_time))
 
-  const totals = filtered.reduce((a,r) => ({dep:a.dep+(r.departure_count||0),arr:a.arr+(r.arrival_count||0),ovf:a.ovf+(r.overfly_count||0),tc:a.tc+(r.traffic_count||0)}),{dep:0,arr:0,ovf:0,tc:0})
+  const totals = filtered.reduce((a,l) => ({dep:a.dep+(l.departure_count||0),arr:a.arr+(l.arrival_count||0),ovf:a.ovf+(l.overfly_count||0),tc:a.tc+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)}),{dep:0,arr:0,ovf:0,tc:0})
 
   // Group by date for chart
   const byDate = {}
-  filtered.forEach(r => {
-    if(!byDate[r.strip_date]) byDate[r.strip_date] = {dep:0,arr:0,ovf:0}
-    byDate[r.strip_date].dep += r.departure_count||0
-    byDate[r.strip_date].arr += r.arrival_count||0
-    byDate[r.strip_date].ovf += r.overfly_count||0
+  filtered.forEach(l => {
+    const dt = new Date(l.on_time).toISOString().slice(0,10)
+    if(!byDate[dt]) byDate[dt] = {dep:0,arr:0,ovf:0}
+    byDate[dt].dep += l.departure_count||0
+    byDate[dt].arr += l.arrival_count||0
+    byDate[dt].ovf += l.overfly_count||0
   })
   const dates = Object.keys(byDate).sort()
   const chartMax = Math.max(1,...dates.map(d => byDate[d].dep+byDate[d].arr+byDate[d].ovf))
 
+  // Group by sector
+  const bySector = {}
+  filtered.forEach(l => {
+    const sk = l.unit+" — "+l.sector
+    if(!bySector[sk]) bySector[sk] = {dep:0,arr:0,ovf:0}
+    bySector[sk].dep += l.departure_count||0
+    bySector[sk].arr += l.arrival_count||0
+    bySector[sk].ovf += l.overfly_count||0
+  })
+  const sectorKeys = Object.keys(bySector).sort((a,b) => (bySector[b].dep+bySector[b].arr+bySector[b].ovf) - (bySector[a].dep+bySector[a].arr+bySector[a].ovf))
+  const sectorMax = Math.max(1,...sectorKeys.map(k => bySector[k].dep+bySector[k].arr+bySector[k].ovf))
+
   const exportCSV = () => {
-    const head = ["Tanggal","Jam Mulai","Jam Selesai","Petugas","Unit","Sektor","DEP","ARR","OVF","Total","Catatan"]
-    const rows = filtered.map(r => [r.strip_date,r.jam_mulai||"",r.jam_selesai||"",r.petugas||"",r.unit||"",r.sector||"",r.departure_count||0,r.arrival_count||0,r.overfly_count||0,r.traffic_count||0,`"${(r.notes||"").replace(/"/g,'""')}"`])
+    const head = ["Tanggal","On","Off","Controller","Unit","Sektor","Shift","DEP","ARR","OVF","Total"]
+    const rows = filtered.map(l => {const dt=new Date(l.on_time).toISOString().slice(0,10);return[dt,fmtT(l.on_time),fmtT(l.off_time),l.atc_name||"",l.unit||"",l.sector||"",l.shift||"",l.departure_count||0,l.arrival_count||0,l.overfly_count||0,(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)]})
     const csv = [head.join(","),...rows.map(r => r.join(","))].join("\n")
     const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"})
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob)
-    a.download = `rekap_fps_${ctx.user.branch_code}_${new Date().toISOString().slice(0,10)}.csv`
+    a.download = `rekap_traffic_${ctx.user.branch_code}_${new Date().toISOString().slice(0,10)}.csv`
     a.click(); URL.revokeObjectURL(a.href)
   }
 
   return (
     <div className="page-content">
-      <Header title="Rekap Flight Strips" sub={"Data traffic — "+ctx.user.branch_code}/>
+      <Header title="Rekap Traffic" sub={"Data traffic per sektor — "+ctx.user.branch_code}/>
 
       {/* Filter bar */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
         <div className="filter-bar" style={{margin:0}}>{[["today","Hari Ini"],["week","7 Hari"],["month","30 Hari"]].map(([k,v]) => <button key={k} className={"filter-btn"+(period===k?" filter-btn-active":"")} onClick={() => setPeriod(k)}>{v}</button>)}</div>
-        <input value={filterPetugas} onChange={e => setFilterPetugas(e.target.value)} placeholder="Filter petugas..." className="filter-input" style={{flex:1,minWidth:100,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}/>
-        <input value={filterUnit} onChange={e => setFilterUnit(e.target.value)} placeholder="Unit..." className="filter-input" style={{width:80,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}/>
+        <input value={filterName} onChange={e => setFilterName(e.target.value)} placeholder="Filter controller..." className="filter-input" style={{flex:1,minWidth:100,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}/>
+        <input value={filterSector} onChange={e => setFilterSector(e.target.value)} placeholder="Sektor..." className="filter-input" style={{width:100,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}/>
       </div>
 
       {/* Summary stats */}
       <div className="stats-grid">
-        <Stat icon="plane" label="Total FPS" value={totals.tc} sub={filtered.length+" record"} color="#10b981"/>
+        <Stat icon="plane" label="Total Traffic" value={totals.tc} sub={filtered.length+" laporan"} color="#10b981"/>
         <Stat icon="upload" label="Departure" value={totals.dep} color="#0284C7"/>
         <Stat icon="download" label="Arrival" value={totals.arr} color="#CA8A04"/>
         <Stat icon="radar" label="Overfly" value={totals.ovf} color="#64748B"/>
       </div>
 
-      {/* Chart */}
-      {dates.length>0 && <div className="panel">
-        <div className="panel-header">
-          <h2 className="panel-title"><I n="chart" s={16}/> Grafik</h2>
-          <div style={{display:"flex",gap:4}}>
-            {[["bar","Bar"],["line","Trend"]].map(([k,v]) => <button key={k} className={"filter-btn"+(chartMode===k?" filter-btn-active":"")} onClick={() => setChartMode(k)} style={{padding:"4px 12px",fontSize:11}}>{v}</button>)}
-          </div>
-        </div>
+      {/* Traffic per Sector */}
+      {sectorKeys.length>0 && <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Traffic Per Sektor</h2></div>
+        <div className="panel-body"><div className="simple-chart">{sectorKeys.map(sk => {
+          const t = bySector[sk].dep+bySector[sk].arr+bySector[sk].ovf
+          return <div key={sk} className="chart-bar-row"><span className="chart-label">{sk}</span><div className="chart-bar-track"><div className="chart-bar-fill" style={{width:(t/sectorMax*100)+"%"}}><span className="chart-bar-value">{t}</span></div></div></div>
+        })}</div></div>
+      </div>}
+
+      {/* Daily chart */}
+      {dates.length>1 && <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Trend Harian</h2></div>
         <div className="panel-body">
-          <svg viewBox={`0 0 680 ${chartMode==="line"?200:240}`} width="100%" style={{display:"block"}}>
-            {chartMode==="bar" ? (
-              <>
-                {/* Bar chart */}
-                {[0,.25,.5,.75,1].map(f => {const y=20+(1-f)*180;return <g key={f}><line x1="46" y1={y} x2="664" y2={y} stroke="var(--border)" strokeWidth=".5"/><text x="42" y={y+4} textAnchor="end" fontSize="10" fill="var(--fg-muted)">{Math.round(chartMax*f)}</text></g>})}
-                {dates.map((d,i) => {
-                  const gw=Math.min(54,(618/dates.length)-8),bw=Math.max(3,(gw-4)/3),gap=(618-gw*dates.length)/(dates.length+1)
-                  const x0=46+gap+i*(gw+gap)
-                  const vals=[byDate[d].dep,byDate[d].arr,byDate[d].ovf],cols=["#0284C7","#CA8A04","#64748B"]
-                  return <g key={d}>
-                    {vals.map((v,j) => {const bh=(v/chartMax)*180;return <rect key={j} x={x0+j*(bw+1)} y={20+180-bh} width={bw} height={Math.max(0,bh)} fill={cols[j]} rx="2" opacity=".85"/>})}
-                    <text x={x0+gw/2} y={225} textAnchor="middle" fontSize="9" fill="var(--fg-muted)" transform={`rotate(-25,${x0+gw/2},225)`}>{d.slice(5)}</text>
-                  </g>
-                })}
+          <svg viewBox="0 0 680 200" width="100%" style={{display:"block"}}>
+            {[0,.25,.5,.75,1].map(f => {const y=16+(1-f)*150;return <line key={f} x1="46" y1={y} x2="664" y2={y} stroke="var(--border)" strokeWidth=".5"/>})}
+            {(() => {
+              const pts=dates.map((d,i) => ({x:46+(dates.length===1?309:(i/(dates.length-1))*618),y:16+(1-(byDate[d].dep+byDate[d].arr+byDate[d].ovf)/chartMax)*150,v:byDate[d].dep+byDate[d].arr+byDate[d].ovf,d}))
+              const pathD=pts.map((p,i) => `${i===0?"M":"L"}${p.x},${p.y}`).join(" ")
+              return <>
+                <path d={`${pathD} L${pts[pts.length-1].x},166 L${pts[0].x},166 Z`} fill="#0284C7" opacity=".1"/>
+                <path d={pathD} fill="none" stroke="#0284C7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                {pts.map((p,i) => <g key={i}><circle cx={p.x} cy={p.y} r="4" fill="var(--card)" stroke="#0284C7" strokeWidth="2"/><text x={p.x} y={p.y-10} textAnchor="middle" fontSize="10" fontWeight="600" fill="#0284C7">{p.v}</text><text x={p.x} y={185} textAnchor="middle" fontSize="9" fill="var(--fg-muted)">{p.d.slice(5)}</text></g>)}
               </>
-            ) : (
-              <>
-                {/* Line chart */}
-                {[0,.25,.5,.75,1].map(f => {const y=16+(1-f)*150;return <line key={f} x1="46" y1={y} x2="664" y2={y} stroke="var(--border)" strokeWidth=".5"/>})}
-                {(() => {
-                  const pts=dates.map((d,i) => ({x:46+(dates.length===1?309:(i/(dates.length-1))*618),y:16+(1-(byDate[d].dep+byDate[d].arr+byDate[d].ovf)/chartMax)*150,v:byDate[d].dep+byDate[d].arr+byDate[d].ovf,d}))
-                  const pathD=pts.map((p,i) => `${i===0?"M":"L"}${p.x},${p.y}`).join(" ")
-                  return <>
-                    <path d={`${pathD} L${pts[pts.length-1].x},166 L${pts[0].x},166 Z`} fill="#0284C7" opacity=".1"/>
-                    <path d={pathD} fill="none" stroke="#0284C7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    {pts.map((p,i) => <g key={i}><circle cx={p.x} cy={p.y} r="4" fill="var(--card)" stroke="#0284C7" strokeWidth="2"/><text x={p.x} y={p.y-10} textAnchor="middle" fontSize="10" fontWeight="600" fill="#0284C7">{p.v}</text><text x={p.x} y={185} textAnchor="middle" fontSize="9" fill="var(--fg-muted)">{p.d.slice(5)}</text></g>)}
-                  </>
-                })()}
-              </>
-            )}
+            })()}
           </svg>
-          {/* Legend */}
-          <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:8}}>
-            {FPS_TYPES.map(t => <div key={t.key} style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"var(--fg-muted)"}}><div style={{width:10,height:10,borderRadius:2,background:t.color}}/>{t.full}</div>)}
-          </div>
         </div>
       </div>}
 
@@ -873,31 +658,33 @@ const CabangRekap = () => {
         <div className="panel-body">
           {filtered.length===0 ? <div className="empty-state"><p>Tidak ada data untuk filter ini</p></div> :
           <div className="table-wrap"><table className="data-table"><thead><tr>
-            <th>Tanggal</th><th>Jam</th><th>Petugas</th><th>Unit</th><th>Sektor</th>
+            <th>Tanggal</th><th>On–Off</th><th>Controller</th><th>Unit</th><th>Sektor</th><th>Shift</th>
             <th style={{textAlign:"center",color:"#0284C7"}}>DEP</th>
             <th style={{textAlign:"center",color:"#CA8A04"}}>ARR</th>
             <th style={{textAlign:"center",color:"#64748B"}}>OVF</th>
-            <th style={{textAlign:"center"}}>Total</th><th>Catatan</th>
+            <th style={{textAlign:"center"}}>Total</th>
           </tr></thead>
-          <tbody>{filtered.map(s => <tr key={s.id}>
-            <td style={{whiteSpace:"nowrap"}}>{fmtD(s.strip_date)}</td>
-            <td style={{whiteSpace:"nowrap",color:"var(--fg-muted)",fontSize:12}}>{s.jam_mulai||"-"}{s.jam_selesai?(" – "+s.jam_selesai):""}</td>
-            <td><strong>{s.petugas||"-"}</strong></td>
-            <td><span className="unit-tag">{s.unit}</span></td>
-            <td>{s.sector||"-"}</td>
-            <td style={{textAlign:"center",color:"#0284C7",fontWeight:700}}>{s.departure_count||0}</td>
-            <td style={{textAlign:"center",color:"#CA8A04",fontWeight:700}}>{s.arrival_count||0}</td>
-            <td style={{textAlign:"center",color:"#64748B",fontWeight:700}}>{s.overfly_count||0}</td>
-            <td style={{textAlign:"center",fontWeight:800}}>{s.traffic_count}</td>
-            <td style={{fontSize:11,color:"var(--fg-muted)",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.notes||"-"}</td>
-          </tr>)}</tbody>
+          <tbody>{filtered.map(l => {
+            const tc=(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)
+            return <tr key={l.id}>
+            <td style={{whiteSpace:"nowrap"}}>{fmtD(l.on_time)}</td>
+            <td style={{whiteSpace:"nowrap",color:"var(--fg-muted)",fontSize:12}}>{fmtT(l.on_time)}–{fmtT(l.off_time)}</td>
+            <td><strong>{l.atc_name||"-"}</strong></td>
+            <td><span className="unit-tag">{l.unit}</span></td>
+            <td>{l.sector||"-"}</td>
+            <td>{l.shift||"-"}</td>
+            <td style={{textAlign:"center",color:"#0284C7",fontWeight:700}}>{l.departure_count||0}</td>
+            <td style={{textAlign:"center",color:"#CA8A04",fontWeight:700}}>{l.arrival_count||0}</td>
+            <td style={{textAlign:"center",color:"#64748B",fontWeight:700}}>{l.overfly_count||0}</td>
+            <td style={{textAlign:"center",fontWeight:800}}>{tc}</td>
+          </tr>})}
+          </tbody>
           <tfoot><tr style={{fontWeight:700}}>
-            <td colSpan={5} style={{textAlign:"right",color:"var(--fg-muted)"}}>TOTAL</td>
+            <td colSpan={6} style={{textAlign:"right",color:"var(--fg-muted)"}}>TOTAL</td>
             <td style={{textAlign:"center",color:"#0284C7"}}>{totals.dep}</td>
             <td style={{textAlign:"center",color:"#CA8A04"}}>{totals.arr}</td>
             <td style={{textAlign:"center",color:"#64748B"}}>{totals.ovf}</td>
             <td style={{textAlign:"center"}}>{totals.tc}</td>
-            <td></td>
           </tr></tfoot>
           </table></div>}
         </div>
@@ -916,7 +703,7 @@ const AdminDash = () => {
   const ctx = useApp()
   const allActive = ctx.logs.filter(l => !l.off_time)
   const todayLogs = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
-  const todayTC = ctx.strips.filter(s => new Date(s.strip_date).toDateString() === new Date().toDateString()).reduce((a,s) => a+s.traffic_count, 0)
+  const todayTC = ctx.logs.filter(l => l.off_time && new Date(l.on_time).toDateString() === new Date().toDateString()).reduce((a,l) => a+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0), 0)
   const brAct = {}
   allActive.forEach(l => { brAct[l.branch_code] = (brAct[l.branch_code]||0)+1 })
 
@@ -1000,27 +787,30 @@ const AdminMonLog = () => {
 }
 
 // ============================================================
-// ADMIN: MONITORING RECAP
+// ADMIN: MONITORING REKAP TRAFFIC
 // ============================================================
 const AdminMonRecap = () => {
   const ctx = useApp()
   const [br,setBr] = useState("ALL")
   const [period,setPeriod] = useState("today")
-  const fl = ctx.strips.filter(s => {
-    const brOk = br==="ALL" || s.branch_code===br
-    const d = (new Date()-new Date(s.strip_date))/864e5
-    const pOk = period==="today" ? new Date(s.strip_date).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
+  const trafficLogs = ctx.logs.filter(l => {
+    if(!l.off_time) return false
+    const tc = (l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)
+    if(tc===0) return false
+    const brOk = br==="ALL" || l.branch_code===br
+    const d = (new Date()-new Date(l.on_time))/864e5
+    const pOk = period==="today" ? new Date(l.on_time).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
     return brOk && pOk
   })
-  const tot = fl.reduce((a,s) => a+s.traffic_count, 0)
+  const tot = trafficLogs.reduce((a,l) => a+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0), 0)
   const byBr = {}
-  fl.forEach(s => { if(!byBr[s.branch_code]) byBr[s.branch_code]={tc:0,n:0}; byBr[s.branch_code].tc+=s.traffic_count; byBr[s.branch_code].n++ })
+  trafficLogs.forEach(l => { if(!byBr[l.branch_code]) byBr[l.branch_code]={tc:0,n:0}; byBr[l.branch_code].tc+=(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0); byBr[l.branch_code].n++ })
   const brKeys = Object.keys(byBr).sort((a,b) => byBr[b].tc-byBr[a].tc)
   let mx = 1; brKeys.forEach(k => { if(byBr[k].tc>mx) mx=byBr[k].tc })
 
   return (
     <div className="page-content">
-      <Header title="Monitoring Rekap Traffic" sub="Dari flight strips"/>
+      <Header title="Monitoring Rekap Traffic" sub="Dari laporan off-mic controller"/>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
         <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
         <select className="br-select" value={br} onChange={e => setBr(e.target.value)}><option value="ALL">Semua Cabang</option>{ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}</select>
@@ -1028,7 +818,7 @@ const AdminMonRecap = () => {
       </div>
       <div className="stats-grid">
         <Stat icon="plane" label="Total Traffic" value={tot} color="#10b981"/>
-        <Stat icon="upload" label="Strip" value={fl.length} color="#38bdf8"/>
+        <Stat icon="log" label="Laporan" value={trafficLogs.length} color="#38bdf8"/>
         <Stat icon="building" label="Cabang" value={brKeys.length} color="#8b5cf6"/>
       </div>
       {brKeys.length>0 && <div className="panel"><div className="panel-header"><h2 className="panel-title">Traffic Per Cabang</h2></div><div className="panel-body"><div className="simple-chart">{brKeys.map(code => <div key={code} className="chart-bar-row"><span className="chart-label">{code}</span><div className="chart-bar-track"><div className="chart-bar-fill" style={{width:(byBr[code].tc/mx*100)+"%"}}><span className="chart-bar-value">{byBr[code].tc}</span></div></div></div>)}</div></div></div>}
@@ -1183,7 +973,6 @@ export default function App() {
   const [branches,setBranches] = useState([])
   const [sectors,setSectors] = useState([])
   const [logs,setLogs] = useState([])
-  const [strips,setStrips] = useState([])
   const [handovers,setHandovers] = useState([])
   const [handoverChecklists,setHandoverChecklists] = useState([])
 
@@ -1203,18 +992,16 @@ export default function App() {
   }
 
   const loadData = async () => {
-    const [brRes, secRes, logRes, stripRes, hoRes, hcRes] = await Promise.all([
+    const [brRes, secRes, logRes, hoRes, hcRes] = await Promise.all([
       supabase.from("branches").select("*").order("code"),
       supabase.from("sectors").select("*").order("sort_order"),
       supabase.from("position_logs").select("*").order("on_time",{ascending:false}).limit(500),
-      supabase.from("flight_strips").select("*").order("created_at",{ascending:false}).limit(200),
       supabase.from("handover_notes").select("*").order("created_at",{ascending:false}).limit(200),
       supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
     ])
     if (brRes.data) setBranches(brRes.data)
     if (secRes.data) setSectors(secRes.data)
     if (logRes.data) setLogs(logRes.data)
-    if (stripRes.data) setStrips(stripRes.data)
     if (hoRes.data) setHandovers(hoRes.data)
     if (hcRes.data) setHandoverChecklists(hcRes.data)
   }
@@ -1236,7 +1023,7 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     setSession(null); setUser(null); setPage("dashboard")
-    setBranches([]); setSectors([]); setLogs([]); setStrips([]); setHandovers([]); setHandoverChecklists([])
+    setBranches([]); setSectors([]); setLogs([]); setHandovers([]); setHandoverChecklists([])
   }
 
   if (loading) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat...</p><span className="login-spinner"/></div>
@@ -1245,11 +1032,11 @@ export default function App() {
 
   const pageMap = user.role === "admin"
     ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
-    : {dashboard:CabangDash,log:CabangLog,strips:CabangStrips,rekap:CabangRekap,handover:CabangHandover}
+    : {dashboard:CabangDash,log:CabangLog,rekap:CabangRekap,handover:CabangHandover}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
-    <AppContext.Provider value={{user,branches,sectors,logs,strips,handovers,handoverChecklists,reload:loadData}}>
+    <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,reload:loadData}}>
       <div className="app-layout">
         <Sidebar page={page} go={setPage} user={user} logout={handleLogout} col={col} toggle={() => setCol(!col)}/>
         <main className="main-area"><CurrentPage/></main>
