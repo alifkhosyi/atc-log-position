@@ -706,12 +706,24 @@ const AdminDash = () => {
   const allActive = ctx.logs.filter(l => !l.off_time)
   const todayLogs = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
   const todayTC = ctx.logs.filter(l => l.off_time && new Date(l.on_time).toDateString() === new Date().toDateString()).reduce((a,l) => a+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0), 0)
+
+  // Per-branch and per-unit active counts
   const brAct = {}
-  allActive.forEach(l => { brAct[l.branch_code] = (brAct[l.branch_code]||0)+1 })
+  const brUnitAct = {} // { "WADD": { "TWR": 2, "APP": 1 } }
+  allActive.forEach(l => {
+    brAct[l.branch_code] = (brAct[l.branch_code]||0)+1
+    if(!brUnitAct[l.branch_code]) brUnitAct[l.branch_code] = {}
+    brUnitAct[l.branch_code][l.unit] = (brUnitAct[l.branch_code][l.unit]||0)+1
+  })
+
+  const handleBranchClick = (code) => {
+    ctx.setNavBranch(code)
+    ctx.goPage("mon_log")
+  }
 
   return (
     <div className="page-content">
-      <Header title="Dashboard Admin Pusat" sub="Monitoring seluruh 70 cabang"/>
+      <Header title="Dashboard Admin Pusat" sub="Monitoring seluruh cabang"/>
       <div className="stats-grid">
         <Stat icon="radar" label="Total Cabang" value={ctx.branches.length} sub="Seluruh Indonesia" color="#38bdf8"/>
         <Stat icon="mic" label="On Mic" value={allActive.length} sub="Seluruh cabang" color="#10b981"/>
@@ -722,12 +734,62 @@ const AdminDash = () => {
         <div className="panel-header"><h2 className="panel-title"><Pulse s={10}/> Semua Cabang</h2><span className="panel-badge">LIVE</span></div>
         <div className="panel-body"><div className="branch-grid">{ctx.branches.map(b => {
           const c = brAct[b.code]||0
+          const unitAct = brUnitAct[b.code] || {}
+          const isActive = c > 0
           return (
-            <div key={b.code} className={"branch-card"+(c>0?" branch-card-active":"")}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div className="branch-code">{b.code}</div><Pulse on={c>0} s={7}/></div>
-              <div className="branch-name">{b.name}</div><div className="branch-city">{b.city}</div>
-              <div className="branch-units">{b.units.map(u => <span key={u} className="branch-unit-tag">{u}</span>)}</div>
-              <div className="branch-status"><I n="mic" s={11}/> {c} on mic</div>
+            <div
+              key={b.code}
+              className={"branch-card"+(isActive?" branch-card-active":"")}
+              onClick={() => handleBranchClick(b.code)}
+              style={{
+                cursor:"pointer",
+                transition:"all .2s ease",
+                opacity: isActive ? 1 : 0.55,
+                border: isActive ? "1.5px solid #10b981" : "1px solid var(--border)",
+                boxShadow: isActive ? "0 0 16px rgba(16,185,129,0.15), 0 0 4px rgba(16,185,129,0.1)" : "none",
+              }}
+              onMouseDown={e => { e.currentTarget.style.transform = "scale(0.96)"; e.currentTarget.style.boxShadow = isActive ? "0 0 8px rgba(16,185,129,0.3)" : "0 0 8px rgba(100,116,139,0.15)" }}
+              onMouseUp={e => { e.currentTarget.style.transform = "scale(1)" }}
+              onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)" }}
+            >
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div className="branch-code">{b.code}</div>
+                <Pulse on={isActive} s={isActive ? 9 : 6}/>
+              </div>
+              <div className="branch-name">{b.name}</div>
+              <div className="branch-city">{b.city}</div>
+              <div className="branch-units" style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
+                {b.units.map(u => {
+                  const unitOn = (unitAct[u]||0) > 0
+                  return (
+                    <span key={u} style={{
+                      display:"inline-flex",alignItems:"center",gap:4,
+                      padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
+                      letterSpacing:".3px",
+                      background: unitOn ? "rgba(16,185,129,0.15)" : "rgba(100,116,139,0.08)",
+                      color: unitOn ? "#059669" : "#94a3b8",
+                      border: unitOn ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent",
+                      boxShadow: unitOn ? "0 0 6px rgba(16,185,129,0.2)" : "none",
+                      transition:"all .3s ease",
+                    }}>
+                      <span style={{
+                        width:5,height:5,borderRadius:"50%",
+                        background: unitOn ? "#10b981" : "#cbd5e1",
+                        boxShadow: unitOn ? "0 0 4px #10b981" : "none",
+                      }}/>
+                      {u}
+                      {unitOn && <span style={{fontSize:9,fontWeight:400}}>({unitAct[u]})</span>}
+                    </span>
+                  )
+                })}
+              </div>
+              <div className="branch-status" style={{
+                marginTop:6,fontSize:11,
+                color: isActive ? "#059669" : "#94a3b8",
+                fontWeight: isActive ? 700 : 400,
+              }}>
+                <I n="mic" s={11}/> {c > 0 ? c+" on mic" : "Idle"}
+              </div>
             </div>
           )
         })}</div></div>
@@ -741,7 +803,16 @@ const AdminDash = () => {
 // ============================================================
 const AdminMonLog = () => {
   const ctx = useApp()
-  const [br,setBr] = useState("ALL")
+  const [br,setBr] = useState(ctx.navBranch || "ALL")
+  
+  // Clear navBranch after consuming it
+  useEffect(() => {
+    if (ctx.navBranch) {
+      setBr(ctx.navBranch)
+      ctx.setNavBranch(null)
+    }
+  }, [ctx.navBranch])
+
   const allActive = ctx.logs.filter(l => !l.off_time)
   const fa = br==="ALL" ? allActive : allActive.filter(l => l.branch_code===br)
   const todayAll = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
@@ -1255,6 +1326,7 @@ export default function App() {
   const [page,setPage] = useState("dashboard")
   const [col,setCol] = useState(false)
   const [loading,setLoading] = useState(true)
+  const [navBranch,setNavBranch] = useState(null) // for dashboard→mon_log navigation
 
   const [branches,setBranches] = useState([])
   const [sectors,setSectors] = useState([])
@@ -1325,7 +1397,7 @@ export default function App() {
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
-    <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,personnel,reload:loadData}}>
+    <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,personnel,navBranch,setNavBranch,goPage:setPage,reload:loadData}}>
       <div className="app-layout">
         <Sidebar page={page} go={setPage} user={user} logout={handleLogout} col={col} toggle={() => setCol(!col)}/>
         <main className="main-area"><CurrentPage/></main>
