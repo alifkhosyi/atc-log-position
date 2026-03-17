@@ -1306,11 +1306,388 @@ const AdminMonHandover = () => {
 // ============================================================
 // ADMIN: EXPORT & AUDIT (placeholder)
 // ============================================================
-const AdminExport = () => (
-  <div className="page-content"><Header title="Export Laporan" sub="PDF atau Excel"/>
-    <div className="panel"><div className="panel-body"><div className="empty-state"><I n="download" s={44}/><p>Fitur export akan tersedia setelah integrasi jsPDF & SheetJS</p></div></div></div>
-  </div>
-)
+// ============================================================
+// ADMIN: EXPORT LAPORAN (Excel + PDF)
+// ============================================================
+const AdminExport = () => {
+  const ctx = useApp()
+  const [br,setBr] = useState("ALL")
+  const [dateFrom,setDateFrom] = useState(new Date().toISOString().slice(0,10))
+  const [dateTo,setDateTo] = useState(new Date().toISOString().slice(0,10))
+  const [filterMode,setFilterMode] = useState("period") // period | range
+  const [period,setPeriod] = useState("today")
+  const [shift,setShift] = useState("ALL")
+  const [reportType,setReportType] = useState("log_position")
+  const [exporting,setExporting] = useState(false)
+  const [libsLoaded,setLibsLoaded] = useState(false)
+
+  // Load libraries on mount
+  useEffect(() => {
+    const loadLibs = async () => {
+      if (window.ExcelJS && window.jspdf) { setLibsLoaded(true); return }
+      const scripts = [
+        "https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js",
+        "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.3/jspdf.plugin.autotable.min.js"
+      ]
+      for (const src of scripts) {
+        if (!document.querySelector(`script[src="${src}"]`)) {
+          await new Promise((res,rej) => { const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s) })
+        }
+      }
+      setLibsLoaded(true)
+    }
+    loadLibs()
+  },[])
+
+  // ── Filter logic ──
+  const inRange = (dateStr) => {
+    if (filterMode === "period") {
+      const d = (new Date() - new Date(dateStr)) / 864e5
+      return period==="today" ? new Date(dateStr).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
+    }
+    return dateStr >= dateFrom && dateStr <= dateTo
+  }
+  const matchBr = (code) => br==="ALL" || code===br
+  const matchShift = (s) => shift==="ALL" || s===shift
+
+  const getBrName = (code) => { const b=ctx.branches.find(x=>x.code===code); return b ? b.name+" ("+code+")" : code }
+  const brLabel = br==="ALL" ? "Semua Cabang" : getBrName(br)
+  const periodLabel = filterMode==="period" ? (period==="today"?"Hari Ini":period==="week"?"7 Hari Terakhir":"30 Hari Terakhir") : dateFrom+" s/d "+dateTo
+
+  // ── Report types ──
+  const REPORTS = [
+    {id:"log_position",label:"Log Position",icon:"mic",desc:"Siapa on/off mic, kapan, durasi"},
+    {id:"rekap_traffic",label:"Rekap Traffic",icon:"plane",desc:"DEP/ARR/OVF per cabang & sektor"},
+    {id:"handover_checklist",label:"Handover Checklists",icon:"checklist",desc:"Status checklist serah terima"},
+    {id:"handover_notes",label:"Handover Notes",icon:"note",desc:"Catatan serah terima"},
+    {id:"daily_summary",label:"Ringkasan Harian",icon:"dashboard",desc:"Rangkuman aktivitas per hari"},
+    {id:"personnel_stats",label:"Statistik Personel",icon:"chart",desc:"Jam kerja & frekuensi on mic"},
+  ]
+
+  // ── Data collectors ──
+  const getLogData = () => ctx.logs.filter(l => {
+    const dt = new Date(l.on_time).toISOString().slice(0,10)
+    return matchBr(l.branch_code) && inRange(dt) && matchShift(l.shift)
+  }).sort((a,b) => new Date(b.on_time)-new Date(a.on_time))
+
+  const getTrafficData = () => ctx.logs.filter(l => {
+    if(!l.off_time) return false
+    const tc=(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)
+    if(tc===0) return false
+    const dt = new Date(l.on_time).toISOString().slice(0,10)
+    return matchBr(l.branch_code) && inRange(dt) && matchShift(l.shift)
+  }).sort((a,b) => new Date(b.on_time)-new Date(a.on_time))
+
+  const getChecklistData = () => ctx.handoverChecklists.filter(c => {
+    const brOk = br==="ALL" || c.branch_id===br
+    return brOk && inRange(c.checklist_date) && matchShift(c.shift)
+  })
+
+  const getNotesData = () => ctx.handovers.filter(n => {
+    const dt = new Date(n.created_at).toISOString().slice(0,10)
+    return matchBr(n.branch_code) && inRange(dt)
+  })
+
+  // ── Excel Export ──
+  const exportExcel = async () => {
+    if(!window.ExcelJS) { alert("Library belum dimuat"); return }
+    setExporting(true)
+    try {
+      const wb = new window.ExcelJS.Workbook()
+      wb.creator = "ATC Log Position — Airnav Indonesia"
+      wb.created = new Date()
+
+      const headerStyle = {font:{bold:true,color:{argb:"FFFFFFFF"},size:11},fill:{type:"pattern",pattern:"solid",fgColor:{argb:"FF1e3a5f"}},alignment:{horizontal:"center",vertical:"middle"},border:{bottom:{style:"thin"}}}
+      const addHeaders = (ws, headers) => {
+        const row = ws.addRow(headers)
+        row.eachCell(c => { c.font=headerStyle.font; c.fill=headerStyle.fill; c.alignment=headerStyle.alignment; c.border=headerStyle.border })
+        return row
+      }
+      const addTitle = (ws, title) => {
+        const r = ws.addRow([title]); r.font={bold:true,size:14,color:{argb:"FF1e3a5f"}}
+        ws.addRow([brLabel+" — "+periodLabel+(shift!=="ALL"?" — Shift "+shift:"")]); ws.addRow([])
+      }
+
+      if (reportType==="log_position" || reportType==="daily_summary" || reportType==="personnel_stats") {
+        const data = getLogData()
+        if (reportType==="log_position") {
+          const ws = wb.addWorksheet("Log Position")
+          addTitle(ws, "Laporan Log Position")
+          addHeaders(ws, ["Cabang","Tanggal","Nama ATC","Unit","Sektor","CWP","Shift","On","Off","Durasi (mnt)","DEP","ARR","OVF","Status"])
+          data.forEach(l => ws.addRow([l.branch_code,fmtD(l.on_time),l.atc_name,l.unit,l.sector,l.cwp,l.shift,fmtT(l.on_time),l.off_time?fmtT(l.off_time):"-",l.off_time?durMin(l.on_time,l.off_time):"-",l.departure_count||0,l.arrival_count||0,l.overfly_count||0,l.off_time?"Off":"On Mic"]))
+          ws.columns.forEach(c => { c.width = 14 })
+        }
+        if (reportType==="daily_summary") {
+          const ws = wb.addWorksheet("Ringkasan Harian")
+          addTitle(ws, "Ringkasan Harian")
+          // Group by date
+          const byDate = {}
+          data.forEach(l => {
+            const dt = new Date(l.on_time).toISOString().slice(0,10)
+            if(!byDate[dt]) byDate[dt]={logs:0,onMic:0,offMic:0,dep:0,arr:0,ovf:0,branches:new Set(),personnel:new Set()}
+            byDate[dt].logs++
+            if(l.off_time) { byDate[dt].offMic++; byDate[dt].dep+=l.departure_count||0; byDate[dt].arr+=l.arrival_count||0; byDate[dt].ovf+=l.overfly_count||0 }
+            else byDate[dt].onMic++
+            byDate[dt].branches.add(l.branch_code)
+            byDate[dt].personnel.add(l.atc_name)
+          })
+          addHeaders(ws, ["Tanggal","Total Log","Masih On","Sudah Off","Cabang Aktif","Personel Aktif","DEP","ARR","OVF","Total Traffic"])
+          Object.keys(byDate).sort().reverse().forEach(dt => {
+            const d=byDate[dt]; ws.addRow([dt,d.logs,d.onMic,d.offMic,d.branches.size,d.personnel.size,d.dep,d.arr,d.ovf,d.dep+d.arr+d.ovf])
+          })
+          ws.columns.forEach(c => { c.width = 15 })
+        }
+        if (reportType==="personnel_stats") {
+          const ws = wb.addWorksheet("Statistik Personel")
+          addTitle(ws, "Statistik Personel")
+          const byPerson = {}
+          data.filter(l=>l.off_time).forEach(l => {
+            const k = l.atc_name+"||"+l.branch_code
+            if(!byPerson[k]) byPerson[k]={name:l.atc_name,branch:l.branch_code,count:0,totalMin:0,dep:0,arr:0,ovf:0}
+            byPerson[k].count++
+            byPerson[k].totalMin += durMin(l.on_time,l.off_time)
+            byPerson[k].dep += l.departure_count||0
+            byPerson[k].arr += l.arrival_count||0
+            byPerson[k].ovf += l.overfly_count||0
+          })
+          addHeaders(ws, ["Nama","Cabang","Jumlah On Mic","Total Jam Kerja","Rata-rata (mnt)","DEP","ARR","OVF","Total Traffic"])
+          Object.values(byPerson).sort((a,b)=>b.totalMin-a.totalMin).forEach(p => {
+            ws.addRow([p.name,p.branch,p.count,Math.round(p.totalMin/60*10)/10+" jam",p.count?Math.round(p.totalMin/p.count):0,p.dep,p.arr,p.ovf,p.dep+p.arr+p.ovf])
+          })
+          ws.columns.forEach(c => { c.width = 16 })
+        }
+      }
+      if (reportType==="rekap_traffic") {
+        const data = getTrafficData()
+        const ws = wb.addWorksheet("Rekap Traffic")
+        addTitle(ws, "Rekap Traffic")
+        addHeaders(ws, ["Cabang","Tanggal","On","Off","Controller","Unit","Sektor","Shift","DEP","ARR","OVF","Total"])
+        data.forEach(l => ws.addRow([l.branch_code,fmtD(l.on_time),fmtT(l.on_time),fmtT(l.off_time),l.atc_name,l.unit,l.sector,l.shift,l.departure_count||0,l.arrival_count||0,l.overfly_count||0,(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)]))
+        // Summary sheet
+        const ws2 = wb.addWorksheet("Summary Per Cabang")
+        addTitle(ws2, "Summary Traffic Per Cabang")
+        const byBr2 = {}
+        data.forEach(l => { if(!byBr2[l.branch_code]) byBr2[l.branch_code]={dep:0,arr:0,ovf:0,n:0}; byBr2[l.branch_code].dep+=l.departure_count||0; byBr2[l.branch_code].arr+=l.arrival_count||0; byBr2[l.branch_code].ovf+=l.overfly_count||0; byBr2[l.branch_code].n++ })
+        addHeaders(ws2, ["Cabang","Bandara","Laporan","DEP","ARR","OVF","Total"])
+        Object.keys(byBr2).sort((a,b)=>(byBr2[b].dep+byBr2[b].arr+byBr2[b].ovf)-(byBr2[a].dep+byBr2[a].arr+byBr2[a].ovf)).forEach(code => {
+          const d=byBr2[code]; ws2.addRow([code,getBrName(code),d.n,d.dep,d.arr,d.ovf,d.dep+d.arr+d.ovf])
+        })
+        ws.columns.forEach(c => { c.width = 14 }); ws2.columns.forEach(c => { c.width = 16 })
+      }
+      if (reportType==="handover_checklist") {
+        const data = getChecklistData()
+        const ws = wb.addWorksheet("Handover Checklists")
+        addTitle(ws, "Laporan Handover Checklists")
+        addHeaders(ws, ["Tanggal","Waktu","Shift","MOD","Traffic Situation","Conflict & Solution","Weather","Facilities","Coordination","Others","Incoming","Outgoing"])
+        data.forEach(c => ws.addRow([c.checklist_date,c.checklist_time,c.shift,c.manager_on_duty,...CHECKLIST_ITEMS.map(it=>c[it.key+"_status"]+(c[it.key+"_notes"]?" ("+c[it.key+"_notes"]+")":"")),c.incoming_personnel,c.outgoing_personnel]))
+        ws.columns.forEach(c => { c.width = 18 })
+      }
+      if (reportType==="handover_notes") {
+        const data = getNotesData()
+        const ws = wb.addWorksheet("Handover Notes")
+        addTitle(ws, "Laporan Handover Notes")
+        addHeaders(ws, ["Cabang","Tanggal","Shift","Prioritas","Catatan","Penulis"])
+        data.forEach(n => ws.addRow([n.branch_code,fmtDT(n.created_at),n.from_shift+" → "+n.to_shift,n.priority,n.content,n.author_name]))
+        ws.columns.forEach(c => { c.width = 20 })
+      }
+
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
+      const a = document.createElement("a"); a.href=URL.createObjectURL(blob)
+      a.download = `${reportType}_${br}_${new Date().toISOString().slice(0,10)}.xlsx`
+      a.click(); URL.revokeObjectURL(a.href)
+    } catch(e) { alert("Error export Excel: "+e.message) }
+    setExporting(false)
+  }
+
+  // ── PDF Export ──
+  const exportPDF = async () => {
+    if(!window.jspdf) { alert("Library belum dimuat"); return }
+    setExporting(true)
+    try {
+      const { jsPDF } = window.jspdf
+      const doc = new jsPDF({orientation:"landscape",unit:"mm",format:"a4"})
+      const pageW = doc.internal.pageSize.getWidth()
+      
+      // Header
+      doc.setFontSize(16); doc.setFont(undefined,"bold"); doc.setTextColor(30,58,95)
+      doc.text("ATC LOG POSITION — AIRNAV INDONESIA", pageW/2, 15, {align:"center"})
+      doc.setFontSize(12); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80)
+      const reportLabel = REPORTS.find(r=>r.id===reportType)?.label || reportType
+      doc.text(reportLabel+" — "+brLabel, pageW/2, 22, {align:"center"})
+      doc.text(periodLabel+(shift!=="ALL"?" — Shift "+shift:""), pageW/2, 28, {align:"center"})
+      doc.setDrawColor(30,58,95); doc.setLineWidth(0.5); doc.line(14, 31, pageW-14, 31)
+
+      if (reportType==="log_position") {
+        const data = getLogData()
+        doc.autoTable({
+          startY:35, head:[["Cabang","Tanggal","Nama","Unit","Sektor","CWP","Shift","On","Off","Durasi","DEP","ARR","OVF"]],
+          body: data.map(l => [l.branch_code,fmtD(l.on_time),l.atc_name,l.unit,l.sector,l.cwp,l.shift,fmtT(l.on_time),l.off_time?fmtT(l.off_time):"-",l.off_time?durMin(l.on_time,l.off_time)+"m":"-",l.departure_count||0,l.arrival_count||0,l.overfly_count||0]),
+          styles:{fontSize:7,cellPadding:1.5},headStyles:{fillColor:[30,58,95],textColor:255,fontSize:7},alternateRowStyles:{fillColor:[245,247,250]},
+        })
+      }
+      if (reportType==="rekap_traffic") {
+        const data = getTrafficData()
+        doc.autoTable({
+          startY:35, head:[["Cabang","Tanggal","On–Off","Controller","Unit","Sektor","Shift","DEP","ARR","OVF","Total"]],
+          body: data.map(l => [l.branch_code,fmtD(l.on_time),fmtT(l.on_time)+"–"+fmtT(l.off_time),l.atc_name,l.unit,l.sector,l.shift,l.departure_count||0,l.arrival_count||0,l.overfly_count||0,(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)]),
+          styles:{fontSize:7,cellPadding:1.5},headStyles:{fillColor:[30,58,95],textColor:255,fontSize:7},alternateRowStyles:{fillColor:[245,247,250]},
+        })
+      }
+      if (reportType==="handover_checklist") {
+        const data = getChecklistData()
+        doc.autoTable({
+          startY:35, head:[["Tanggal","Waktu","Shift","MOD","Traffic","Conflict","Weather","Facilities","Coord","Others","In","Out"]],
+          body: data.map(c => [c.checklist_date,c.checklist_time,c.shift,c.manager_on_duty,...CHECKLIST_ITEMS.map(it=>c[it.key+"_status"]),c.incoming_personnel,c.outgoing_personnel]),
+          styles:{fontSize:7,cellPadding:1.5},headStyles:{fillColor:[30,58,95],textColor:255,fontSize:7},alternateRowStyles:{fillColor:[245,247,250]},
+        })
+      }
+      if (reportType==="handover_notes") {
+        const data = getNotesData()
+        doc.autoTable({
+          startY:35, head:[["Cabang","Tanggal","Shift","Prioritas","Catatan","Penulis"]],
+          body: data.map(n => [n.branch_code,fmtDT(n.created_at),n.from_shift+"→"+n.to_shift,n.priority,n.content,n.author_name]),
+          styles:{fontSize:7,cellPadding:1.5},headStyles:{fillColor:[30,58,95],textColor:255,fontSize:7},alternateRowStyles:{fillColor:[245,247,250]},
+          columnStyles:{4:{cellWidth:80}},
+        })
+      }
+      if (reportType==="daily_summary") {
+        const data = getLogData()
+        const byDate = {}
+        data.forEach(l => {
+          const dt=new Date(l.on_time).toISOString().slice(0,10)
+          if(!byDate[dt]) byDate[dt]={logs:0,on:0,off:0,dep:0,arr:0,ovf:0,br:new Set(),ppl:new Set()}
+          byDate[dt].logs++;if(l.off_time){byDate[dt].off++;byDate[dt].dep+=l.departure_count||0;byDate[dt].arr+=l.arrival_count||0;byDate[dt].ovf+=l.overfly_count||0}else byDate[dt].on++
+          byDate[dt].br.add(l.branch_code);byDate[dt].ppl.add(l.atc_name)
+        })
+        doc.autoTable({
+          startY:35, head:[["Tanggal","Log","On","Off","Cabang","Personel","DEP","ARR","OVF","Traffic"]],
+          body: Object.keys(byDate).sort().reverse().map(dt=>{const d=byDate[dt];return[dt,d.logs,d.on,d.off,d.br.size,d.ppl.size,d.dep,d.arr,d.ovf,d.dep+d.arr+d.ovf]}),
+          styles:{fontSize:8,cellPadding:2},headStyles:{fillColor:[30,58,95],textColor:255,fontSize:8},alternateRowStyles:{fillColor:[245,247,250]},
+        })
+      }
+      if (reportType==="personnel_stats") {
+        const data = getLogData().filter(l=>l.off_time)
+        const byP = {}
+        data.forEach(l => {
+          const k=l.atc_name+"||"+l.branch_code
+          if(!byP[k]) byP[k]={name:l.atc_name,br:l.branch_code,n:0,min:0,dep:0,arr:0,ovf:0}
+          byP[k].n++;byP[k].min+=durMin(l.on_time,l.off_time);byP[k].dep+=l.departure_count||0;byP[k].arr+=l.arrival_count||0;byP[k].ovf+=l.overfly_count||0
+        })
+        doc.autoTable({
+          startY:35, head:[["Nama","Cabang","On Mic","Total Jam","Rata² (mnt)","DEP","ARR","OVF","Traffic"]],
+          body: Object.values(byP).sort((a,b)=>b.min-a.min).map(p=>[p.name,p.br,p.n,(p.min/60).toFixed(1)+" jam",p.n?Math.round(p.min/p.n):0,p.dep,p.arr,p.ovf,p.dep+p.arr+p.ovf]),
+          styles:{fontSize:7,cellPadding:1.5},headStyles:{fillColor:[30,58,95],textColor:255,fontSize:7},alternateRowStyles:{fillColor:[245,247,250]},
+        })
+      }
+
+      // Footer
+      const pageCount = doc.internal.getNumberOfPages()
+      for(let i=1;i<=pageCount;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(150);doc.text("Dicetak: "+new Date().toLocaleString("id-ID")+" — ATC Log Position Airnav Indonesia",14,doc.internal.pageSize.getHeight()-8);doc.text("Hal "+i+"/"+pageCount,pageW-14,doc.internal.pageSize.getHeight()-8,{align:"right"})}
+
+      doc.save(`${reportType}_${br}_${new Date().toISOString().slice(0,10)}.pdf`)
+    } catch(e) { alert("Error export PDF: "+e.message) }
+    setExporting(false)
+  }
+
+  // ── Count preview ──
+  const previewCount = () => {
+    if(reportType==="log_position"||reportType==="daily_summary"||reportType==="personnel_stats") return getLogData().length+" log"
+    if(reportType==="rekap_traffic") return getTrafficData().length+" laporan traffic"
+    if(reportType==="handover_checklist") return getChecklistData().length+" checklist"
+    if(reportType==="handover_notes") return getNotesData().length+" catatan"
+    return ""
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="Export Laporan" sub="Download Excel atau PDF"/>
+
+      {/* Report Type Selection */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="log" s={16}/> Pilih Jenis Laporan</h2></div>
+        <div className="panel-body">
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10}}>
+            {REPORTS.map(r => (
+              <div key={r.id} onClick={() => setReportType(r.id)} style={{
+                padding:"14px 16px",borderRadius:10,cursor:"pointer",transition:"all .2s",
+                border:reportType===r.id?"2px solid #2563eb":"1.5px solid var(--border)",
+                background:reportType===r.id?"rgba(37,99,235,0.06)":"var(--card)",
+              }}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <I n={r.icon} s={16}/>
+                  <span style={{fontWeight:700,fontSize:13,color:reportType===r.id?"#2563eb":"var(--fg)"}}>{r.label}</span>
+                </div>
+                <div style={{fontSize:11,color:"var(--fg-muted)"}}>{r.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="eye" s={16}/> Filter</h2></div>
+        <div className="panel-body">
+          <div className="form-grid">
+            <div className="field">
+              <label>Cabang</label>
+              <select value={br} onChange={e => setBr(e.target.value)}>
+                <option value="ALL">Semua Cabang</option>
+                {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Mode Filter</label>
+              <select value={filterMode} onChange={e => setFilterMode(e.target.value)}>
+                <option value="period">Periode</option>
+                <option value="range">Rentang Tanggal</option>
+              </select>
+            </div>
+            {filterMode==="period" ? (
+              <div className="field">
+                <label>Periode</label>
+                <select value={period} onChange={e => setPeriod(e.target.value)}>
+                  <option value="today">Hari Ini</option>
+                  <option value="week">7 Hari Terakhir</option>
+                  <option value="month">30 Hari Terakhir</option>
+                </select>
+              </div>
+            ) : (<>
+              <div className="field"><label>Dari Tanggal</label><input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}/></div>
+              <div className="field"><label>Sampai Tanggal</label><input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}/></div>
+            </>)}
+            <div className="field">
+              <label>Shift</label>
+              <select value={shift} onChange={e => setShift(e.target.value)}>
+                <option value="ALL">Semua Shift</option>
+                {SHIFTS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Preview count */}
+          <div style={{marginTop:16,padding:"12px 16px",background:"var(--bg)",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+            <div>
+              <span style={{fontSize:12,color:"var(--fg-muted)"}}>Data ditemukan: </span>
+              <strong style={{color:"var(--fg)"}}>{previewCount()}</strong>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn btn-primary" onClick={exportExcel} disabled={exporting||!libsLoaded} style={{display:"flex",alignItems:"center",gap:6}}>
+                <I n="download" s={14}/> {exporting?"Mengexport...":"Export Excel"}
+              </button>
+              <button className="btn btn-primary" onClick={exportPDF} disabled={exporting||!libsLoaded} style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#dc2626,#b91c1c)"}}>
+                <I n="download" s={14}/> {exporting?"Mengexport...":"Export PDF"}
+              </button>
+            </div>
+          </div>
+          {!libsLoaded && <div style={{fontSize:11,color:"var(--fg-muted)",marginTop:8}}>Memuat library export...</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
 const AdminAudit = () => (
   <div className="page-content"><Header title="Audit Log" sub="Aktivitas sistem"/>
     <div className="panel"><div className="panel-body"><div className="empty-state"><I n="shield" s={44}/><p>Audit log akan aktif setelah integrasi penuh</p></div></div></div>
