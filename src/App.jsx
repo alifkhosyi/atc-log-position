@@ -17,6 +17,19 @@ const durMin = (a,b) => a && b ? Math.round((new Date(b)-new Date(a))/60000) : 0
 const SHIFTS = ["Morning","Afternoon","Night"]
 const getShift = () => { const h = new Date().getHours(); return h>=6&&h<14?"Morning":h>=14&&h<22?"Afternoon":"Night" }
 
+// Audit log helper — fire and forget, never blocks UI
+const logAudit = (action, detail="", user=null) => {
+  try {
+    supabase.from("audit_logs").insert({
+      user_id: user?.id || null,
+      username: user?.display_name || user?.username || "-",
+      branch_code: user?.branch_code || (user?.role==="admin"?"ADMIN":"-"),
+      action,
+      detail: typeof detail === "object" ? JSON.stringify(detail) : String(detail),
+    }).then()
+  } catch(e) { /* silent */ }
+}
+
 const Pulse = ({on=true,s=8}) => (
   <span style={{position:"relative",display:"inline-flex",verticalAlign:"middle"}}>
     <span style={{width:s,height:s,borderRadius:"50%",background:on?"#10b981":"#4b5563",display:"block"}}/>
@@ -103,6 +116,7 @@ const Login = ({onLogin}) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pw.trim() })
     if (error) { setErr(error.message); setLd(false); return }
     onLogin(data.session)
+    // Audit logged after profile load in handleLogin
     setLd(false)
   }
 
@@ -249,7 +263,7 @@ const CabangLog = () => {
       logged_by: ctx.user.id
     })
     if (error) alert("Error: " + error.message)
-    else { await ctx.reload(); setNm(""); setShow(false) }
+    else { logAudit("ON_MIC",nm.trim()+" — "+unit+" "+unitSectors[si]?.name+" ("+cwps[ci]+")",ctx.user); await ctx.reload(); setNm(""); setShow(false) }
     setSaving(false)
   }
 
@@ -265,7 +279,11 @@ const CabangLog = () => {
     }
     const { error } = await supabase.from("position_logs").update(updateData).eq("id", id)
     if (error) alert("Error: " + error.message)
-    else { await ctx.reload(); setOffId(null); setDep(""); setArr(""); setOvf("") }
+    else {
+      const lg = ctx.logs.find(x=>x.id===id)
+      logAudit("OFF_MIC",(lg?.atc_name||"?")+" — "+(lg?.unit||"")+" "+(lg?.sector||"")+(isController?" DEP:"+updateData.departure_count+" ARR:"+updateData.arrival_count+" OVF:"+updateData.overfly_count:""),ctx.user)
+      await ctx.reload(); setOffId(null); setDep(""); setArr(""); setOvf("")
+    }
     setSaving(false)
   }
 
@@ -385,11 +403,12 @@ const CabangHandover = () => {
     setSavingCL(true)
     const {error} = await supabase.from("handover_checklists").insert({...f, branch_id:ctx.user.id, created_by:ctx.user.id})
     if(error) alert("Error: "+error.message)
-    else {setF(initForm());setShowForm(false);await ctx.reload()}
+    else {logAudit("CHECKLIST_CREATE","Shift "+f.shift+" MOD:"+f.manager_on_duty,ctx.user);setF(initForm());setShowForm(false);await ctx.reload()}
     setSavingCL(false)
   }
   const delCL = async (id) => {
     if(!confirm("Hapus checklist ini?"))return
+    logAudit("CHECKLIST_DELETE","ID:"+id.slice(0,8),ctx.user)
     await supabase.from("handover_checklists").delete().eq("id",id)
     await ctx.reload()
   }
@@ -412,7 +431,7 @@ const CabangHandover = () => {
       written_by: ctx.user.id
     })
     if (error) alert("Error: "+error.message)
-    else { await ctx.reload(); setTxt(""); setPri("normal") }
+    else { logAudit("NOTE_CREATE","Prioritas:"+pri+" — "+txt.slice(0,50),ctx.user); await ctx.reload(); setTxt(""); setPri("normal") }
     setSavingN(false)
   }
 
@@ -1497,6 +1516,7 @@ const AdminExport = () => {
       const a = document.createElement("a"); a.href=URL.createObjectURL(blob)
       a.download = `${reportType}_${br}_${new Date().toISOString().slice(0,10)}.xlsx`
       a.click(); URL.revokeObjectURL(a.href)
+      logAudit("EXPORT_EXCEL",reportType+" — "+brLabel+" — "+periodLabel,ctx.user)
     } catch(e) { alert("Error export Excel: "+e.message) }
     setExporting(false)
   }
@@ -1587,6 +1607,7 @@ const AdminExport = () => {
       for(let i=1;i<=pageCount;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(150);doc.text("Dicetak: "+new Date().toLocaleString("id-ID")+" — ATC Log Position Airnav Indonesia",14,doc.internal.pageSize.getHeight()-8);doc.text("Hal "+i+"/"+pageCount,pageW-14,doc.internal.pageSize.getHeight()-8,{align:"right"})}
 
       doc.save(`${reportType}_${br}_${new Date().toISOString().slice(0,10)}.pdf`)
+      logAudit("EXPORT_PDF",reportType+" — "+brLabel+" — "+periodLabel,ctx.user)
     } catch(e) { alert("Error export PDF: "+e.message) }
     setExporting(false)
   }
@@ -1688,11 +1709,120 @@ const AdminExport = () => {
     </div>
   )
 }
-const AdminAudit = () => (
-  <div className="page-content"><Header title="Audit Log" sub="Aktivitas sistem"/>
-    <div className="panel"><div className="panel-body"><div className="empty-state"><I n="shield" s={44}/><p>Audit log akan aktif setelah integrasi penuh</p></div></div></div>
-  </div>
-)
+const AdminAudit = () => {
+  const ctx = useApp()
+  const [auditLogs,setAuditLogs] = useState([])
+  const [loading,setLoading] = useState(true)
+  const [br,setBr] = useState("ALL")
+  const [actionFilter,setActionFilter] = useState("ALL")
+  const [dateFilter,setDateFilter] = useState("")
+  const [search,setSearch] = useState("")
+  const [limit,setLimit] = useState(100)
+
+  const fetchLogs = async () => {
+    setLoading(true)
+    let q = supabase.from("audit_logs").select("*").order("created_at",{ascending:false}).limit(limit)
+    if(br!=="ALL") q = q.eq("branch_code",br)
+    if(actionFilter!=="ALL") q = q.eq("action",actionFilter)
+    if(dateFilter) q = q.gte("created_at",dateFilter+"T00:00:00").lte("created_at",dateFilter+"T23:59:59")
+    const {data} = await q
+    if(data) setAuditLogs(data)
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchLogs() },[br,actionFilter,dateFilter,limit])
+
+  const filtered = auditLogs.filter(l => {
+    if(!search) return true
+    const s = search.toLowerCase()
+    return (l.username||"").toLowerCase().includes(s) || (l.detail||"").toLowerCase().includes(s) || (l.action||"").toLowerCase().includes(s)
+  })
+
+  const ACTION_COLORS = {
+    LOGIN:{bg:"#dcfce7",fg:"#166534",icon:"🔓"},
+    LOGOUT:{bg:"#f1f5f9",fg:"#475569",icon:"🔒"},
+    ON_MIC:{bg:"#dbeafe",fg:"#1e40af",icon:"🎙️"},
+    OFF_MIC:{bg:"#fef3c7",fg:"#92400e",icon:"🔇"},
+    CHECKLIST_CREATE:{bg:"#f0fdf4",fg:"#166534",icon:"📋"},
+    CHECKLIST_DELETE:{bg:"#fef2f2",fg:"#991b1b",icon:"🗑️"},
+    NOTE_CREATE:{bg:"#eff6ff",fg:"#1d4ed8",icon:"📝"},
+    EXPORT_EXCEL:{bg:"#f0fdf4",fg:"#166534",icon:"📊"},
+    EXPORT_PDF:{bg:"#fef2f2",fg:"#991b1b",icon:"📄"},
+  }
+
+  const uniqueActions = [...new Set(auditLogs.map(l => l.action))]
+
+  return (
+    <div className="page-content">
+      <Header title="Audit Log" sub="Aktivitas seluruh sistem"/>
+
+      {/* Filters */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <span className="monitor-label"><I n="shield" s={12}/> AUDIT</span>
+        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
+          <option value="ALL">Semua Cabang</option>
+          <option value="ADMIN">Admin</option>
+          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
+        </select>
+        <select className="br-select" value={actionFilter} onChange={e => setActionFilter(e.target.value)}>
+          <option value="ALL">Semua Aktivitas</option>
+          {["LOGIN","LOGOUT","ON_MIC","OFF_MIC","CHECKLIST_CREATE","CHECKLIST_DELETE","NOTE_CREATE","EXPORT_EXCEL","EXPORT_PDF"].map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="br-select"/>
+        {dateFilter && <button className="btn btn-ghost btn-sm" onClick={() => setDateFilter("")}>✕</button>}
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama/detail..." style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12,minWidth:140}}/>
+      </div>
+
+      {/* Stats */}
+      <div className="stats-grid">
+        <Stat icon="shield" label="Total Log" value={filtered.length} color="#8b5cf6"/>
+        <Stat icon="log" label="Login" value={filtered.filter(l=>l.action==="LOGIN").length} color="#10b981"/>
+        <Stat icon="mic" label="On Mic" value={filtered.filter(l=>l.action==="ON_MIC").length} color="#2563eb"/>
+        <Stat icon="micOff" label="Off Mic" value={filtered.filter(l=>l.action==="OFF_MIC").length} color="#f59e0b"/>
+      </div>
+
+      {/* Log list */}
+      <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title">Riwayat Aktivitas</h2>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span className="panel-counter">{filtered.length}</span>
+            <select value={limit} onChange={e => setLimit(+e.target.value)} style={{padding:"4px 8px",borderRadius:6,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:11}}>
+              <option value={50}>50</option><option value={100}>100</option><option value={200}>200</option><option value={500}>500</option>
+            </select>
+            <button className="btn btn-ghost btn-sm" onClick={fetchLogs} style={{fontSize:11}}>↻ Refresh</button>
+          </div>
+        </div>
+        <div className="panel-body">
+          {loading ? <div className="empty-state"><span className="login-spinner"/></div> :
+          filtered.length===0 ? <div className="empty-state"><I n="shield" s={44}/><p>Belum ada log aktivitas</p></div> :
+          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+            {filtered.map(l => {
+              const ac = ACTION_COLORS[l.action] || {bg:"#f1f5f9",fg:"#475569",icon:"📌"}
+              return (
+                <div key={l.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:8,background:"var(--card)",borderBottom:"1px solid var(--border)"}}>
+                  <span style={{fontSize:16,lineHeight:1,marginTop:2}}>{ac.icon}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
+                      <span style={{display:"inline-block",padding:"1px 8px",borderRadius:8,fontSize:10,fontWeight:700,background:ac.bg,color:ac.fg}}>{l.action}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:"var(--fg)"}}>{l.username}</span>
+                      {l.branch_code && l.branch_code!=="-" && <span style={{fontSize:10,color:"var(--fg-muted)",background:"var(--bg)",padding:"1px 6px",borderRadius:6}}>{l.branch_code}</span>}
+                    </div>
+                    {l.detail && <div style={{fontSize:11,color:"var(--fg-muted)",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{l.detail}</div>}
+                  </div>
+                  <div style={{fontSize:10,color:"var(--fg-muted)",whiteSpace:"nowrap",textAlign:"right"}}>
+                    <div>{new Date(l.created_at).toLocaleDateString("id-ID",{day:"2-digit",month:"short"})}</div>
+                    <div>{new Date(l.created_at).toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ============================================================
 // MAIN APP
@@ -1722,7 +1852,7 @@ export default function App() {
 
   const loadProfile = async (s) => {
     const { data, error } = await supabase.from("accounts").select("*").eq("id", s.user.id).single()
-    if (data) { setUser(data); setSession(s) }
+    if (data) { setUser(data); setSession(s); logAudit("LOGIN","Masuk ke sistem",data) }
     else { alert("Akun tidak ditemukan di tabel accounts"); await supabase.auth.signOut() }
     setLoading(false)
   }
@@ -1759,6 +1889,7 @@ export default function App() {
   }
 
   const handleLogout = async () => {
+    logAudit("LOGOUT","Keluar dari sistem",user)
     await supabase.auth.signOut()
     setSession(null); setUser(null); setPage("dashboard")
     setBranches([]); setSectors([]); setLogs([]); setHandovers([]); setHandoverChecklists([]); setPersonnel([])
