@@ -216,6 +216,7 @@ const CabangLog = () => {
   const ctx = useApp()
   const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {units:["TWR"]}
   const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
+  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
 
   const [unit,setUnit] = useState(br.units[0]||"TWR")
   const [nm,setNm] = useState("")
@@ -318,7 +319,7 @@ const CabangLog = () => {
         <div className="panel-header"><h2 className="panel-title">Form On Mic</h2></div>
         <div className="panel-body">
           <div className="form-grid">
-            <div className="field"><label>Nama ATC</label><input value={nm} onChange={e => setNm(e.target.value)} placeholder="Nama lengkap ATC"/></div>
+            <div className="field"><label>Nama ATC</label><select value={nm} onChange={e => setNm(e.target.value)}><option value="">— Pilih personel —</option>{myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
             <div className="field"><label>Unit</label><select value={unit} onChange={e => {setUnit(e.target.value);setSi(0);setCi(0)}}>{br.units.map(u => <option key={u}>{u}</option>)}</select></div>
             <div className="field"><label>Sektor</label><select value={si} onChange={e => {setSi(+e.target.value);setCi(0)}}>{unitSectors.map((s,i) => <option key={i} value={i}>{s.name}</option>)}</select></div>
             <div className="field"><label>CWP</label><select value={ci} onChange={e => setCi(+e.target.value)}>{cwps.map((c,i) => <option key={i} value={i}>{c}</option>)}</select></div>
@@ -357,6 +358,7 @@ const STATUS_CLR = {"OK":{bg:"#dcfce7",fg:"#166534",bd:"#86efac"},"Not OK":{bg:"
 
 const CabangHandover = () => {
   const ctx = useApp()
+  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
 
   // ── Checklist state ──
   const [showForm,setShowForm] = useState(false)
@@ -434,7 +436,7 @@ const CabangHandover = () => {
           <div className="form-grid">
             <div className="field"><label>Date</label><input type="date" value={f.checklist_date} onChange={e => set("checklist_date",e.target.value)}/></div>
             <div className="field"><label>Time</label><input type="time" value={f.checklist_time} onChange={e => set("checklist_time",e.target.value)}/></div>
-            <div className="field"><label>Manager on Duty</label><input value={f.manager_on_duty} onChange={e => set("manager_on_duty",e.target.value)} placeholder="Nama MOD..."/></div>
+            <div className="field"><label>Manager on Duty</label><select value={f.manager_on_duty} onChange={e => set("manager_on_duty",e.target.value)}><option value="">— Pilih MOD —</option>{myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
             <div className="field"><label>Shift</label><select value={f.shift} onChange={e => set("shift",e.target.value)}><option value="">Pilih...</option><option value="Pagi">Pagi</option><option value="Siang">Siang</option><option value="Malam">Malam</option></select></div>
           </div>
           <div style={{overflowX:"auto",margin:"20px 0"}}>
@@ -461,11 +463,11 @@ const CabangHandover = () => {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,padding:"20px 0",borderTop:"2px solid var(--border)"}}>
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Incoming Personnel</div>
-              <input value={f.incoming_personnel} onChange={e => set("incoming_personnel",e.target.value)} placeholder="Nama incoming..." style={{padding:"10px",borderRadius:4,border:"1px solid var(--border)",borderBottom:"2px solid var(--fg)",fontSize:14,fontWeight:600,textAlign:"center",width:"100%",background:"var(--card)",color:"var(--fg)"}}/>
+              <select value={f.incoming_personnel} onChange={e => set("incoming_personnel",e.target.value)} style={{padding:"10px",borderRadius:4,border:"1px solid var(--border)",borderBottom:"2px solid var(--fg)",fontSize:14,fontWeight:600,textAlign:"center",width:"100%",background:"var(--card)",color:"var(--fg)"}}><option value="">— Pilih —</option>{myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select>
             </div>
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Outgoing Personnel</div>
-              <input value={f.outgoing_personnel} onChange={e => set("outgoing_personnel",e.target.value)} placeholder="Nama outgoing..." style={{padding:"10px",borderRadius:4,border:"1px solid var(--border)",borderBottom:"2px solid var(--fg)",fontSize:14,fontWeight:600,textAlign:"center",width:"100%",background:"var(--card)",color:"var(--fg)"}}/>
+              <select value={f.outgoing_personnel} onChange={e => set("outgoing_personnel",e.target.value)} style={{padding:"10px",borderRadius:4,border:"1px solid var(--border)",borderBottom:"2px solid var(--fg)",fontSize:14,fontWeight:600,textAlign:"center",width:"100%",background:"var(--card)",color:"var(--fg)"}}><option value="">— Pilih —</option>{myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select>
             </div>
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:12}}>
@@ -1259,6 +1261,7 @@ export default function App() {
   const [logs,setLogs] = useState([])
   const [handovers,setHandovers] = useState([])
   const [handoverChecklists,setHandoverChecklists] = useState([])
+  const [personnel,setPersonnel] = useState([])
 
   // Check existing session on load
   useEffect(() => {
@@ -1276,18 +1279,20 @@ export default function App() {
   }
 
   const loadData = async () => {
-    const [brRes, secRes, logRes, hoRes, hcRes] = await Promise.all([
+    const [brRes, secRes, logRes, hoRes, hcRes, pRes] = await Promise.all([
       supabase.from("branches").select("*").order("code"),
       supabase.from("sectors").select("*").order("sort_order"),
       supabase.from("position_logs").select("*").order("on_time",{ascending:false}).limit(500),
       supabase.from("handover_notes").select("*").order("created_at",{ascending:false}).limit(200),
       supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
+      supabase.from("personnel").select("id,name,branch_code").eq("is_active",true).order("name"),
     ])
     if (brRes.data) setBranches(brRes.data)
     if (secRes.data) setSectors(secRes.data)
     if (logRes.data) setLogs(logRes.data)
     if (hoRes.data) setHandovers(hoRes.data)
     if (hcRes.data) setHandoverChecklists(hcRes.data)
+    if (pRes.data) setPersonnel(pRes.data)
   }
 
   // Load data + auto refresh
@@ -1307,7 +1312,7 @@ export default function App() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     setSession(null); setUser(null); setPage("dashboard")
-    setBranches([]); setSectors([]); setLogs([]); setHandovers([]); setHandoverChecklists([])
+    setBranches([]); setSectors([]); setLogs([]); setHandovers([]); setHandoverChecklists([]); setPersonnel([])
   }
 
   if (loading) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat...</p><span className="login-spinner"/></div>
@@ -1320,7 +1325,7 @@ export default function App() {
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
-    <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,reload:loadData}}>
+    <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,personnel,reload:loadData}}>
       <div className="app-layout">
         <Sidebar page={page} go={setPage} user={user} logout={handleLogout} col={col} toggle={() => setCol(!col)}/>
         <main className="main-area"><CurrentPage/></main>
