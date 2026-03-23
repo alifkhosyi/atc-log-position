@@ -60,6 +60,9 @@ const ICONS = {
   eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z",
   monitor:"M2 3h20v14H2zM8 21h8M12 17v4",
   building:"M4 2h16v20H4zM9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01",
+  calendar:"M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
+  edit:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z",
+  swap:"M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4",
 }
 const I = ({n,s=18}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[n]||""}/></svg>
 
@@ -147,19 +150,30 @@ const Login = ({onLogin}) => {
 // SIDEBAR
 // ============================================================
 const Sidebar = ({page,go,user,logout,col,toggle}) => {
-  const items = user.role === "admin" ? [
+  const [monOpen,setMonOpen] = useState(true)
+  const MON_SUB = ["mon_roster","mon_log","mon_today"]
+  const adminItems = [
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
-    {id:"mon_log",label:"Monitoring Log Position",icon:"monitor"},
+    {id:"mon_branch",label:"Monitoring Cabang",icon:"monitor",sub:[
+      {id:"mon_roster",label:"Roster",icon:"calendar"},
+      {id:"mon_log",label:"Log Position",icon:"mic"},
+      {id:"mon_today",label:"Log Hari Ini",icon:"log"},
+    ]},
     {id:"mon_recap",label:"Monitoring Rekap Traffic",icon:"chart"},
     {id:"mon_handover",label:"Monitoring Handover/Takeover",icon:"checklist"},
     {id:"export",label:"Export Laporan",icon:"download"},
     {id:"audit",label:"Audit Log",icon:"shield"},
-  ] : [
+  ]
+  const cabangItems = [
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
+    {id:"roster",label:"Roster",icon:"calendar"},
     {id:"log",label:"Log Position",icon:"mic"},
     {id:"rekap",label:"Rekap Traffic",icon:"chart"},
     {id:"handover",label:"Handover/Takeover",icon:"checklist"},
   ]
+  const items = user.role === "admin" ? adminItems : cabangItems
+  const isMonSub = MON_SUB.includes(page)
+
   return (
     <aside className={"sidebar"+(col?" sidebar-collapsed":"")}>
       <div className="sidebar-header">
@@ -168,7 +182,29 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
       </div>
       <nav className="sidebar-nav">
         {!col && <div className="sidebar-section">{user.role==="admin"?"Admin Pusat":"Cabang "+user.branch_code}</div>}
-        {items.map(it => <button key={it.id} className={"sidebar-item"+(page===it.id?" sidebar-item-active":"")} onClick={() => go(it.id)} title={col?it.label:undefined}><I n={it.icon} s={17}/>{!col && <span>{it.label}</span>}</button>)}
+        {items.map(it => {
+          if (it.sub) {
+            const parentActive = isMonSub
+            return (
+              <div key={it.id}>
+                <button
+                  className={"sidebar-item"+(parentActive?" sidebar-item-active":"")}
+                  onClick={() => { if(col){ go(it.sub[0].id) } else { setMonOpen(o=>!o); if(!isMonSub) go(it.sub[0].id) } }}
+                  title={col?it.label:undefined}
+                >
+                  <I n={it.icon} s={17}/>
+                  {!col && <><span style={{flex:1,textAlign:"left"}}>{it.label}</span><span style={{fontSize:9,opacity:.5,display:"inline-block",transform:monOpen?"rotate(90deg)":"rotate(0deg)",transition:"transform .2s"}}>▶</span></>}
+                </button>
+                {!col && monOpen && it.sub.map(sub => (
+                  <button key={sub.id} className={"sidebar-item"+(page===sub.id?" sidebar-item-active":"")} onClick={() => go(sub.id)} style={{paddingLeft:34,fontSize:12}}>
+                    <I n={sub.icon} s={14}/><span>{sub.label}</span>
+                  </button>
+                ))}
+              </div>
+            )
+          }
+          return <button key={it.id} className={"sidebar-item"+(page===it.id?" sidebar-item-active":"")} onClick={() => go(it.id)} title={col?it.label:undefined}><I n={it.icon} s={17}/>{!col && <span>{it.label}</span>}</button>
+        })}
       </nav>
       <div className="sidebar-footer">
         <div className="sidebar-user"><div className="sidebar-avatar">{(user.display_name||"U")[0].toUpperCase()}</div>{!col && <div className="sidebar-user-info"><div className="sidebar-user-name">{user.display_name}</div><div className="sidebar-user-role">{user.role==="admin"?"Admin Pusat":"Cabang "+user.branch_code}</div></div>}</div>
@@ -224,7 +260,315 @@ const CabangDash = () => {
 }
 
 // ============================================================
-// CABANG: LOG POSITION
+// SHIFT CONFIG
+// ============================================================
+const SHIFT_CONFIG = {
+  Pagi:   {start:7,  end:15, label:"Pagi",   color:"#f59e0b", bg:"#fffbeb", hours:"07:00–15:00"},
+  Siang:  {start:15, end:23, label:"Siang",  color:"#0284C7", bg:"#eff6ff", hours:"15:00–23:00"},
+  Malam:  {start:23, end:7,  label:"Malam",  color:"#8b5cf6", bg:"#f5f3ff", hours:"23:00–07:00"},
+}
+const SHIFT_NAMES = ["Pagi","Siang","Malam"]
+
+const getShiftNow = () => {
+  const h = new Date().getHours()
+  if (h >= 7 && h < 15) return "Pagi"
+  if (h >= 15 && h < 23) return "Siang"
+  return "Malam"
+}
+
+const ShiftBadge = ({shift,small}) => {
+  const c = SHIFT_CONFIG[shift]||{color:"#64748b",bg:"#f1f5f9",label:shift,hours:""}
+  return <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:small?"2px 8px":"3px 10px",borderRadius:20,fontSize:small?10:11,fontWeight:700,background:c.bg,color:c.color,border:`1px solid ${c.color}33`}}>{c.label}{!small&&<span style={{fontWeight:400,fontSize:9,opacity:.7}}>{c.hours}</span>}</span>
+}
+
+// ============================================================
+// CABANG: ROSTER
+// ============================================================
+const CabangRoster = () => {
+  const ctx = useApp()
+  const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {units:["TWR"]}
+  const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
+  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+
+  const [rosters,setRosters] = useState([])
+  const [loading,setLoading] = useState(true)
+  const [selDate,setSelDate] = useState(new Date().toISOString().slice(0,10))
+  const [showForm,setShowForm] = useState(false)
+  const [editItem,setEditItem] = useState(null)
+  const [saving,setSaving] = useState(false)
+  // Override modal
+  const [overrideItem,setOverrideItem] = useState(null) // {roster, slot: 1|2}
+  const [overrideForm,setOverrideForm] = useState({name:"",unit:"",sector:"",cwp:"",reason:""})
+  const [savingOvr,setSavingOvr] = useState(false)
+
+  const initSlot = () => ({name:"",unit:br.units[0]||"TWR",sector:"",cwp:""})
+  const [form,setForm] = useState({shift:"Pagi",slot1:initSlot(),slot2:initSlot()})
+
+  const fetchRosters = async () => {
+    setLoading(true)
+    const {data} = await supabase.from("rosters").select("*")
+      .eq("branch_code",ctx.user.branch_code)
+      .gte("roster_date",selDate).lte("roster_date",selDate)
+      .order("shift")
+    setRosters(data||[])
+    setLoading(false)
+  }
+  useEffect(() => { fetchRosters() },[selDate])
+
+  const getSectorList = (unit) => mySectors.filter(s => s.unit===unit)
+  const getCwpList = (unit,sectorName) => {
+    const sec = mySectors.find(s => s.unit===unit && s.name===sectorName)
+    return sec ? sec.cwps : ["Controller","Assistant"]
+  }
+
+  const setSlot = (slot,key,val) => {
+    setForm(f => ({...f,[slot]:{...f[slot],[key]:val, ...(key==="unit"?{sector:"",cwp:""}:{}), ...(key==="sector"?{cwp:""}:{})}}))
+  }
+
+  const saveRoster = async () => {
+    if (saving) return
+    setSaving(true)
+    const payload = {
+      branch_code: ctx.user.branch_code,
+      roster_date: selDate,
+      shift: form.shift,
+      atc1_name: form.slot1.name||null,
+      atc1_unit: form.slot1.unit||null,
+      atc1_sector: form.slot1.sector||null,
+      atc1_cwp: form.slot1.cwp||null,
+      atc2_name: form.slot2.name||null,
+      atc2_unit: form.slot2.unit||null,
+      atc2_sector: form.slot2.sector||null,
+      atc2_cwp: form.slot2.cwp||null,
+      created_by: ctx.user.id,
+    }
+    let error
+    if (editItem) {
+      ;({error} = await supabase.from("rosters").update({...payload,updated_at:new Date().toISOString()}).eq("id",editItem.id))
+    } else {
+      ;({error} = await supabase.from("rosters").insert(payload))
+    }
+    if (error) alert("Error: "+error.message)
+    else {
+      logAudit(editItem?"ROSTER_UPDATE":"ROSTER_CREATE", `${selDate} ${form.shift}`, ctx.user)
+      setShowForm(false); setEditItem(null); setForm({shift:"Pagi",slot1:initSlot(),slot2:initSlot()}); await fetchRosters()
+    }
+    setSaving(false)
+  }
+
+  const editRoster = (r) => {
+    setEditItem(r)
+    setForm({
+      shift: r.shift,
+      slot1:{name:r.atc1_name||"",unit:r.atc1_unit||br.units[0]||"TWR",sector:r.atc1_sector||"",cwp:r.atc1_cwp||""},
+      slot2:{name:r.atc2_name||"",unit:r.atc2_unit||br.units[0]||"TWR",sector:r.atc2_sector||"",cwp:r.atc2_cwp||""},
+    })
+    setShowForm(true)
+  }
+
+  const deleteRoster = async (id) => {
+    if (!confirm("Hapus roster ini?")) return
+    await supabase.from("rosters").delete().eq("id",id)
+    logAudit("ROSTER_DELETE","ID:"+id.slice(0,8),ctx.user)
+    await fetchRosters()
+  }
+
+  const openOverride = (roster,slot) => {
+    const name = slot===1 ? roster.atc1_name : roster.atc2_name
+    const unit = slot===1 ? roster.atc1_unit : roster.atc2_unit
+    const sector = slot===1 ? roster.atc1_sector : roster.atc2_sector
+    const cwp = slot===1 ? roster.atc1_cwp : roster.atc2_cwp
+    setOverrideItem({roster,slot})
+    setOverrideForm({name:name||"",unit:unit||br.units[0]||"TWR",sector:sector||"",cwp:cwp||"",reason:""})
+  }
+
+  const saveOverride = async () => {
+    if (!overrideForm.reason.trim()) { alert("Alasan override wajib diisi"); return }
+    setSavingOvr(true)
+    const {roster,slot} = overrideItem
+    const patch = slot===1
+      ? {atc1_name:overrideForm.name,atc1_unit:overrideForm.unit,atc1_sector:overrideForm.sector,atc1_cwp:overrideForm.cwp}
+      : {atc2_name:overrideForm.name,atc2_unit:overrideForm.unit,atc2_sector:overrideForm.sector,atc2_cwp:overrideForm.cwp}
+    const {error} = await supabase.from("rosters").update({
+      ...patch,
+      is_overridden:true,
+      override_reason:overrideForm.reason,
+      overridden_by:ctx.user.display_name,
+      overridden_at:new Date().toISOString(),
+      updated_at:new Date().toISOString(),
+    }).eq("id",roster.id)
+    if (error) alert("Error: "+error.message)
+    else {
+      logAudit("ROSTER_OVERRIDE",`Slot ${slot} ${roster.shift} — Alasan: ${overrideForm.reason}`,ctx.user)
+      setOverrideItem(null); await fetchRosters()
+    }
+    setSavingOvr(false)
+  }
+
+  const SlotForm = ({slotKey,label}) => {
+    const s = form[slotKey]
+    const sectors = getSectorList(s.unit)
+    const cwps = getCwpList(s.unit,s.sector)
+    return (
+      <div style={{background:"var(--bg)",borderRadius:10,padding:14,border:"1px solid var(--border)"}}>
+        <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",marginBottom:10,textTransform:"uppercase",letterSpacing:".5px"}}>{label}</div>
+        <div className="form-grid" style={{gridTemplateColumns:"1fr 1fr"}}>
+          <div className="field"><label>Nama ATC</label>
+            <select value={s.name} onChange={e => setSlot(slotKey,"name",e.target.value)}>
+              <option value="">— Kosong —</option>
+              {myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="field"><label>Unit</label>
+            <select value={s.unit} onChange={e => setSlot(slotKey,"unit",e.target.value)}>
+              {br.units.map(u => <option key={u}>{u}</option>)}
+            </select>
+          </div>
+          <div className="field"><label>Sektor</label>
+            <select value={s.sector} onChange={e => setSlot(slotKey,"sector",e.target.value)}>
+              <option value="">— Pilih —</option>
+              {sectors.map(s2 => <option key={s2.id} value={s2.name}>{s2.name}</option>)}
+            </select>
+          </div>
+          <div className="field"><label>CWP</label>
+            <select value={s.cwp} onChange={e => setSlot(slotKey,"cwp",e.target.value)}>
+              <option value="">— Pilih —</option>
+              {cwps.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const existingShifts = rosters.map(r => r.shift)
+  const currentShift = getShiftNow()
+
+  return (
+    <div className="page-content">
+      <Header title="Roster" sub={"Jadwal dinas ATC — "+ctx.user.branch_code}/>
+
+      {/* Date nav */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <button className="btn btn-ghost btn-sm" onClick={() => { const d=new Date(selDate); d.setDate(d.getDate()-1); setSelDate(d.toISOString().slice(0,10)) }}>‹ Prev</button>
+        <input type="date" value={selDate} onChange={e => setSelDate(e.target.value)} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}/>
+        <button className="btn btn-ghost btn-sm" onClick={() => { const d=new Date(selDate); d.setDate(d.getDate()+1); setSelDate(d.toISOString().slice(0,10)) }}>Next ›</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setSelDate(new Date().toISOString().slice(0,10))}>Hari Ini</button>
+        {!showForm && <button className="btn btn-primary btn-sm" onClick={() => {setEditItem(null);setForm({shift:"Pagi",slot1:initSlot(),slot2:initSlot()});setShowForm(true)}} style={{marginLeft:"auto"}}><I n="plus" s={14}/> Tambah Roster</button>}
+      </div>
+
+      {/* Form */}
+      {showForm && <div className="panel" style={{animation:"fadeIn .3s ease",marginBottom:20}}>
+        <div className="panel-header"><h2 className="panel-title"><I n="calendar" s={16}/> {editItem?"Edit":"Buat"} Roster — {selDate}</h2></div>
+        <div className="panel-body">
+          <div className="field" style={{marginBottom:16,maxWidth:200}}>
+            <label>Shift</label>
+            <select value={form.shift} onChange={e => setForm(f => ({...f,shift:e.target.value}))}>
+              {SHIFT_NAMES.filter(s => editItem || !existingShifts.includes(s)).map(s => <option key={s} value={s}>{s} ({SHIFT_CONFIG[s].hours})</option>)}
+            </select>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+            <SlotForm slotKey="slot1" label="ATC Slot 1"/>
+            <SlotForm slotKey="slot2" label="ATC Slot 2"/>
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <button className="btn btn-ghost" onClick={() => {setShowForm(false);setEditItem(null)}}>Batal</button>
+            <button className="btn btn-primary" onClick={saveRoster} disabled={saving}><I n="calendar" s={15}/> {saving?"Menyimpan...":editItem?"Update Roster":"Simpan Roster"}</button>
+          </div>
+        </div>
+      </div>}
+
+      {/* Roster cards */}
+      {loading ? <div className="empty-state"><span className="login-spinner"/></div> :
+      rosters.length===0 ? <div className="panel"><div className="panel-body"><div className="empty-state"><I n="calendar" s={44}/><p>Belum ada roster untuk tanggal ini</p></div></div></div> :
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        {SHIFT_NAMES.map(shiftName => {
+          const r = rosters.find(x => x.shift===shiftName)
+          if (!r) return null
+          const isNow = shiftName === currentShift && selDate === new Date().toISOString().slice(0,10)
+          const sc = SHIFT_CONFIG[shiftName]
+          return (
+            <div key={r.id} className="panel" style={{border:isNow?`2px solid ${sc.color}`:"1px solid var(--border)",boxShadow:isNow?`0 0 16px ${sc.color}22`:"none"}}>
+              <div className="panel-header" style={{background:isNow?sc.bg:"transparent"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  {isNow && <Pulse s={8}/>}
+                  <ShiftBadge shift={shiftName}/>
+                  {isNow && <span style={{fontSize:11,fontWeight:600,color:sc.color}}>SHIFT AKTIF</span>}
+                  {r.is_overridden && <span style={{fontSize:10,background:"#fef2f2",color:"#dc2626",padding:"2px 8px",borderRadius:10,fontWeight:700}}>⚠ Override</span>}
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => editRoster(r)}><I n="edit" s={13}/></button>
+                  <button className="btn btn-ghost btn-sm" style={{color:"#ef4444"}} onClick={() => deleteRoster(r.id)}><I n="x" s={13}/></button>
+                </div>
+              </div>
+              <div className="panel-body">
+                {r.is_overridden && <div style={{fontSize:11,color:"#dc2626",background:"#fef2f2",padding:"6px 12px",borderRadius:8,marginBottom:12}}>Override oleh {r.overridden_by}: {r.override_reason}</div>}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  {[{slot:1,name:r.atc1_name,unit:r.atc1_unit,sector:r.atc1_sector,cwp:r.atc1_cwp},
+                    {slot:2,name:r.atc2_name,unit:r.atc2_unit,sector:r.atc2_sector,cwp:r.atc2_cwp}].map(s => (
+                    <div key={s.slot} style={{background:"var(--bg)",borderRadius:10,padding:12,border:"1px solid var(--border)"}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"var(--fg-muted)",marginBottom:6,textTransform:"uppercase"}}>Slot {s.slot}</div>
+                      {s.name ? <>
+                        <div style={{fontSize:15,fontWeight:700,color:"var(--fg)",marginBottom:4}}>{s.name}</div>
+                        <div style={{fontSize:12,color:"var(--fg-muted)"}}><span className="unit-tag" style={{fontSize:10}}>{s.unit}</span> {s.sector} — {s.cwp}</div>
+                        <button className="btn btn-ghost btn-sm" style={{marginTop:8,fontSize:11}} onClick={() => openOverride(r,s.slot)}><I n="swap" s={12}/> Override</button>
+                      </> : <div style={{fontSize:12,color:"var(--fg-muted)",fontStyle:"italic"}}>Kosong</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>}
+
+      {/* Override Modal */}
+      {overrideItem && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:"var(--card)",borderRadius:16,padding:24,maxWidth:400,width:"100%",boxShadow:"0 24px 48px rgba(0,0,0,.3)"}}>
+            <h3 style={{margin:"0 0 4px",fontSize:16,fontWeight:700}}>Override Manual</h3>
+            <p style={{margin:"0 0 16px",fontSize:12,color:"var(--fg-muted)"}}>Slot {overrideItem.slot} — Shift {overrideItem.roster.shift}</p>
+            <div className="field"><label>Nama ATC Pengganti</label>
+              <select value={overrideForm.name} onChange={e => setOverrideForm(f=>({...f,name:e.target.value}))}>
+                <option value="">— Pilih —</option>
+                {myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="form-grid" style={{gridTemplateColumns:"1fr 1fr"}}>
+              <div className="field"><label>Unit</label>
+                <select value={overrideForm.unit} onChange={e => setOverrideForm(f=>({...f,unit:e.target.value,sector:"",cwp:""}))}>
+                  {br.units.map(u => <option key={u}>{u}</option>)}
+                </select>
+              </div>
+              <div className="field"><label>Sektor</label>
+                <select value={overrideForm.sector} onChange={e => setOverrideForm(f=>({...f,sector:e.target.value,cwp:""}))}>
+                  <option value="">— Pilih —</option>
+                  {getSectorList(overrideForm.unit).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="field"><label>CWP</label>
+              <select value={overrideForm.cwp} onChange={e => setOverrideForm(f=>({...f,cwp:e.target.value}))}>
+                <option value="">— Pilih —</option>
+                {getCwpList(overrideForm.unit,overrideForm.sector).map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="field"><label>Alasan Override <span style={{color:"#ef4444"}}>*</span></label>
+              <input value={overrideForm.reason} onChange={e => setOverrideForm(f=>({...f,reason:e.target.value}))} placeholder="Contoh: Sakit, Tukar shift, Cuti mendadak..."/>
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:16}}>
+              <button className="btn btn-ghost" onClick={() => setOverrideItem(null)}>Batal</button>
+              <button className="btn btn-primary" onClick={saveOverride} disabled={savingOvr||!overrideForm.reason.trim()}>{savingOvr?"Menyimpan...":"Simpan Override"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================
+// CABANG: LOG POSITION (with roster auto-fill)
 // ============================================================
 const CabangLog = () => {
   const ctx = useApp()
@@ -241,6 +585,10 @@ const CabangLog = () => {
   const [ovf,setOvf] = useState("")
   const [saving,setSaving] = useState(false)
 
+  // Roster state
+  const [todayRoster,setTodayRoster] = useState(null)
+  const [rosterLoading,setRosterLoading] = useState(true)
+
   const unitSectors = mySectors.filter(s => s.unit === unit)
   const [si,setSi] = useState(0)
   const cwps = unitSectors[si] ? unitSectors[si].cwps : ["Controller","Assistant"]
@@ -248,6 +596,48 @@ const CabangLog = () => {
 
   const active = ctx.logs.filter(l => !l.off_time)
   const today = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+  const currentShift = getShiftNow()
+
+  // Fetch today's roster for current shift
+  const fetchTodayRoster = async () => {
+    setRosterLoading(true)
+    const todayStr = new Date().toISOString().slice(0,10)
+    const {data} = await supabase.from("rosters").select("*")
+      .eq("branch_code",ctx.user.branch_code)
+      .eq("roster_date",todayStr)
+      .eq("shift",currentShift)
+      .single()
+    setTodayRoster(data||null)
+    setRosterLoading(false)
+  }
+  useEffect(() => { fetchTodayRoster() },[])
+
+  // Get roster slots for current shift
+  const rosterSlots = todayRoster ? [
+    {name:todayRoster.atc1_name,unit:todayRoster.atc1_unit,sector:todayRoster.atc1_sector,cwp:todayRoster.atc1_cwp},
+    {name:todayRoster.atc2_name,unit:todayRoster.atc2_unit,sector:todayRoster.atc2_sector,cwp:todayRoster.atc2_cwp},
+  ].filter(s => s.name) : []
+
+  // Check if a roster slot is already on mic
+  const isOnMic = (atcName) => active.some(l => l.atc_name === atcName && l.branch_code === ctx.user.branch_code)
+
+  const onMicFromRoster = async (slot) => {
+    if (saving) return
+    setSaving(true)
+    const { error } = await supabase.from("position_logs").insert({
+      branch_code: ctx.user.branch_code,
+      atc_name: slot.name,
+      unit: slot.unit,
+      sector: slot.sector || "Sector 1",
+      cwp: slot.cwp || "Controller",
+      shift: currentShift,
+      on_time: new Date().toISOString(),
+      logged_by: ctx.user.id
+    })
+    if (error) alert("Error: " + error.message)
+    else { logAudit("ON_MIC",slot.name+" — "+slot.unit+" "+slot.sector+" ("+slot.cwp+") [dari roster]",ctx.user); await ctx.reload() }
+    setSaving(false)
+  }
 
   const onMic = async () => {
     if (!nm.trim() || saving) return
@@ -258,7 +648,7 @@ const CabangLog = () => {
       unit,
       sector: unitSectors[si]?.name || "Sector 1",
       cwp: cwps[ci] || "Controller",
-      shift: getShift(),
+      shift: currentShift,
       on_time: new Date().toISOString(),
       logged_by: ctx.user.id
     })
@@ -292,6 +682,47 @@ const CabangLog = () => {
   return (
     <div className="page-content">
       <Header title="Log Position" sub={"Input posisi ATC — "+ctx.user.branch_code}/>
+
+      {/* ── Roster Shift Aktif ── */}
+      <div className="panel" style={{marginBottom:16,border:"1.5px solid "+SHIFT_CONFIG[currentShift].color+"55",background:SHIFT_CONFIG[currentShift].bg}}>
+        <div className="panel-header" style={{background:"transparent"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <I n="calendar" s={16}/>
+            <h2 className="panel-title" style={{color:SHIFT_CONFIG[currentShift].color}}>Roster Shift Aktif</h2>
+            <ShiftBadge shift={currentShift}/>
+          </div>
+          <span className="panel-badge">AUTO</span>
+        </div>
+        <div className="panel-body">
+          {rosterLoading ? <div style={{padding:8}}><span className="login-spinner"/></div> :
+          !todayRoster ? (
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0"}}>
+              <span style={{fontSize:13,color:"var(--fg-muted)"}}>Belum ada roster untuk shift ini.</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => ctx.goPage("roster")}><I n="calendar" s={13}/> Buat Roster</button>
+            </div>
+          ) : (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              {rosterSlots.map((slot,i) => {
+                const already = isOnMic(slot.name)
+                return (
+                  <div key={i} style={{background:"var(--card)",borderRadius:10,padding:12,border:`1px solid ${already?"#10b981":"var(--border)"}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:"var(--fg)"}}>{slot.name}</div>
+                      <div style={{fontSize:11,color:"var(--fg-muted)",marginTop:2}}><span className="unit-tag" style={{fontSize:10}}>{slot.unit}</span> {slot.sector} — {slot.cwp}</div>
+                    </div>
+                    {already
+                      ? <span style={{fontSize:11,color:"#10b981",fontWeight:600,display:"flex",alignItems:"center",gap:4}}><Pulse s={7}/> On Mic</span>
+                      : <button className="btn btn-primary btn-sm" onClick={() => onMicFromRoster(slot)} disabled={saving}><I n="mic" s={13}/> On Mic</button>
+                    }
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Active Positions ── */}
       {active.length > 0 && <div className="panel panel-glow">
         <div className="panel-header"><h2 className="panel-title"><Pulse s={10}/> ATC On Mic ({active.length})</h2></div>
         <div className="panel-body">{active.map(l => {
@@ -331,17 +762,18 @@ const CabangLog = () => {
         )})}</div>
       </div>}
 
-      <button className="btn btn-primary btn-lg" onClick={() => setShow(!show)} style={{marginBottom:20}}><I n={show?"x":"mic"} s={18}/> {show?"Tutup Form":"Input ATC On Mic"}</button>
+      {/* ── Manual On Mic (override) ── */}
+      <button className="btn btn-ghost btn-lg" onClick={() => setShow(!show)} style={{marginBottom:20}}><I n={show?"x":"swap"} s={16}/> {show?"Tutup":"Input Manual / Override"}</button>
 
       {show && <div className="panel">
-        <div className="panel-header"><h2 className="panel-title">Form On Mic</h2></div>
+        <div className="panel-header"><h2 className="panel-title">Form On Mic Manual</h2><span style={{fontSize:11,color:"var(--fg-muted)"}}>Di luar roster</span></div>
         <div className="panel-body">
           <div className="form-grid">
             <div className="field"><label>Nama ATC</label><select value={nm} onChange={e => setNm(e.target.value)}><option value="">— Pilih personel —</option>{myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
             <div className="field"><label>Unit</label><select value={unit} onChange={e => {setUnit(e.target.value);setSi(0);setCi(0)}}>{br.units.map(u => <option key={u}>{u}</option>)}</select></div>
             <div className="field"><label>Sektor</label><select value={si} onChange={e => {setSi(+e.target.value);setCi(0)}}>{unitSectors.map((s,i) => <option key={i} value={i}>{s.name}</option>)}</select></div>
             <div className="field"><label>CWP</label><select value={ci} onChange={e => setCi(+e.target.value)}>{cwps.map((c,i) => <option key={i} value={i}>{c}</option>)}</select></div>
-            <div className="field"><label>Shift</label><input value={getShift()} disabled/></div>
+            <div className="field"><label>Shift</label><input value={currentShift} disabled/></div>
           </div>
           <button className="btn btn-primary" onClick={onMic} style={{marginTop:16}} disabled={!nm.trim()||saving}><I n="mic" s={16}/> {saving?"Menyimpan...":"On Mic Sekarang"}</button>
         </div>
@@ -818,30 +1250,137 @@ const AdminDash = () => {
 }
 
 // ============================================================
-// ADMIN: MONITORING LOG
+// ADMIN: MONITORING ROSTER
+// ============================================================
+const AdminMonRoster = () => {
+  const ctx = useApp()
+  const [br,setBr] = useState("ALL")
+  const [selDate,setSelDate] = useState(new Date().toISOString().slice(0,10))
+  const [rosters,setRosters] = useState([])
+  const [loading,setLoading] = useState(true)
+
+  const fetchRosters = async () => {
+    setLoading(true)
+    let q = supabase.from("rosters").select("*").eq("roster_date",selDate).order("branch_code").order("shift")
+    if (br !== "ALL") q = q.eq("branch_code",br)
+    const {data} = await q
+    setRosters(data||[])
+    setLoading(false)
+  }
+  useEffect(() => { fetchRosters() },[selDate,br])
+
+  const currentShift = getShiftNow()
+  const overrideCount = rosters.filter(r => r.is_overridden).length
+
+  // Group by branch
+  const byBranch = {}
+  rosters.forEach(r => {
+    if (!byBranch[r.branch_code]) byBranch[r.branch_code] = []
+    byBranch[r.branch_code].push(r)
+  })
+
+  return (
+    <div className="page-content">
+      <Header title="Monitoring Roster" sub="Jadwal dinas ATC seluruh cabang"/>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
+          <option value="ALL">Semua Cabang</option>
+          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
+        </select>
+        <button className="btn btn-ghost btn-sm" onClick={() => { const d=new Date(selDate); d.setDate(d.getDate()-1); setSelDate(d.toISOString().slice(0,10)) }}>‹</button>
+        <input type="date" value={selDate} onChange={e => setSelDate(e.target.value)} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}/>
+        <button className="btn btn-ghost btn-sm" onClick={() => { const d=new Date(selDate); d.setDate(d.getDate()+1); setSelDate(d.toISOString().slice(0,10)) }}>›</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setSelDate(new Date().toISOString().slice(0,10))}>Hari Ini</button>
+      </div>
+
+      <div className="stats-grid">
+        <Stat icon="calendar" label="Total Roster" value={rosters.length} sub={`${selDate}`} color="#38bdf8"/>
+        <Stat icon="building" label="Cabang" value={Object.keys(byBranch).length} sub="Sudah input roster" color="#10b981"/>
+        <Stat icon="swap" label="Override" value={overrideCount} sub="Perubahan manual" color="#f59e0b"/>
+        <Stat icon="clock" label="Shift Aktif" value={currentShift} sub={SHIFT_CONFIG[currentShift].hours} color={SHIFT_CONFIG[currentShift].color}/>
+      </div>
+
+      {loading ? <div className="panel"><div className="panel-body"><div className="empty-state"><span className="login-spinner"/></div></div></div> :
+      rosters.length===0 ? <div className="panel"><div className="panel-body"><div className="empty-state"><I n="calendar" s={44}/><p>Belum ada roster untuk filter ini</p></div></div></div> :
+      <div style={{display:"flex",flexDirection:"column",gap:20}}>
+        {Object.keys(byBranch).sort().map(code => {
+          const b = ctx.branches.find(x => x.code===code)
+          const bRosters = byBranch[code]
+          return (
+            <div key={code} className="panel">
+              <div className="panel-header">
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span className="unit-tag" style={{fontWeight:700,fontSize:13}}>{code}</span>
+                  <span style={{fontSize:13,color:"var(--fg)"}}>{b?.name||""}</span>
+                  <span style={{fontSize:11,color:"var(--fg-muted)"}}>{b?.city||""}</span>
+                </div>
+                <span className="panel-counter">{bRosters.length} shift</span>
+              </div>
+              <div className="panel-body">
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {SHIFT_NAMES.map(shiftName => {
+                    const r = bRosters.find(x => x.shift===shiftName)
+                    const sc = SHIFT_CONFIG[shiftName]
+                    const isNow = shiftName===currentShift && selDate===new Date().toISOString().slice(0,10)
+                    if (!r) return (
+                      <div key={shiftName} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,border:"1px dashed var(--border)",opacity:.5}}>
+                        <ShiftBadge shift={shiftName} small/>
+                        <span style={{fontSize:12,color:"var(--fg-muted)",fontStyle:"italic"}}>Belum ada roster</span>
+                      </div>
+                    )
+                    return (
+                      <div key={r.id} style={{padding:"10px 14px",borderRadius:10,border:isNow?`1.5px solid ${sc.color}`:  "1px solid var(--border)",background:isNow?sc.bg:"var(--bg)"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                          {isNow && <Pulse s={7}/>}
+                          <ShiftBadge shift={shiftName} small/>
+                          {isNow && <span style={{fontSize:10,fontWeight:600,color:sc.color}}>AKTIF</span>}
+                          {r.is_overridden && <span style={{fontSize:10,background:"#fef2f2",color:"#dc2626",padding:"1px 8px",borderRadius:10,fontWeight:700}}>⚠ Override</span>}
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                          {[{slot:1,name:r.atc1_name,unit:r.atc1_unit,sector:r.atc1_sector,cwp:r.atc1_cwp},
+                            {slot:2,name:r.atc2_name,unit:r.atc2_unit,sector:r.atc2_sector,cwp:r.atc2_cwp}].map(s => (
+                            <div key={s.slot} style={{background:"var(--card)",borderRadius:8,padding:"8px 10px",border:"1px solid var(--border)"}}>
+                              <div style={{fontSize:9,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",marginBottom:3}}>Slot {s.slot}</div>
+                              {s.name
+                                ? <><div style={{fontSize:13,fontWeight:700}}>{s.name}</div><div style={{fontSize:11,color:"var(--fg-muted)",marginTop:2}}><span className="unit-tag" style={{fontSize:9}}>{s.unit}</span> {s.sector} — {s.cwp}</div></>
+                                : <div style={{fontSize:11,color:"var(--fg-muted)",fontStyle:"italic"}}>Kosong</div>}
+                            </div>
+                          ))}
+                        </div>
+                        {r.is_overridden && <div style={{fontSize:11,color:"#dc2626",marginTop:8,padding:"4px 8px",background:"#fef2f2",borderRadius:6}}>Diubah oleh {r.overridden_by}: {r.override_reason}</div>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>}
+    </div>
+  )
+}
+
+// ============================================================
+// ADMIN: MONITORING LOG (ON MIC)
 // ============================================================
 const AdminMonLog = () => {
   const ctx = useApp()
   const [br,setBr] = useState(ctx.navBranch || "ALL")
-  
-  // Clear navBranch after consuming it
+
   useEffect(() => {
-    if (ctx.navBranch) {
-      setBr(ctx.navBranch)
-      ctx.setNavBranch(null)
-    }
+    if (ctx.navBranch) { setBr(ctx.navBranch); ctx.setNavBranch(null) }
   }, [ctx.navBranch])
 
   const allActive = ctx.logs.filter(l => !l.off_time)
   const fa = br==="ALL" ? allActive : allActive.filter(l => l.branch_code===br)
-  const todayAll = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
-  const ft = br==="ALL" ? todayAll : todayAll.filter(l => l.branch_code===br)
 
   return (
     <div className="page-content">
-      <Header title="Monitoring Log Position" sub="Real-time seluruh cabang"/>
+      <Header title="Monitoring Log Position" sub="ATC on mic real-time seluruh cabang"/>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
-        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        <span className="monitor-label"><I n="eye" s={12}/> LIVE</span>
         <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
           <option value="ALL">Semua Cabang</option>
           {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
@@ -849,7 +1388,7 @@ const AdminMonLog = () => {
       </div>
       <div className="stats-grid">
         <Stat icon="mic" label="On Mic" value={fa.length} sub={br==="ALL"?"Seluruh cabang":br} color="#10b981"/>
-        <Stat icon="log" label="Log Hari Ini" value={ft.length} color="#38bdf8"/>
+        <Stat icon="building" label="Cabang Aktif" value={[...new Set(fa.map(l=>l.branch_code))].length} color="#38bdf8"/>
       </div>
       <div className="panel">
         <div className="panel-header"><h2 className="panel-title"><Pulse s={10}/> ATC On Mic</h2><span className="panel-badge">LIVE</span></div>
@@ -867,11 +1406,40 @@ const AdminMonLog = () => {
           })}</div>}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ============================================================
+// ADMIN: MONITORING LOG HARI INI
+// ============================================================
+const AdminMonToday = () => {
+  const ctx = useApp()
+  const [br,setBr] = useState("ALL")
+
+  const todayAll = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+  const ft = br==="ALL" ? todayAll : todayAll.filter(l => l.branch_code===br)
+
+  return (
+    <div className="page-content">
+      <Header title="Log Hari Ini" sub="Semua aktivitas log position hari ini"/>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
+          <option value="ALL">Semua Cabang</option>
+          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
+        </select>
+      </div>
+      <div className="stats-grid">
+        <Stat icon="log" label="Log Hari Ini" value={ft.length} color="#38bdf8"/>
+        <Stat icon="mic" label="Masih On Mic" value={ft.filter(l=>!l.off_time).length} color="#10b981"/>
+        <Stat icon="micOff" label="Sudah Off" value={ft.filter(l=>l.off_time).length} color="#64748b"/>
+      </div>
       <div className="panel">
         <div className="panel-header"><h2 className="panel-title">Log Hari Ini</h2><span className="panel-counter">{ft.length}</span></div>
-        <div className="panel-body">{ft.length===0 ? <div className="empty-state"><p>Belum ada log</p></div> :
-          <div className="table-wrap"><table className="data-table"><thead><tr><th>Cabang</th><th>Nama</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>On</th><th>Off</th><th>Status</th></tr></thead>
-          <tbody>{ft.map(l => <tr key={l.id}><td><span className="unit-tag">{l.branch_code}</span></td><td><strong>{l.atc_name}</strong></td><td>{l.unit}</td><td>{l.sector}</td><td>{l.cwp}</td><td>{fmtT(l.on_time)}</td><td>{l.off_time?fmtT(l.off_time):"-"}</td><td>{l.off_time?<span className="status-badge status-off">Off</span>:<span className="status-badge status-on"><Pulse s={6}/> On</span>}</td></tr>)}</tbody></table></div>}
+        <div className="panel-body">{ft.length===0 ? <div className="empty-state"><I n="log" s={44}/><p>Belum ada log hari ini</p></div> :
+          <div className="table-wrap"><table className="data-table"><thead><tr><th>Cabang</th><th>Nama</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>Shift</th><th>On</th><th>Off</th><th>Status</th></tr></thead>
+          <tbody>{ft.map(l => <tr key={l.id}><td><span className="unit-tag">{l.branch_code}</span></td><td><strong>{l.atc_name}</strong></td><td>{l.unit}</td><td>{l.sector}</td><td>{l.cwp}</td><td>{l.shift}</td><td>{fmtT(l.on_time)}</td><td>{l.off_time?fmtT(l.off_time):"-"}</td><td>{l.off_time?<span className="status-badge status-off">Off</span>:<span className="status-badge status-on"><Pulse s={6}/> On</span>}</td></tr>)}</tbody></table></div>}
         </div>
       </div>
     </div>
@@ -1900,8 +2468,8 @@ export default function App() {
   if (!user) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat profil...</p><span className="login-spinner"/></div>
 
   const pageMap = user.role === "admin"
-    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
-    : {dashboard:CabangDash,log:CabangLog,rekap:CabangRekap,handover:CabangHandover}
+    ? {dashboard:AdminDash,mon_roster:AdminMonRoster,mon_log:AdminMonLog,mon_today:AdminMonToday,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
+    : {dashboard:CabangDash,roster:CabangRoster,log:CabangLog,rekap:CabangRekap,handover:CabangHandover}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
