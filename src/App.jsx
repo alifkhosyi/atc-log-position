@@ -63,6 +63,10 @@ const ICONS = {
   calendar:"M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
   edit:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z",
   swap:"M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4",
+  magic:"M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z",
+  refresh:"M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
+  warn:"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0ZM12 9v4M12 17h.01",
+  copy:"M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2ZM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 0 2 2v1",
 }
 const I = ({n,s=18}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[n]||""}/></svg>
 
@@ -159,6 +163,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
       {id:"mon_log",label:"Log Position",icon:"mic"},
       {id:"mon_today",label:"Log Hari Ini",icon:"log"},
     ]},
+    {id:"roster_gen",label:"Generate Roster",icon:"magic"},
     {id:"mon_recap",label:"Monitoring Rekap Traffic",icon:"chart"},
     {id:"mon_handover",label:"Monitoring Handover/Takeover",icon:"checklist"},
     {id:"export",label:"Export Laporan",icon:"download"},
@@ -167,6 +172,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
   const cabangItems = [
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
     {id:"roster",label:"Roster",icon:"calendar"},
+    {id:"roster_gen",label:"Generate Roster",icon:"magic"},
     {id:"log",label:"Log Position",icon:"mic"},
     {id:"rekap",label:"Rekap Traffic",icon:"chart"},
     {id:"handover",label:"Handover/Takeover",icon:"checklist"},
@@ -2393,6 +2399,653 @@ const AdminAudit = () => {
 }
 
 // ============================================================
+// ROSTER GENERATOR — AI-assisted, rule-based schedule engine
+// ============================================================
+
+// ── Surabaya shift rotation rules ──────────────────────────
+// Pattern: 2 work days + 2 rest days, rotating I→V→IV→III→II
+// 10 groups for APP (4 per group), ~21 patterns for TWR
+// CUTI: personel cuti ditandai, slot-nya diisi otomatis
+
+const SHIFT_ROTATION = ["I","V","IV","III","II"]
+const SHIFT_HOURS = { I:"06:00–12:00", II:"08:00–14:00", III:"14:00–20:00", IV:"16:00–22:00", V:"22:00–06:00" }
+
+// Map shift roman → app shift label
+const SHIFT_MAP = { I:"Pagi", II:"Pagi", III:"Siang", IV:"Siang", V:"Malam" }
+
+// Generate 30-day pattern starting from a given shift index & day offset
+// offset: 0=start on day1, 2=start on day3, 4=start on day5...
+const genPattern = (startShiftIdx, dayOffset=0) => {
+  const result = []
+  let si = startShiftIdx
+  // build enough blocks to cover offset + 30 days
+  const blocks = []
+  for (let b=0; b<20; b++) {
+    const sh = SHIFT_ROTATION[si % SHIFT_ROTATION.length]
+    blocks.push(sh, sh, "-", "-")
+    si++
+  }
+  return blocks.slice(dayOffset, dayOffset + 30)
+}
+
+// Pre-defined Surabaya APP groups (10 groups, 4 personel each)
+// groupId 0-4: start day1 with shift I,II,III,IV,V
+// groupId 5-9: start day3 with shift I,II,III,IV,V
+const APP_GROUPS = [
+  {id:0,offset:0,startShift:0}, // Grup 1: start day1 Shift I  → BM,AX,WW,LX
+  {id:1,offset:0,startShift:1}, // Grup 2: start day1 Shift II → RI,JI,BG,HH
+  {id:2,offset:0,startShift:2}, // Grup 3: start day1 Shift III→ FHA,GK,GP,HU
+  {id:3,offset:0,startShift:3}, // Grup 4: start day1 Shift IV → IJ,IG,JX,MW
+  {id:4,offset:0,startShift:4}, // Grup 5: start day1 Shift V  → MP,VT,YI,ZR
+  {id:5,offset:2,startShift:0}, // Grup 6: start day3 Shift I  → SA,SE,YM,UL
+  {id:6,offset:2,startShift:1}, // Grup 7: start day3 Shift II → VC,NE,GA,FD
+  {id:7,offset:2,startShift:2}, // Grup 8: start day3 Shift III→ RP,AB,LR,DJ
+  {id:8,offset:2,startShift:3}, // Grup 9: start day3 Shift IV → IC,FV,II,ON
+  {id:9,offset:2,startShift:4}, // Grup10: start day3 Shift V  → SD,QZ,BI,TB
+]
+
+// Get shift for a personel on a specific day (1-indexed)
+const getShiftForDay = (groupId, day, cutiDays=[]) => {
+  if (cutiDays.includes(day)) return "CUTI"
+  const g = APP_GROUPS[groupId] || APP_GROUPS[0]
+  const pattern = genPattern(g.startShift, g.offset)
+  return pattern[day-1] || "-"
+}
+
+// Determine app shift (Pagi/Siang/Malam) from roman numeral
+const romanToAppShift = (roman) => {
+  if (!roman || roman === "-" || roman === "CUTI") return null
+  return SHIFT_MAP[roman] || null
+}
+
+// Build full month roster for all personel
+const buildMonthRoster = (year, month, personnelList, cutiMap) => {
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const result = {} // date -> { Pagi: [{name,unit,sector,cwp,shift}], Siang: [...], Malam: [...] }
+
+  for (let d=1; d<=daysInMonth; d++) {
+    const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`
+    result[dateStr] = { Pagi:[], Siang:[], Malam:[] }
+  }
+
+  personnelList.forEach(p => {
+    const cutiDays = cutiMap[p.id] || []
+    const groupId = p.roster_group ?? 0
+
+    for (let d=1; d<=daysInMonth; d++) {
+      const shift = getShiftForDay(groupId, d, cutiDays)
+      const appShift = romanToAppShift(shift)
+      if (!appShift) continue
+
+      const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`
+      result[dateStr][appShift].push({
+        name: p.name,
+        unit: p.unit || "APP",
+        sector: p.default_sector || "Sector 1",
+        cwp: p.default_cwp || "Controller",
+        roman_shift: shift,
+      })
+    }
+  })
+  return result
+}
+
+// Convert month roster to array of rosters records (matching Supabase schema)
+const rosterToRecords = (monthRoster, branchCode, userId) => {
+  const records = []
+  Object.entries(monthRoster).forEach(([date, shifts]) => {
+    Object.entries(shifts).forEach(([shiftName, people]) => {
+      if (people.length === 0) return
+      records.push({
+        branch_code: branchCode,
+        roster_date: date,
+        shift: shiftName,
+        atc1_name: people[0]?.name || null,
+        atc1_unit: people[0]?.unit || null,
+        atc1_sector: people[0]?.sector || null,
+        atc1_cwp: people[0]?.cwp || null,
+        atc2_name: people[1]?.name || null,
+        atc2_unit: people[1]?.unit || null,
+        atc2_sector: people[1]?.sector || null,
+        atc2_cwp: people[1]?.cwp || null,
+        created_by: userId,
+      })
+    })
+  })
+  return records
+}
+
+const MONTH_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"]
+const DAY_NAMES = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"]
+const ROMAN_COLORS = {
+  "I":  {bg:"#dbeafe",fg:"#1d4ed8"},
+  "II": {bg:"#dcfce7",fg:"#15803d"},
+  "III":{bg:"#fef9c3",fg:"#a16207"},
+  "IV": {bg:"#ffedd5",fg:"#c2410c"},
+  "V":  {bg:"#ede9fe",fg:"#6d28d9"},
+  "-":  {bg:"transparent",fg:"#94a3b8"},
+  "CUTI":{bg:"#fee2e2",fg:"#dc2626"},
+}
+
+const RosterGenerator = () => {
+  const ctx = useApp()
+  const isAdmin = ctx.user.role === "admin"
+
+  // For admin: pick branch; for cabang: use own branch
+  const [selectedBranch, setSelectedBranch] = useState(isAdmin ? (ctx.branches[0]?.code||"") : ctx.user.branch_code)
+  const br = ctx.branches.find(b => b.code === selectedBranch) || {units:["APP","TWR"],name:""}
+  const brPersonnel = ctx.personnel.filter(p => p.branch_code === selectedBranch)
+
+  const now = new Date()
+  const [selMonth, setSelMonth] = useState(now.getMonth()+1)
+  const [selYear, setSelYear] = useState(now.getFullYear())
+
+  // Personnel with group assignments
+  const [personnelConfig, setPersonnelConfig] = useState([])
+  const [cutiMap, setCutiMap] = useState({}) // { personnel_id: [day1, day2, ...] }
+  const [cutiInput, setCutiInput] = useState({}) // { personnel_id: "1,5,10" }
+
+  // Generation state
+  const [generated, setGenerated] = useState(null) // { monthRoster, records }
+  const [generating, setGenerating] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveResult, setSaveResult] = useState(null) // {ok, count, skipped}
+  const [activeTab, setActiveTab] = useState("config") // config | preview | save
+  const [previewDate, setPreviewDate] = useState(null)
+  const [conflict, setConflict] = useState([]) // existing roster dates in selected month
+
+  // Init personnel config when branch/personnel changes
+  useEffect(() => {
+    if (!brPersonnel.length) return
+    setPersonnelConfig(brPersonnel.map((p,i) => ({
+      ...p,
+      roster_group: i % 10,
+      unit: p.unit || br.units?.[0] || "APP",
+      default_sector: "",
+      default_cwp: "Controller",
+      include: true,
+    })))
+    setCutiMap({})
+    setCutiInput({})
+    setGenerated(null)
+    setSaveResult(null)
+    setActiveTab("config")
+  }, [selectedBranch, selMonth, selYear])
+
+  // Check existing rosters for conflict
+  useEffect(() => {
+    const fetchConflict = async () => {
+      const firstDay = `${selYear}-${String(selMonth).padStart(2,"0")}-01`
+      const lastDay = `${selYear}-${String(selMonth).padStart(2,"0")}-${new Date(selYear,selMonth,0).getDate()}`
+      const {data} = await supabase.from("rosters").select("roster_date").eq("branch_code",selectedBranch).gte("roster_date",firstDay).lte("roster_date",lastDay)
+      if (data) setConflict([...new Set(data.map(r=>r.roster_date))])
+    }
+    if (selectedBranch) fetchConflict()
+  }, [selectedBranch, selMonth, selYear])
+
+  const daysInMonth = new Date(selYear, selMonth, 0).getDate()
+
+  const updatePersonnel = (id, key, val) => {
+    setPersonnelConfig(prev => prev.map(p => p.id===id ? {...p,[key]:val} : p))
+  }
+
+  const parseCutiDays = (str) => {
+    if (!str?.trim()) return []
+    return str.split(/[,\s]+/).map(s=>parseInt(s)).filter(n => !isNaN(n) && n>=1 && n<=daysInMonth)
+  }
+
+  const updateCuti = (id, val) => {
+    setCutiInput(prev => ({...prev,[id]:val}))
+    setCutiMap(prev => ({...prev,[id]:parseCutiDays(val)}))
+  }
+
+  const generate = () => {
+    setGenerating(true)
+    setTimeout(() => {
+      try {
+        const activePersonnel = personnelConfig.filter(p => p.include)
+        const monthRoster = buildMonthRoster(selYear, selMonth, activePersonnel, cutiMap)
+        const records = rosterToRecords(monthRoster, selectedBranch, ctx.user.id)
+        setGenerated({monthRoster, records})
+        setActiveTab("preview")
+        // Set preview to first day
+        const firstDate = `${selYear}-${String(selMonth).padStart(2,"0")}-01`
+        setPreviewDate(firstDate)
+      } catch(e) { alert("Error: "+e.message) }
+      setGenerating(false)
+    }, 400)
+  }
+
+  const saveToSupabase = async (overwrite=false) => {
+    if (!generated) return
+    setSaving(true)
+    setSaveResult(null)
+    try {
+      const {records} = generated
+      let skipped = 0, saved = 0
+
+      if (overwrite) {
+        // Delete existing for this month/branch first
+        const firstDay = `${selYear}-${String(selMonth).padStart(2,"0")}-01`
+        const lastDay = `${selYear}-${String(selMonth).padStart(2,"0")}-${daysInMonth}`
+        await supabase.from("rosters").delete().eq("branch_code",selectedBranch).gte("roster_date",firstDay).lte("roster_date",lastDay)
+      }
+
+      // Batch insert in chunks of 50
+      for (let i=0; i<records.length; i+=50) {
+        const chunk = records.slice(i, i+50)
+        const {error} = await supabase.from("rosters").insert(chunk)
+        if (error) { skipped += chunk.length } else { saved += chunk.length }
+      }
+
+      logAudit("ROSTER_GENERATE", `${MONTH_NAMES[selMonth-1]} ${selYear} — ${selectedBranch} — ${saved} records`, ctx.user)
+      setSaveResult({ok:true, count:saved, skipped})
+      setActiveTab("save")
+      // Refresh conflict list
+      const firstDay = `${selYear}-${String(selMonth).padStart(2,"0")}-01`
+      const lastDay = `${selYear}-${String(selMonth).padStart(2,"0")}-${daysInMonth}`
+      const {data} = await supabase.from("rosters").select("roster_date").eq("branch_code",selectedBranch).gte("roster_date",firstDay).lte("roster_date",lastDay)
+      if (data) setConflict([...new Set(data.map(r=>r.roster_date))])
+      await ctx.reload()
+    } catch(e) { setSaveResult({ok:false, msg:e.message}) }
+    setSaving(false)
+  }
+
+  // Compute stats per personel
+  const computeStats = (personId) => {
+    if (!generated) return null
+    const counts = {I:0,II:0,III:0,IV:0,V:0,CUTI:0,total:0}
+    const p = personnelConfig.find(x=>x.id===personId)
+    if (!p) return counts
+    const cutiDays = cutiMap[personId] || []
+    for (let d=1; d<=daysInMonth; d++) {
+      const sh = getShiftForDay(p.roster_group, d, cutiDays)
+      if (sh === "CUTI") { counts.CUTI++; continue }
+      if (sh !== "-") { counts[sh] = (counts[sh]||0)+1; counts.total++ }
+    }
+    return counts
+  }
+
+  const Tab = ({id,label,icon}) => (
+    <button onClick={()=>setActiveTab(id)} style={{
+      padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,
+      display:"flex",alignItems:"center",gap:6,
+      background:activeTab===id?"var(--accent)":"transparent",
+      color:activeTab===id?"#fff":"var(--fg-muted)",
+    }}>
+      <I n={icon} s={14}/>{label}
+    </button>
+  )
+
+  // Preview calendar grid for a specific date
+  const CalendarPreview = () => {
+    const weeks = []
+    const firstDow = new Date(selYear, selMonth-1, 1).getDay()
+    let cells = Array(firstDow).fill(null)
+    for (let d=1; d<=daysInMonth; d++) cells.push(d)
+    while (cells.length % 7 !== 0) cells.push(null)
+    for (let i=0; i<cells.length; i+=7) weeks.push(cells.slice(i,i+7))
+
+    return (
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <thead>
+            <tr>{DAY_NAMES.map(d=><th key={d} style={{padding:"4px 2px",textAlign:"center",color:"var(--fg-muted)",fontWeight:600,fontSize:10}}>{d}</th>)}</tr>
+          </thead>
+          <tbody>
+            {weeks.map((wk,wi)=>(
+              <tr key={wi}>
+                {wk.map((day,di)=>{
+                  if (!day) return <td key={di}/>
+                  const dateStr = `${selYear}-${String(selMonth).padStart(2,"0")}-${String(day).padStart(2,"0")}`
+                  const shifts = generated?.monthRoster[dateStr]
+                  const hasPagi = shifts?.Pagi?.length>0
+                  const hasSiang = shifts?.Siang?.length>0
+                  const hasMalam = shifts?.Malam?.length>0
+                  const isConflict = conflict.includes(dateStr)
+                  const isSelected = previewDate===dateStr
+                  return (
+                    <td key={di} onClick={()=>setPreviewDate(dateStr)} style={{
+                      padding:"4px 2px",textAlign:"center",cursor:"pointer",
+                      background:isSelected?"var(--accent)33":"transparent",
+                      borderRadius:6,
+                    }}>
+                      <div style={{fontWeight:700,fontSize:12,color:isSelected?"var(--accent)":"var(--fg)",marginBottom:2}}>{day}</div>
+                      <div style={{display:"flex",gap:2,justifyContent:"center",flexWrap:"wrap"}}>
+                        {hasPagi && <span style={{fontSize:8,background:"#dbeafe",color:"#1d4ed8",borderRadius:3,padding:"0 3px"}}>P</span>}
+                        {hasSiang && <span style={{fontSize:8,background:"#fef9c3",color:"#a16207",borderRadius:3,padding:"0 3px"}}>S</span>}
+                        {hasMalam && <span style={{fontSize:8,background:"#ede9fe",color:"#6d28d9",borderRadius:3,padding:"0 3px"}}>M</span>}
+                        {isConflict && !generated && <span style={{fontSize:8,background:"#fee2e2",color:"#dc2626",borderRadius:3,padding:"0 3px"}}>!</span>}
+                      </div>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  // Detail view for selected date
+  const DayDetail = () => {
+    if (!previewDate || !generated) return <div style={{color:"var(--fg-muted)",fontSize:13,padding:16}}>Klik tanggal untuk melihat detail</div>
+    const shifts = generated.monthRoster[previewDate]
+    const dayNum = parseInt(previewDate.split("-")[2])
+    const dow = DAY_NAMES[new Date(previewDate).getDay()]
+    return (
+      <div>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:12,color:"var(--fg)"}}>{dow}, {dayNum} {MONTH_NAMES[selMonth-1]} {selYear}</div>
+        {["Pagi","Siang","Malam"].map(sh => {
+          const sc = SHIFT_CONFIG[sh]
+          const people = shifts[sh]||[]
+          return (
+            <div key={sh} style={{marginBottom:12,padding:"10px 12px",borderRadius:8,border:`1px solid ${sc.color}44`,background:sc.bg}}>
+              <div style={{fontSize:11,fontWeight:700,color:sc.color,marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
+                <ShiftBadge shift={sh} small/>
+                <span style={{fontSize:10,opacity:.7}}>{sc.hours}</span>
+                <span style={{marginLeft:"auto",fontSize:10,background:sc.color+"22",padding:"1px 8px",borderRadius:10}}>{people.length} ATC</span>
+              </div>
+              {people.length===0 ? <div style={{fontSize:12,color:"var(--fg-muted)",fontStyle:"italic"}}>Tidak ada personel</div> :
+              people.map((p,i) => (
+                <div key={i} style={{fontSize:12,display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontWeight:600,color:"var(--fg)"}}>{p.name}</span>
+                  <span style={{fontSize:10,background:"var(--bg)",padding:"1px 6px",borderRadius:4,color:"var(--fg-muted)"}}>{p.unit}</span>
+                  <span style={{fontSize:10,color:"var(--fg-muted)"}}>{p.sector}</span>
+                  <span style={{fontSize:10,background:ROMAN_COLORS[p.roman_shift]?.bg,color:ROMAN_COLORS[p.roman_shift]?.fg,padding:"1px 6px",borderRadius:4,marginLeft:"auto"}}>{p.roman_shift}</span>
+                </div>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="Generate Roster" sub="Buat jadwal dinas otomatis berbasis pola shift"/>
+
+      {/* Branch selector for admin */}
+      {isAdmin && (
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+          <span className="monitor-label"><I n="building" s={12}/> CABANG</span>
+          <select className="br-select" value={selectedBranch} onChange={e=>setSelectedBranch(e.target.value)}>
+            <option value="">— Pilih Cabang —</option>
+            {ctx.branches.map(b=><option key={b.code} value={b.code}>{b.code} — {b.city}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Month/Year picker */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <I n="calendar" s={16}/>
+        <select value={selMonth} onChange={e=>{setSelMonth(+e.target.value);setGenerated(null)}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}>
+          {MONTH_NAMES.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+        </select>
+        <input type="number" value={selYear} min={2024} max={2030} onChange={e=>{setSelYear(+e.target.value);setGenerated(null)}} style={{width:80,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}/>
+        {conflict.length>0 && (
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:"#f59e0b",background:"#fef3c7",padding:"4px 10px",borderRadius:8}}>
+            <I n="warn" s={13}/> {conflict.length} hari sudah ada roster — akan di-overwrite jika disimpan
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:"flex",gap:4,marginBottom:20,padding:"4px",background:"var(--bg)",borderRadius:10,width:"fit-content"}}>
+        <Tab id="config" label="Konfigurasi" icon="checklist"/>
+        <Tab id="preview" label={`Preview${generated?` (${generated.records.length} records)`:""}`} icon="eye"/>
+        <Tab id="save" label="Simpan" icon="download"/>
+      </div>
+
+      {/* ═══ TAB: KONFIGURASI ═══ */}
+      {activeTab==="config" && (
+        <div>
+          <div className="stats-grid" style={{marginBottom:20}}>
+            <Stat icon="building" label="Cabang" value={selectedBranch||"—"} sub={br.name} color="#38bdf8"/>
+            <Stat icon="calendar" label="Bulan" value={`${MONTH_NAMES[selMonth-1]} ${selYear}`} sub={`${daysInMonth} hari`} color="#8b5cf6"/>
+            <Stat icon="mic" label="Personel Aktif" value={personnelConfig.filter(p=>p.include).length} sub={`dari ${personnelConfig.length}`} color="#10b981"/>
+            <Stat icon="plane" label="Estimasi Records" value={personnelConfig.filter(p=>p.include).length > 0 ? daysInMonth * 3 : 0} sub="roster entries" color="#f59e0b"/>
+          </div>
+
+          {brPersonnel.length===0 ? (
+            <div className="panel"><div className="panel-body"><div className="empty-state"><I n="building" s={44}/><p>Pilih cabang yang memiliki data personel</p></div></div></div>
+          ) : (
+            <div className="panel">
+              <div className="panel-header">
+                <h2 className="panel-title"><I n="checklist" s={16}/> Konfigurasi Personel & Grup Rotasi</h2>
+                <span className="panel-counter">{personnelConfig.filter(p=>p.include).length} aktif</span>
+              </div>
+              <div className="panel-body">
+                <div style={{fontSize:12,color:"var(--fg-muted)",marginBottom:12,padding:"8px 12px",background:"var(--bg)",borderRadius:8,display:"flex",alignItems:"flex-start",gap:8}}>
+                  <I n="warn" s={14}/>
+                  <div>Sistem menggunakan pola rotasi 5-shift Surabaya: <strong>2 hari kerja + 2 hari libur</strong>, rotasi I→V→IV→III→II. Assign tiap personel ke grup (0–9) sesuai pola yang berlaku.</div>
+                </div>
+                <div style={{overflowX:"auto"}}>
+                  <table className="data-table">
+                    <thead><tr>
+                      <th style={{width:32}}>✓</th>
+                      <th>Nama</th>
+                      <th>Unit</th>
+                      <th style={{width:80}}>Grup</th>
+                      <th>Pola Shift (5 hari)</th>
+                      <th>Sektor Default</th>
+                      <th>Hari Cuti</th>
+                    </tr></thead>
+                    <tbody>
+                      {personnelConfig.map(p => {
+                        const preview5 = genPattern(APP_GROUPS[p.roster_group]?.startShift||0, APP_GROUPS[p.roster_group]?.offset||0).slice(0,10)
+                        return (
+                          <tr key={p.id} style={{opacity:p.include?1:.4}}>
+                            <td><input type="checkbox" checked={p.include} onChange={e=>updatePersonnel(p.id,"include",e.target.checked)}/></td>
+                            <td><strong style={{fontSize:13}}>{p.name}</strong></td>
+                            <td>
+                              <select value={p.unit} onChange={e=>updatePersonnel(p.id,"unit",e.target.value)} style={{padding:"3px 6px",borderRadius:5,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:11}}>
+                                {(br.units||["APP","TWR"]).map(u=><option key={u}>{u}</option>)}
+                              </select>
+                            </td>
+                            <td>
+                              <select value={p.roster_group} onChange={e=>updatePersonnel(p.id,"roster_group",+e.target.value)} style={{padding:"3px 6px",borderRadius:5,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:11,width:56}}>
+                                {APP_GROUPS.map(g=><option key={g.id} value={g.id}>{g.id}</option>)}
+                              </select>
+                            </td>
+                            <td>
+                              <div style={{display:"flex",gap:2}}>
+                                {preview5.map((sh,i)=>(
+                                  <span key={i} style={{
+                                    fontSize:10,fontWeight:600,padding:"1px 5px",borderRadius:4,
+                                    background:ROMAN_COLORS[sh]?.bg||"transparent",
+                                    color:ROMAN_COLORS[sh]?.fg||"#94a3b8",
+                                  }}>{sh}</span>
+                                ))}
+                              </div>
+                            </td>
+                            <td>
+                              <input value={p.default_sector} onChange={e=>updatePersonnel(p.id,"default_sector",e.target.value)} placeholder="Sector 1" style={{padding:"3px 8px",borderRadius:5,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:11,width:90}}/>
+                            </td>
+                            <td>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                <input
+                                  value={cutiInput[p.id]||""}
+                                  onChange={e=>updateCuti(p.id,e.target.value)}
+                                  placeholder="1,5,15..."
+                                  style={{padding:"3px 8px",borderRadius:5,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:11,width:80}}
+                                />
+                                {(cutiMap[p.id]?.length>0) && (
+                                  <span style={{fontSize:10,color:"#dc2626",background:"#fee2e2",padding:"1px 6px",borderRadius:4}}>{cutiMap[p.id].length}H</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{marginTop:20,display:"flex",gap:10,alignItems:"center"}}>
+                  <button className="btn btn-primary" onClick={generate} disabled={generating||personnelConfig.filter(p=>p.include).length===0} style={{gap:6,display:"flex",alignItems:"center"}}>
+                    <I n="magic" s={15}/> {generating?"Generating...":"Generate Jadwal"}
+                  </button>
+                  <span style={{fontSize:12,color:"var(--fg-muted)"}}>
+                    {personnelConfig.filter(p=>p.include).length} personel × {daysInMonth} hari
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ TAB: PREVIEW ═══ */}
+      {activeTab==="preview" && (
+        <div>
+          {!generated ? (
+            <div className="panel"><div className="panel-body"><div className="empty-state"><I n="calendar" s={44}/><p>Generate jadwal terlebih dahulu di tab Konfigurasi</p></div></div></div>
+          ) : (
+            <div>
+              {/* Stats */}
+              <div className="stats-grid" style={{marginBottom:20}}>
+                <Stat icon="calendar" label="Total Records" value={generated.records.length} sub="roster entries" color="#38bdf8"/>
+                <Stat icon="mic" label="Personel" value={personnelConfig.filter(p=>p.include).length} color="#10b981"/>
+                <Stat icon="plane" label="Hari Kerja" value={`${daysInMonth} hari`} sub={`${MONTH_NAMES[selMonth-1]} ${selYear}`} color="#f59e0b"/>
+                <Stat icon="warn" label="Hari Konflik" value={conflict.length} sub="sudah ada roster" color={conflict.length>0?"#ef4444":"#10b981"}/>
+              </div>
+
+              {/* Calendar + day detail */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+                <div className="panel">
+                  <div className="panel-header"><h2 className="panel-title"><I n="calendar" s={15}/> Kalender {MONTH_NAMES[selMonth-1]} {selYear}</h2></div>
+                  <div className="panel-body"><CalendarPreview/></div>
+                </div>
+                <div className="panel">
+                  <div className="panel-header"><h2 className="panel-title"><I n="log" s={15}/> Detail Hari</h2></div>
+                  <div className="panel-body"><DayDetail/></div>
+                </div>
+              </div>
+
+              {/* Per-personel stats */}
+              <div className="panel">
+                <div className="panel-header"><h2 className="panel-title"><I n="chart" s={15}/> Rekap Shift Per Personel</h2></div>
+                <div className="panel-body">
+                  <div style={{overflowX:"auto"}}>
+                    <table className="data-table">
+                      <thead><tr>
+                        <th>Nama</th><th>Unit</th><th>Grup</th>
+                        {["I","II","III","IV","V"].map(s=><th key={s} style={{textAlign:"center"}}><span style={{padding:"1px 6px",borderRadius:4,background:ROMAN_COLORS[s]?.bg,color:ROMAN_COLORS[s]?.fg,fontSize:11}}>{s}</span></th>)}
+                        <th style={{textAlign:"center"}}>Cuti</th>
+                        <th style={{textAlign:"center"}}>Total HK</th>
+                        <th style={{textAlign:"center"}}>Jam</th>
+                      </tr></thead>
+                      <tbody>
+                        {personnelConfig.filter(p=>p.include).map(p=>{
+                          const stats = computeStats(p.id)
+                          return (
+                            <tr key={p.id}>
+                              <td><strong>{p.name}</strong></td>
+                              <td><span className="unit-tag">{p.unit}</span></td>
+                              <td style={{textAlign:"center",fontSize:12,color:"var(--fg-muted)"}}>{p.roster_group}</td>
+                              {["I","II","III","IV","V"].map(s=><td key={s} style={{textAlign:"center",fontSize:12}}>{stats?.[s]||0}</td>)}
+                              <td style={{textAlign:"center",fontSize:12,color:"#dc2626"}}>{stats?.CUTI||0}</td>
+                              <td style={{textAlign:"center",fontWeight:700}}>{stats?.total||0}</td>
+                              <td style={{textAlign:"center",fontSize:12,color:"var(--fg-muted)"}}>{(stats?.total||0)*4}h</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{marginTop:16,display:"flex",gap:10}}>
+                <button className="btn btn-ghost" onClick={()=>setActiveTab("config")}><I n="edit" s={14}/> Ubah Konfigurasi</button>
+                <button className="btn btn-primary" onClick={()=>setActiveTab("save")} style={{display:"flex",alignItems:"center",gap:6}}>
+                  <I n="download" s={14}/> Lanjut Simpan
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ TAB: SIMPAN ═══ */}
+      {activeTab==="save" && (
+        <div>
+          {!generated ? (
+            <div className="panel"><div className="panel-body"><div className="empty-state"><I n="download" s={44}/><p>Generate jadwal terlebih dahulu</p></div></div></div>
+          ) : saveResult?.ok ? (
+            <div className="panel" style={{border:"2px solid #10b981"}}>
+              <div className="panel-body">
+                <div style={{textAlign:"center",padding:"24px 0"}}>
+                  <div style={{fontSize:48,marginBottom:12}}>✅</div>
+                  <div style={{fontSize:18,fontWeight:700,color:"#10b981",marginBottom:6}}>Roster Berhasil Disimpan!</div>
+                  <div style={{fontSize:14,color:"var(--fg-muted)",marginBottom:20}}>{saveResult.count} records disimpan ke database{saveResult.skipped>0?` (${saveResult.skipped} gagal)`:""}</div>
+                  <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+                    <button className="btn btn-ghost" onClick={()=>{setGenerated(null);setActiveTab("config");setSaveResult(null)}}><I n="refresh" s={14}/> Generate Bulan Lain</button>
+                    <button className="btn btn-primary" onClick={()=>ctx.goPage("roster")}><I n="calendar" s={14}/> Lihat Roster</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="panel" style={{marginBottom:16}}>
+                <div className="panel-header"><h2 className="panel-title"><I n="warn" s={15}/> Konfirmasi Simpan</h2></div>
+                <div className="panel-body">
+                  <div style={{fontSize:14,marginBottom:16}}>
+                    Roster <strong>{MONTH_NAMES[selMonth-1]} {selYear}</strong> untuk cabang <strong>{selectedBranch}</strong> akan disimpan:
+                  </div>
+                  <div className="stats-grid">
+                    <Stat icon="calendar" label="Total Records" value={generated.records.length} color="#38bdf8"/>
+                    <Stat icon="mic" label="Personel" value={personnelConfig.filter(p=>p.include).length} color="#10b981"/>
+                    <Stat icon="warn" label="Konflik" value={conflict.length} sub={conflict.length>0?"akan di-overwrite":""} color={conflict.length>0?"#ef4444":"#10b981"}/>
+                  </div>
+
+                  {conflict.length>0 && (
+                    <div style={{marginTop:16,padding:"12px 16px",background:"#fef2f2",borderRadius:8,fontSize:13,color:"#dc2626",display:"flex",alignItems:"flex-start",gap:8}}>
+                      <I n="warn" s={16}/>
+                      <div>
+                        <strong>Peringatan:</strong> Sudah ada {conflict.length} hari dengan roster di bulan ini. Jika klik <strong>"Simpan & Overwrite"</strong>, semua roster lama di bulan ini akan dihapus dan diganti dengan yang baru.
+                      </div>
+                    </div>
+                  )}
+
+                  {saveResult?.ok===false && (
+                    <div style={{marginTop:12,padding:"10px 14px",background:"#fef2f2",borderRadius:8,fontSize:13,color:"#dc2626"}}>
+                      Error: {saveResult.msg}
+                    </div>
+                  )}
+
+                  <div style={{marginTop:20,display:"flex",gap:10,flexWrap:"wrap"}}>
+                    <button className="btn btn-ghost" onClick={()=>setActiveTab("preview")}><I n="eye" s={14}/> Kembali ke Preview</button>
+                    {conflict.length===0 ? (
+                      <button className="btn btn-primary" onClick={()=>saveToSupabase(false)} disabled={saving} style={{display:"flex",alignItems:"center",gap:6}}>
+                        <I n="download" s={14}/> {saving?"Menyimpan...":"Simpan ke Database"}
+                      </button>
+                    ) : (
+                      <>
+                        <button className="btn btn-primary" onClick={()=>saveToSupabase(false)} disabled={saving} style={{display:"flex",alignItems:"center",gap:6}}>
+                          <I n="plus" s={14}/> {saving?"Menyimpan...":"Tambahkan Saja"}
+                        </button>
+                        <button className="btn btn-primary" onClick={()=>saveToSupabase(true)} disabled={saving} style={{background:"#ef4444",display:"flex",alignItems:"center",gap:6}}>
+                          <I n="warn" s={14}/> {saving?"Menyimpan...":"Simpan & Overwrite"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================
 // MAIN APP
 // ============================================================
 export default function App() {
@@ -2468,8 +3121,8 @@ export default function App() {
   if (!user) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat profil...</p><span className="login-spinner"/></div>
 
   const pageMap = user.role === "admin"
-    ? {dashboard:AdminDash,mon_roster:AdminMonRoster,mon_log:AdminMonLog,mon_today:AdminMonToday,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
-    : {dashboard:CabangDash,roster:CabangRoster,log:CabangLog,rekap:CabangRekap,handover:CabangHandover}
+    ? {dashboard:AdminDash,mon_roster:AdminMonRoster,mon_log:AdminMonLog,mon_today:AdminMonToday,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit,roster_gen:RosterGenerator}
+    : {dashboard:CabangDash,roster:CabangRoster,roster_gen:RosterGenerator,log:CabangLog,rekap:CabangRekap,handover:CabangHandover}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
