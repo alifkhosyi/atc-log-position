@@ -404,13 +404,13 @@ const CabangRoster = () => {
   const bgRowHover = isDark ? "#09142a" : "#eff6ff"
   const borderColor = isDark ? "#0d1828" : "#e2e8f0"
   const borderColorMid = isDark ? "#060c17" : "#f1f5f9"
-  const textName = isDark ? "#4b6882" : "#334155"
-  const textInit = isDark ? "#1a2840" : "#94a3b8"
+  const textName = isDark ? "#e2e8f0" : "#1e293b"
+  const textInit = isDark ? "#94a3b8" : "#475569"
   const bgInit = isDark ? "#0b1220" : "#f1f5f9"
-  const borderInit = isDark ? "#141f30" : "#e2e8f0"
-  const textDayNum = isDark ? "#2a3a50" : "#64748b"
-  const textDayName = isDark ? "#1a2840" : "#cbd5e1"
-  const textWknd = isDark ? "#141f30" : "#e2e8f0"
+  const borderInit = isDark ? "#1e3a5f" : "#e2e8f0"
+  const textDayNum = isDark ? "#cbd5e1" : "#334155"
+  const textDayName = isDark ? "#67e8f9" : "#0284c7"
+  const textWknd = isDark ? "#334155" : "#94a3b8"
   const bgWknd = isDark ? "#060c17" : "#fafafa"
   const bgTodayHd = isDark ? "#0d1f3a" : "#eff6ff"
   const textTodayNum = isDark ? "#3b82f6" : "#2563eb"
@@ -431,13 +431,13 @@ const CabangRoster = () => {
               style={{
                 padding:"6px 20px", borderRadius:7, cursor:"pointer", fontFamily:"inherit",
                 fontSize:11, fontWeight:800, letterSpacing:2,
-                border:`1.5px solid ${activeUnit===u ? (u==="TWR"?"#3b82f6":"#10b981") : (isDark?"#1a2840":"#e2e8f0")}`,
+                border:`1.5px solid ${activeUnit===u ? (u==="TWR"?"#3b82f6":"#10b981") : (isDark?"#1e3a5f":"#e2e8f0")}`, 
                 background: activeUnit===u
                   ? (u==="TWR" ? (isDark?"#0b1a2e":"#eff6ff") : (isDark?"#022c22":"#f0fdf4"))
                   : (isDark?"transparent":"#f8fafc"),
                 color: activeUnit===u
                   ? (u==="TWR" ? "#3b82f6" : "#10b981")
-                  : (isDark?"#3d5a7a":"#94a3b8"),
+                  : (isDark?"#94a3b8":"#94a3b8"),
                 transition:"all .15s",
               }}
             >{u} <span style={{fontSize:9,opacity:.6,marginLeft:4}}>{WARR_ROSTER_DATA[u]?.personnel?.length} personel</span></button>
@@ -465,7 +465,7 @@ const CabangRoster = () => {
                 <div style={{width:26,height:17,borderRadius:4,background:sc.grad,border:`1px solid ${sc.border}`,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .3s"}}>
                   <span style={{fontSize:7,fontWeight:800,color:sc.text}}>{k}</span>
                 </div>
-                <span style={{fontSize:9,color:isDark?"#3d5a7a":"#64748b"}}>{labels[k]}</span>
+                <span style={{fontSize:9,color:isDark?"#94a3b8":"#64748b"}}>{labels[k]}</span>
               </div>
             )
           })}
@@ -478,10 +478,10 @@ const CabangRoster = () => {
           <thead>
             <tr style={{background:bgTableHead}}>
               <th style={{position:"sticky",left:0,zIndex:20,background:bgTableHead,padding:"8px 10px",textAlign:"left",borderBottom:`1px solid ${borderColor}`,borderRight:`1px solid ${borderColor}`,width:42,minWidth:42}}>
-                <span style={{color:isDark?"#1a2840":"#cbd5e1",fontSize:8,letterSpacing:1}}>No</span>
+                <span style={{color:isDark?"#7dd3fc":"#0284c7",fontSize:8,letterSpacing:1}}>No</span>
               </th>
               <th style={{position:"sticky",left:42,zIndex:20,background:bgTableHead,padding:"8px 6px",textAlign:"center",borderBottom:`1px solid ${borderColor}`,borderRight:`1px solid ${borderColor}`,width:44,minWidth:44}}>
-                <span style={{color:isDark?"#1a2840":"#cbd5e1",fontSize:8,letterSpacing:1}}>Init</span>
+                <span style={{color:isDark?"#7dd3fc":"#0284c7",fontSize:8,letterSpacing:1}}>Init</span>
               </th>
               {Array.from({length:days},(_,i)=>i+1).map(day => {
                 const dn = new Date(2025,viewMonth,day).getDay()
@@ -505,10 +505,10 @@ const CabangRoster = () => {
                 onMouseLeave={e=>e.currentTarget.style.background=pi%2===0?bgRow1:bgRow2}
               >
                 <td style={{position:"sticky",left:0,zIndex:5,background:"inherit",padding:"3px 10px",borderRight:`1px solid ${borderColor}`,borderBottom:`1px solid ${borderColorMid}`,textAlign:"center"}}>
-                  <span style={{fontSize:9,color:isDark?"#1a2840":"#cbd5e1"}}>{pi+1}</span>
+                  <span style={{fontSize:9,color:isDark?"#94a3b8":"#64748b"}}>{pi+1}</span>
                 </td>
                 <td style={{position:"sticky",left:42,zIndex:5,background:"inherit",padding:"3px 6px",textAlign:"center",borderRight:`1px solid ${borderColor}`,borderBottom:`1px solid ${borderColorMid}`}}>
-                  <span style={{fontSize:9,fontWeight:700,color:isDark?"#3d5a7a":"#64748b",background:bgInit,border:`1px solid ${borderInit}`,padding:"2px 4px",borderRadius:4,letterSpacing:1,transition:"all .3s"}}>{p}</span>
+                  <span style={{fontSize:9,fontWeight:700,color:isDark?"#e2e8f0":"#334155",background:bgInit,border:`1px solid ${borderInit}`,padding:"2px 4px",borderRadius:4,letterSpacing:1,transition:"all .3s"}}>{p}</span>
                 </td>
                 {Array.from({length:days},(_,i)=>i+1).map(day => {
                   const s = roster[p]?.[mNum]?.[String(day)] || "L"
@@ -537,7 +537,7 @@ const CabangRoster = () => {
         </table>
       </div>
 
-      <div style={{marginTop:8,fontSize:9,color:isDark?"#141f30":"#cbd5e1"}}>
+      <div style={{marginTop:8,fontSize:9,color:isDark?"#475569":"#94a3b8"}}>
         {personnel.length} personel · {days} hari · data dari Excel WARR 2025 · view only
       </div>
     </div>
