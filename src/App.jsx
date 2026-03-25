@@ -172,8 +172,8 @@ const Sidebar = ({page,go,user,logout,col,toggle,theme,setTheme}) => {
   ]
   const cabangItems = [
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
-    {id:"roster",label:"Roster",icon:"calendar"},
     {id:"log",label:"Log Position",icon:"mic"},
+    {id:"roster",label:"Roster",icon:"calendar"},
     {id:"rekap",label:"Rekap Traffic",icon:"chart"},
     {id:"handover",label:"Handover/Takeover",icon:"checklist"},
   ]
@@ -333,24 +333,24 @@ const RV3_DAY_NAMES = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"]
 
 // S1-S5: hijau gradasi, L: abu, CUTI: kuning, DIKLAT: ungu
 const RV3_SC_DARK = {
-  S1:{ bg:"#052e16", border:"#4ade80", text:"#bbf7d0", grad:"linear-gradient(145deg,#0a3d20,#052e16)" },
-  S2:{ bg:"#14532d", border:"#22c55e", text:"#86efac", grad:"linear-gradient(145deg,#14532d,#0d3d21)" },
-  S3:{ bg:"#166534", border:"#15803d", text:"#4ade80", grad:"linear-gradient(145deg,#166534,#0f4d27)" },
-  S4:{ bg:"#0f3460", border:"#3b82f6", text:"#bfdbfe", grad:"linear-gradient(145deg,#1a3f72,#0f2a50)" },
-  S5:{ bg:"#1e1b4b", border:"#818cf8", text:"#c7d2fe", grad:"linear-gradient(145deg,#252060,#171540)" },
-  L:{ bg:"#1c1c1e", border:"#3a3a3c", text:"#636366", grad:"linear-gradient(145deg,#242426,#1a1a1c)" },
-  CUTI:{ bg:"#451a03", border:"#d97706", text:"#fcd34d", grad:"linear-gradient(145deg,#451a03,#3b1502)" },
-  DIKLAT:{ bg:"#2e1065", border:"#7c3aed", text:"#c4b5fd", grad:"linear-gradient(145deg,#2e1065,#250d55)" },
+  S1:{ bg:"#052e16", border:"#4ade80", text:"#bbf7d0", grad:"#052e16" },
+  S2:{ bg:"#0f3460", border:"#38bdf8", text:"#bae6fd", grad:"#0f3460" },
+  S3:{ bg:"#422006", border:"#fb923c", text:"#fed7aa", grad:"#422006" },
+  S4:{ bg:"#1e1b4b", border:"#818cf8", text:"#e0e7ff", grad:"#1e1b4b" },
+  S5:{ bg:"#3b0764", border:"#c084fc", text:"#f3e8ff", grad:"#3b0764" },
+  L:{ bg:"transparent", border:"#1f2937", text:"#374151", grad:"transparent" },
+  CUTI:{ bg:"#450a0a", border:"#ef4444", text:"#fca5a5", grad:"#450a0a" },
+  DIKLAT:{ bg:"#1c1917", border:"#a8a29e", text:"#d6d3d1", grad:"#1c1917" },
 }
 const RV3_SC_LIGHT = {
-  S1:{ bg:"#dcfce7", border:"#16a34a", text:"#14532d", grad:"linear-gradient(145deg,#dcfce7,#bbf7d0)" },
-  S2:{ bg:"#d1fae5", border:"#059669", text:"#064e3b", grad:"linear-gradient(145deg,#d1fae5,#a7f3d0)" },
-  S3:{ bg:"#a7f3d0", border:"#10b981", text:"#064e3b", grad:"linear-gradient(145deg,#a7f3d0,#6ee7b7)" },
-  S4:{ bg:"#dbeafe", border:"#3b82f6", text:"#1e40af", grad:"linear-gradient(145deg,#dbeafe,#bfdbfe)" },
-  S5:{ bg:"#ede9fe", border:"#7c3aed", text:"#4c1d95", grad:"linear-gradient(145deg,#ede9fe,#ddd6fe)" },
-  L:{ bg:"#f1f5f9", border:"#cbd5e1", text:"#94a3b8", grad:"linear-gradient(145deg,#f1f5f9,#e2e8f0)" },
-  CUTI:{ bg:"#fef3c7", border:"#d97706", text:"#92400e", grad:"linear-gradient(145deg,#fef3c7,#fde68a)" },
-  DIKLAT:{ bg:"#ede9fe", border:"#7c3aed", text:"#4c1d95", grad:"linear-gradient(145deg,#ede9fe,#ddd6fe)" },
+  S1:{ bg:"#dcfce7", border:"#4ade80", text:"#166534", grad:"#dcfce7" },
+  S2:{ bg:"#dbeafe", border:"#38bdf8", text:"#1e40af", grad:"#dbeafe" },
+  S3:{ bg:"#ffedd5", border:"#fb923c", text:"#9a3412", grad:"#ffedd5" },
+  S4:{ bg:"#ede9fe", border:"#818cf8", text:"#4c1d95", grad:"#ede9fe" },
+  S5:{ bg:"#fae8ff", border:"#c084fc", text:"#6b21a8", grad:"#fae8ff" },
+  L:{ bg:"transparent", border:"#e5e7eb", text:"#9ca3af", grad:"transparent" },
+  CUTI:{ bg:"#fee2e2", border:"#ef4444", text:"#991b1b", grad:"#fee2e2" },
+  DIKLAT:{ bg:"#f5f5f4", border:"#a8a29e", text:"#57534e", grad:"#f5f5f4" },
 }
 
 const CabangRoster = () => {
@@ -404,13 +404,13 @@ const CabangRoster = () => {
   const bgRowHover = isDark ? "#09142a" : "#eff6ff"
   const borderColor = isDark ? "#0d1828" : "#e2e8f0"
   const borderColorMid = isDark ? "#060c17" : "#f1f5f9"
-  const textName = isDark ? "#e2e8f0" : "#1e293b"
-  const textInit = isDark ? "#94a3b8" : "#475569"
+  const textName = isDark ? "#4b6882" : "#334155"
+  const textInit = isDark ? "#1a2840" : "#94a3b8"
   const bgInit = isDark ? "#0b1220" : "#f1f5f9"
-  const borderInit = isDark ? "#1e3a5f" : "#e2e8f0"
-  const textDayNum = isDark ? "#cbd5e1" : "#334155"
-  const textDayName = isDark ? "#67e8f9" : "#0284c7"
-  const textWknd = isDark ? "#334155" : "#94a3b8"
+  const borderInit = isDark ? "#141f30" : "#e2e8f0"
+  const textDayNum = isDark ? "#2a3a50" : "#64748b"
+  const textDayName = isDark ? "#1a2840" : "#cbd5e1"
+  const textWknd = isDark ? "#141f30" : "#e2e8f0"
   const bgWknd = isDark ? "#060c17" : "#fafafa"
   const bgTodayHd = isDark ? "#0d1f3a" : "#eff6ff"
   const textTodayNum = isDark ? "#3b82f6" : "#2563eb"
@@ -431,13 +431,13 @@ const CabangRoster = () => {
               style={{
                 padding:"6px 20px", borderRadius:7, cursor:"pointer", fontFamily:"inherit",
                 fontSize:11, fontWeight:800, letterSpacing:2,
-                border:`1.5px solid ${activeUnit===u ? (u==="TWR"?"#3b82f6":"#10b981") : (isDark?"#1e3a5f":"#e2e8f0")}`, 
+                border:`1.5px solid ${activeUnit===u ? (u==="TWR"?"#3b82f6":"#10b981") : (isDark?"#1a2840":"#e2e8f0")}`,
                 background: activeUnit===u
                   ? (u==="TWR" ? (isDark?"#0b1a2e":"#eff6ff") : (isDark?"#022c22":"#f0fdf4"))
                   : (isDark?"transparent":"#f8fafc"),
                 color: activeUnit===u
                   ? (u==="TWR" ? "#3b82f6" : "#10b981")
-                  : (isDark?"#94a3b8":"#94a3b8"),
+                  : (isDark?"#3d5a7a":"#94a3b8"),
                 transition:"all .15s",
               }}
             >{u} <span style={{fontSize:9,opacity:.6,marginLeft:4}}>{WARR_ROSTER_DATA[u]?.personnel?.length} personel</span></button>
@@ -465,7 +465,7 @@ const CabangRoster = () => {
                 <div style={{width:26,height:17,borderRadius:4,background:sc.grad,border:`1px solid ${sc.border}`,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .3s"}}>
                   <span style={{fontSize:7,fontWeight:800,color:sc.text}}>{k}</span>
                 </div>
-                <span style={{fontSize:9,color:isDark?"#94a3b8":"#64748b"}}>{labels[k]}</span>
+                <span style={{fontSize:9,color:isDark?"#3d5a7a":"#64748b"}}>{labels[k]}</span>
               </div>
             )
           })}
@@ -478,10 +478,10 @@ const CabangRoster = () => {
           <thead>
             <tr style={{background:bgTableHead}}>
               <th style={{position:"sticky",left:0,zIndex:20,background:bgTableHead,padding:"8px 10px",textAlign:"left",borderBottom:`1px solid ${borderColor}`,borderRight:`1px solid ${borderColor}`,width:42,minWidth:42}}>
-                <span style={{color:isDark?"#7dd3fc":"#0284c7",fontSize:8,letterSpacing:1}}>No</span>
+                <span style={{color:isDark?"#1a2840":"#cbd5e1",fontSize:8,letterSpacing:1}}>No</span>
               </th>
               <th style={{position:"sticky",left:42,zIndex:20,background:bgTableHead,padding:"8px 6px",textAlign:"center",borderBottom:`1px solid ${borderColor}`,borderRight:`1px solid ${borderColor}`,width:44,minWidth:44}}>
-                <span style={{color:isDark?"#7dd3fc":"#0284c7",fontSize:8,letterSpacing:1}}>Init</span>
+                <span style={{color:isDark?"#1a2840":"#cbd5e1",fontSize:8,letterSpacing:1}}>Init</span>
               </th>
               {Array.from({length:days},(_,i)=>i+1).map(day => {
                 const dn = new Date(2025,viewMonth,day).getDay()
@@ -505,10 +505,10 @@ const CabangRoster = () => {
                 onMouseLeave={e=>e.currentTarget.style.background=pi%2===0?bgRow1:bgRow2}
               >
                 <td style={{position:"sticky",left:0,zIndex:5,background:"inherit",padding:"3px 10px",borderRight:`1px solid ${borderColor}`,borderBottom:`1px solid ${borderColorMid}`,textAlign:"center"}}>
-                  <span style={{fontSize:9,color:isDark?"#94a3b8":"#64748b"}}>{pi+1}</span>
+                  <span style={{fontSize:9,color:isDark?"#1a2840":"#cbd5e1"}}>{pi+1}</span>
                 </td>
                 <td style={{position:"sticky",left:42,zIndex:5,background:"inherit",padding:"3px 6px",textAlign:"center",borderRight:`1px solid ${borderColor}`,borderBottom:`1px solid ${borderColorMid}`}}>
-                  <span style={{fontSize:9,fontWeight:700,color:isDark?"#e2e8f0":"#334155",background:bgInit,border:`1px solid ${borderInit}`,padding:"2px 4px",borderRadius:4,letterSpacing:1,transition:"all .3s"}}>{p}</span>
+                  <span style={{fontSize:9,fontWeight:700,color:isDark?"#3d5a7a":"#64748b",background:bgInit,border:`1px solid ${borderInit}`,padding:"2px 4px",borderRadius:4,letterSpacing:1,transition:"all .3s"}}>{p}</span>
                 </td>
                 {Array.from({length:days},(_,i)=>i+1).map(day => {
                   const s = roster[p]?.[mNum]?.[String(day)] || "L"
@@ -538,12 +538,109 @@ const CabangRoster = () => {
       </div>
 
       <div style={{marginTop:8,fontSize:9,color:isDark?"#475569":"#94a3b8"}}>
-        {personnel.length} personel · {days} hari · data dari Excel WARR 2025 · view only
+        {personnel.length} personel · {days} hari · data WARR 2025
       </div>
+      <CabangRosterRequest isDark={isDark}/>
     </div>
   )
 }
 
+// ============================================================
+// CABANG: ROSTER REQUEST (cuti/sakit/dinas luar/diklat)
+// ============================================================
+const CabangRosterRequest = ({isDark}) => {
+  const ctx = useApp()
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [requests, setRequests] = useState([])
+  const [loadingReqs, setLoadingReqs] = useState(true)
+  const [form, setForm] = useState({jenis:"Cuti",tanggal_mulai:"",tanggal_selesai:"",keterangan:""})
+
+  const JENIS_OPTS = ["Cuti","Sakit","Dinas Luar","Diklat","Keperluan Khusus"]
+  const JC_D = {"Cuti":{bg:"#450a0a",bd:"#ef4444",tx:"#fca5a5"},"Sakit":{bg:"#422006",bd:"#f97316",tx:"#fed7aa"},"Dinas Luar":{bg:"#0f3460",bd:"#38bdf8",tx:"#bae6fd"},"Diklat":{bg:"#1c1917",bd:"#a8a29e",tx:"#d6d3d1"},"Keperluan Khusus":{bg:"#1e1b4b",bd:"#818cf8",tx:"#e0e7ff"}}
+  const JC_L = {"Cuti":{bg:"#fee2e2",bd:"#ef4444",tx:"#991b1b"},"Sakit":{bg:"#ffedd5",bd:"#f97316",tx:"#9a3412"},"Dinas Luar":{bg:"#dbeafe",bd:"#38bdf8",tx:"#1e40af"},"Diklat":{bg:"#f5f5f4",bd:"#a8a29e",tx:"#57534e"},"Keperluan Khusus":{bg:"#ede9fe",bd:"#818cf8",tx:"#4c1d95"}}
+  const SC_D = {pending:{bg:"#422006",bd:"#f97316",tx:"#fed7aa"},approved:{bg:"#052e16",bd:"#4ade80",tx:"#bbf7d0"},rejected:{bg:"#450a0a",bd:"#ef4444",tx:"#fca5a5"}}
+  const SC_L = {pending:{bg:"#ffedd5",bd:"#f97316",tx:"#9a3412"},approved:{bg:"#dcfce7",bd:"#4ade80",tx:"#166534"},rejected:{bg:"#fee2e2",bd:"#ef4444",tx:"#991b1b"}}
+  const JC = isDark ? JC_D : JC_L
+  const SC = isDark ? SC_D : SC_L
+
+  const loadReqs = async () => {
+    setLoadingReqs(true)
+    const {data} = await supabase.from("roster_requests").select("*")
+      .eq("branch_code",ctx.user.branch_code).order("created_at",{ascending:false}).limit(30)
+    setRequests(data||[])
+    setLoadingReqs(false)
+  }
+  useEffect(() => { loadReqs() },[])
+
+  const submitReq = async () => {
+    if (!form.tanggal_mulai||!form.tanggal_selesai){alert("Mohon isi tanggal mulai dan selesai");return}
+    setSaving(true)
+    const {error} = await supabase.from("roster_requests").insert({
+      branch_code:ctx.user.branch_code, requested_by:ctx.user.id,
+      requester_name:ctx.user.display_name, jenis:form.jenis,
+      tanggal_mulai:form.tanggal_mulai, tanggal_selesai:form.tanggal_selesai,
+      keterangan:form.keterangan, status:"pending",
+    })
+    if(error){alert("Error: "+error.message)}
+    else{logAudit("ROSTER_REQUEST",form.jenis+" — "+form.tanggal_mulai+" s/d "+form.tanggal_selesai,ctx.user);setForm({jenis:"Cuti",tanggal_mulai:"",tanggal_selesai:"",keterangan:""});setShowForm(false);loadReqs()}
+    setSaving(false)
+  }
+
+  return (
+    <div style={{marginTop:20}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <h2 style={{margin:0,fontSize:14,fontWeight:700,color:"var(--fg)",display:"flex",alignItems:"center",gap:8}}>
+          <I n="calendar" s={16}/> Permohonan Roster
+        </h2>
+        {!showForm && <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}><I n="plus" s={13}/> Ajukan Permohonan</button>}
+      </div>
+      {showForm && (
+        <div className="panel" style={{marginBottom:16}}>
+          <div className="panel-header"><h2 className="panel-title"><I n="calendar" s={14}/> Form Permohonan Baru</h2></div>
+          <div className="panel-body">
+            <div className="form-grid">
+              <div className="field"><label>Jenis Permohonan</label><select value={form.jenis} onChange={e => setForm(p=>({...p,jenis:e.target.value}))}>{JENIS_OPTS.map(j => <option key={j} value={j}>{j}</option>)}</select></div>
+              <div className="field"><label>Tanggal Mulai</label><input type="date" value={form.tanggal_mulai} onChange={e => setForm(p=>({...p,tanggal_mulai:e.target.value}))}/></div>
+              <div className="field"><label>Tanggal Selesai</label><input type="date" value={form.tanggal_selesai} onChange={e => setForm(p=>({...p,tanggal_selesai:e.target.value}))}/></div>
+              <div className="field" style={{gridColumn:"1/-1"}}><label>Keterangan (opsional)</label><input type="text" value={form.keterangan} onChange={e => setForm(p=>({...p,keterangan:e.target.value}))} placeholder="Tambahkan keterangan jika perlu..."/></div>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:12}}>
+              <button className="btn btn-primary btn-sm" onClick={submitReq} disabled={saving}>{saving?<span className="login-spinner"/>:<><I n="plus" s={13}/> Kirim Permohonan</>}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}>Batal</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Riwayat Permohonan</h2><span className="panel-counter">{requests.length}</span></div>
+        <div className="panel-body">
+          {loadingReqs ? <div style={{padding:8}}><span className="login-spinner"/></div> :
+          requests.length===0 ? <div className="empty-state"><I n="calendar" s={32}/><p>Belum ada permohonan</p></div> :
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {requests.map(r => {
+              const jc=JC[r.jenis]||JC["Keperluan Khusus"], sc=SC[r.status]||SC.pending
+              return (
+                <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:8,background:"var(--card)",border:"1px solid var(--border)"}}>
+                  <span style={{display:"inline-block",padding:"2px 10px",borderRadius:8,fontSize:11,fontWeight:700,background:jc.bg,color:jc.tx,border:`1px solid ${jc.bd}`,flexShrink:0}}>{r.jenis}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,color:"var(--fg)"}}>{r.tanggal_mulai} → {r.tanggal_selesai}</div>
+                    {r.keterangan && <div style={{fontSize:11,color:"var(--fg-muted)",marginTop:2}}>{r.keterangan}</div>}
+                  </div>
+                  <span style={{display:"inline-block",padding:"2px 10px",borderRadius:8,fontSize:11,fontWeight:700,background:sc.bg,color:sc.tx,border:`1px solid ${sc.bd}`,flexShrink:0,textTransform:"capitalize"}}>{r.status}</span>
+                  <div style={{fontSize:10,color:"var(--fg-muted)",whiteSpace:"nowrap",textAlign:"right"}}>
+                    <div>{new Date(r.created_at).toLocaleDateString("id-ID",{day:"2-digit",month:"short"})}</div>
+                    <div style={{fontSize:9}}>{r.requester_name}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // CABANG: LOG POSITION (with roster auto-fill)
 // ============================================================
