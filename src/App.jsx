@@ -163,7 +163,6 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
       {id:"mon_log",label:"Log Position",icon:"mic"},
       {id:"mon_today",label:"Log Hari Ini",icon:"log"},
     ]},
-    {id:"roster_gen",label:"Generate Roster",icon:"magic"},
     {id:"mon_recap",label:"Monitoring Rekap Traffic",icon:"chart"},
     {id:"mon_handover",label:"Monitoring Handover/Takeover",icon:"checklist"},
     {id:"export",label:"Export Laporan",icon:"download"},
@@ -172,7 +171,6 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
   const cabangItems = [
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
     {id:"roster",label:"Roster",icon:"calendar"},
-    {id:"roster_gen",label:"Generate Roster",icon:"magic"},
     {id:"log",label:"Log Position",icon:"mic"},
     {id:"rekap",label:"Rekap Traffic",icon:"chart"},
     {id:"handover",label:"Handover/Takeover",icon:"checklist"},
@@ -292,695 +290,525 @@ const ShiftBadge = ({shift,small}) => {
 // ============================================================
 
 // ============================================================
-// CABANG: ROSTER (new — per bulan, JSONB schedule)
+// CABANG: ROSTER v2 — TWR + APP, S1-S5, per bulan
 // ============================================================
-const ROSTER_SECTORS = ["TWR", "APP", "GND", "DEL", "ACC", "FIS"]
+const ROSTER_UNITS = ["TWR", "APP"]
 
-const ROSTER_STATUS = [
-  { code: "S1", label: "Shift 1" },
-  { code: "S2", label: "Shift 2" },
-  { code: "S3", label: "Shift 3" },
-  { code: "L",  label: "Libur"   },
-  { code: "CUTI",   label: "Cuti"   },
-  { code: "DIKLAT", label: "Diklat" },
+const ROSTER_STATUS_V2 = [
+  { code:"S1", label:"Shift 1" },
+  { code:"S2", label:"Shift 2" },
+  { code:"S3", label:"Shift 3" },
+  { code:"S4", label:"Shift 4" },
+  { code:"S5", label:"Shift 5" },
+  { code:"L",  label:"Libur"   },
+  { code:"CUTI",   label:"Cuti"   },
+  { code:"DIKLAT", label:"Diklat" },
 ]
 
-const ROSTER_COLORS = {
-  S1:     { bg:"#052e16", border:"#4ade80", text:"#bbf7d0", dot:"#60a5fa", grad:"linear-gradient(145deg,#0a3d20,#052e16)" },
-  S2:     { bg:"#14532d", border:"#22c55e", text:"#86efac", dot:"#3b82f6", grad:"linear-gradient(145deg,#14532d,#0d3d21)" },
-  S3:     { bg:"#166534", border:"#15803d", text:"#4ade80", dot:"#2563eb", grad:"linear-gradient(145deg,#166534,#0f4d27)" },
-  L:      { bg:"#450a0a", border:"#dc2626", text:"#fca5a5", dot:"#ef4444", grad:"linear-gradient(145deg,#5c0f0f,#3b0808)" },
-  CUTI:   { bg:"#451a03", border:"#d97706", text:"#fcd34d", dot:"#f59e0b", grad:"linear-gradient(145deg,#451a03,#3b1502)" },
-  DIKLAT: { bg:"#2e1065", border:"#7c3aed", text:"#c4b5fd", dot:"#8b5cf6", grad:"linear-gradient(145deg,#2e1065,#250d55)" },
+const RC2 = {
+  S1:     { bg:"#052e16", border:"#4ade80", text:"#bbf7d0", dot:"#60a5fa",  grad:"linear-gradient(145deg,#0a3d20,#052e16)" },
+  S2:     { bg:"#14532d", border:"#22c55e", text:"#86efac", dot:"#3b82f6",  grad:"linear-gradient(145deg,#14532d,#0d3d21)" },
+  S3:     { bg:"#166534", border:"#15803d", text:"#4ade80", dot:"#2563eb",  grad:"linear-gradient(145deg,#166534,#0f4d27)" },
+  S4:     { bg:"#0f3460", border:"#3b82f6", text:"#bfdbfe", dot:"#60a5fa",  grad:"linear-gradient(145deg,#1a3f72,#0f2a50)" },
+  S5:     { bg:"#1e1b4b", border:"#818cf8", text:"#c7d2fe", dot:"#a5b4fc",  grad:"linear-gradient(145deg,#252060,#171540)" },
+  L:      { bg:"#450a0a", border:"#dc2626", text:"#fca5a5", dot:"#ef4444",  grad:"linear-gradient(145deg,#5c0f0f,#3b0808)" },
+  CUTI:   { bg:"#451a03", border:"#d97706", text:"#fcd34d", dot:"#f59e0b",  grad:"linear-gradient(145deg,#451a03,#3b1502)" },
+  DIKLAT: { bg:"#2e1065", border:"#7c3aed", text:"#c4b5fd", dot:"#8b5cf6",  grad:"linear-gradient(145deg,#2e1065,#250d55)" },
 }
 
-const R_DAY_NAMES   = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"]
-const R_MONTH_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"]
+const RV2_DAY   = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"]
+const RV2_MONTH = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"]
 
-const rGetDays = (y,m) => new Date(y,m,0).getDate()
-const rMakeInit = (name) => {
-  const w = name.trim().split(/\s+/)
-  return w.length >= 2 ? (w[0][0]+w[1][0]).toUpperCase() : name.slice(0,2).toUpperCase()
-}
+const rv2Days  = (y,m) => new Date(y,m,0).getDate()
+const rv2Init  = (name) => { const w=name.trim().split(/\s+/); return w.length>=2?(w[0][0]+w[1][0]).toUpperCase():name.slice(0,2).toUpperCase() }
 
-// ── Cell Editor Popup ──
-const RCellEditor = ({ value, onSave, onClose, anchorRect }) => {
-  const [st, setSt]   = useState(value?.status || "")
-  const [sec, setSec] = useState(value?.sector || "")
+// ── Cell Editor ──
+const RC2Editor = ({ value, onSave, onClose, anchorRect }) => {
+  const [st,setSt]   = useState(value?.status||"")
+  const [sec,setSec] = useState(value?.sector||"")
   const ref = useRef(null)
-  const isShift = ["S1","S2","S3"].includes(st)
+  const isShift = ["S1","S2","S3","S4","S5"].includes(st)
+  const SECTORS = ["TWR","APP","GND","DEL","ACC","FIS"]
 
   useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose() }
-    document.addEventListener("mousedown", h)
-    return () => document.removeEventListener("mousedown", h)
-  }, [onClose])
+    const h=(e)=>{ if(ref.current&&!ref.current.contains(e.target)) onClose() }
+    document.addEventListener("mousedown",h)
+    return ()=>document.removeEventListener("mousedown",h)
+  },[onClose])
 
-  const top  = Math.min(anchorRect.bottom + 6, window.innerHeight - 320)
-  const left = Math.max(4, Math.min(anchorRect.left - 70, window.innerWidth - 250))
+  const top  = Math.min(anchorRect.bottom+6, window.innerHeight-340)
+  const left = Math.max(4, Math.min(anchorRect.left-70, window.innerWidth-250))
 
   return (
-    <div ref={ref} style={{
-      position:"fixed", zIndex:1000, top, left,
-      width:235, background:"#0b1220",
-      border:"1px solid #1e2d45", borderRadius:10,
-      boxShadow:"0 12px 50px #000c", padding:"14px 14px 12px",
-      fontFamily:"'JetBrains Mono','Courier New',monospace",
-    }}>
+    <div ref={ref} style={{position:"fixed",zIndex:1000,top,left,width:240,background:"#0b1220",border:"1px solid #1e2d45",borderRadius:10,boxShadow:"0 12px 50px #000c",padding:"14px 14px 12px",fontFamily:"'JetBrains Mono','Courier New',monospace"}}>
       <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,marginBottom:10,textTransform:"uppercase"}}>Atur Jadwal</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
-        {ROSTER_STATUS.map(opt => {
-          const active = st === opt.code
-          const sc = ROSTER_COLORS[opt.code]
-          return (
-            <button key={opt.code}
-              onClick={() => { setSt(opt.code); if (!["S1","S2","S3"].includes(opt.code)) setSec("") }}
-              style={{
-                padding:"5px 10px", borderRadius:6,
-                border:`1px solid ${active ? sc.border : "#1a2840"}`,
-                background: active ? sc.grad : "#0a1020",
-                color: active ? sc.text : "#3d5a7a",
-                fontSize:11, fontWeight:800, cursor:"pointer",
-                letterSpacing:.5, transition:"all .12s", fontFamily:"inherit",
-              }}
-            >{opt.code}</button>
-          )
+        {ROSTER_STATUS_V2.map(opt=>{
+          const a=st===opt.code, sc=RC2[opt.code]
+          return <button key={opt.code} onClick={()=>{setSt(opt.code);if(!["S1","S2","S3","S4","S5"].includes(opt.code))setSec("")}} style={{padding:"5px 9px",borderRadius:6,border:`1px solid ${a?sc.border:"#1a2840"}`,background:a?sc.grad:"#0a1020",color:a?sc.text:"#3d5a7a",fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{opt.code}</button>
         })}
-        <button onClick={() => { setSt(""); setSec("") }}
-          style={{
-            padding:"5px 10px", borderRadius:6, fontFamily:"inherit",
-            border:`1px solid ${!st ? "#334155" : "#1a2840"}`,
-            background:!st ? "#1e2d45" : "#0a1020",
-            color:!st ? "#94a3b8" : "#2a3a50",
-            fontSize:11, fontWeight:700, cursor:"pointer",
-          }}
-        >Kosong</button>
+        <button onClick={()=>{setSt("");setSec("")}} style={{padding:"5px 9px",borderRadius:6,border:`1px solid ${!st?"#334155":"#1a2840"}`,background:!st?"#1e2d45":"#0a1020",color:!st?"#94a3b8":"#2a3a50",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>—</button>
       </div>
-
-      {isShift && (
+      {isShift&&(
         <>
           <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,marginBottom:6,textTransform:"uppercase"}}>Sektor</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
-            {[...ROSTER_SECTORS,"—"].map(s => {
-              const active = s==="—" ? !sec : sec===s
-              return (
-                <button key={s} onClick={() => setSec(s==="—" ? "" : s)}
-                  style={{
-                    padding:"3px 9px", borderRadius:5, fontFamily:"inherit",
-                    border:`1px solid ${active ? "#3b82f6" : "#1a2840"}`,
-                    background:active ? "#1e3a5f" : "#0a1020",
-                    color:active ? "#7dd3fc" : "#2a3a50",
-                    fontSize:10, fontWeight:700, cursor:"pointer",
-                  }}
-                >{s}</button>
-              )
+            {[...SECTORS,"—"].map(s=>{
+              const a=s==="—"?!sec:sec===s
+              return <button key={s} onClick={()=>setSec(s==="—"?"":s)} style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${a?"#3b82f6":"#1a2840"}`,background:a?"#1e3a5f":"#0a1020",color:a?"#7dd3fc":"#2a3a50",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{s}</button>
             })}
           </div>
         </>
       )}
-
       <div style={{display:"flex",gap:6}}>
-        <button onClick={() => onSave({ status:st, sector:isShift ? sec : null })}
-          style={{
-            flex:1, padding:"7px 0", borderRadius:6, fontFamily:"inherit",
-            background:"linear-gradient(135deg,#1d4ed8,#1e40af)", border:"none",
-            color:"#fff", fontSize:11, fontWeight:800, cursor:"pointer", letterSpacing:1,
-          }}
-        >SIMPAN</button>
-        <button onClick={onClose}
-          style={{
-            padding:"7px 14px", borderRadius:6, fontFamily:"inherit",
-            background:"transparent", border:"1px solid #1a2840",
-            color:"#3d5a7a", fontSize:11, cursor:"pointer",
-          }}
-        >Batal</button>
+        <button onClick={()=>onSave({status:st,sector:isShift?sec:null})} style={{flex:1,padding:"7px 0",borderRadius:6,background:"linear-gradient(135deg,#1d4ed8,#1e40af)",border:"none",color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer",letterSpacing:1,fontFamily:"inherit"}}>SIMPAN</button>
+        <button onClick={onClose} style={{padding:"7px 14px",borderRadius:6,background:"transparent",border:"1px solid #1a2840",color:"#3d5a7a",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Batal</button>
       </div>
     </div>
   )
 }
 
-// ── Bulk Input Modal ──
-const RBulkModal = ({ personnel, days, dayHeaders, onApply, onClose }) => {
-  const [st, setSt]      = useState("S1")
-  const [sec, setSec]    = useState("")
-  const [selDays, setSD] = useState([])
-  const [selPpl, setSP]  = useState([])
-  const isShift = ["S1","S2","S3"].includes(st)
-
-  const toggleDay = (d) => setSD(p => p.includes(d) ? p.filter(x=>x!==d) : [...p,d])
-  const togglePer = (id) => setSP(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id])
-  const canApply = st && selDays.length > 0 && selPpl.length > 0
-
-  const smBtn = { padding:"2px 8px", borderRadius:4, cursor:"pointer", background:"#070e1a", border:"1px solid #1a2840", color:"#3d5a7a", fontSize:9, fontWeight:600, fontFamily:"inherit" }
+// ── Bulk Modal ──
+const RC2Bulk = ({ personnel, days, dayHeaders, onApply, onClose }) => {
+  const [st,setSt]      = useState("S1")
+  const [sec,setSec]    = useState("")
+  const [selDays,setSD] = useState([])
+  const [selPpl,setSP]  = useState([])
+  const isShift = ["S1","S2","S3","S4","S5"].includes(st)
+  const canApply = st && selDays.length>0 && selPpl.length>0
+  const smBtn = {padding:"2px 8px",borderRadius:4,cursor:"pointer",background:"#070e1a",border:"1px solid #1a2840",color:"#3d5a7a",fontSize:9,fontWeight:600,fontFamily:"inherit"}
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:2000,background:"#000b",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div style={{
-        background:"#0b1220", border:"1px solid #1e2d45", borderRadius:14,
-        width:"min(740px,100%)", maxHeight:"90vh", overflow:"hidden",
-        display:"flex", flexDirection:"column",
-        fontFamily:"'JetBrains Mono','Courier New',monospace",
-        boxShadow:"0 24px 80px #000a",
-      }}>
+      <div style={{background:"#0b1220",border:"1px solid #1e2d45",borderRadius:14,width:"min(740px,100%)",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'JetBrains Mono','Courier New',monospace",boxShadow:"0 24px 80px #000a"}}>
         <div style={{padding:"16px 20px 14px",borderBottom:"1px solid #0f1a2a",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
             <div style={{fontSize:13,fontWeight:800,color:"#e2e8f0",letterSpacing:1}}>⚡ Bulk Input Jadwal</div>
-            <div style={{fontSize:9,color:"#3d5a7a",marginTop:3,letterSpacing:1}}>Set jadwal untuk banyak orang / banyak hari sekaligus</div>
+            <div style={{fontSize:9,color:"#3d5a7a",marginTop:3}}>Set jadwal untuk banyak orang / banyak hari sekaligus</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#3d5a7a",fontSize:20,cursor:"pointer",padding:4,lineHeight:1}}>✕</button>
         </div>
-
-        <div style={{overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:18}}>
+        <div style={{overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:16}}>
           {/* Status */}
           <div>
             <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Status / Shift</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {ROSTER_STATUS.map(opt => {
-                const active = st === opt.code
-                const sc = ROSTER_COLORS[opt.code]
-                return (
-                  <button key={opt.code}
-                    onClick={() => { setSt(opt.code); if (!["S1","S2","S3"].includes(opt.code)) setSec("") }}
-                    style={{
-                      padding:"7px 14px", borderRadius:7, fontFamily:"inherit",
-                      border:`1.5px solid ${active ? sc.border : "#1a2840"}`,
-                      background:active ? sc.grad : "#070e1a",
-                      color:active ? sc.text : "#3d5a7a",
-                      fontSize:12, fontWeight:800, cursor:"pointer", transition:"all .12s",
-                    }}
-                  >
-                    {opt.code} <span style={{fontSize:9,opacity:.7,marginLeft:4}}>{opt.label}</span>
-                  </button>
-                )
+              {ROSTER_STATUS_V2.map(opt=>{
+                const a=st===opt.code, sc=RC2[opt.code]
+                return <button key={opt.code} onClick={()=>{setSt(opt.code);if(!["S1","S2","S3","S4","S5"].includes(opt.code))setSec("")}} style={{padding:"7px 13px",borderRadius:7,border:`1.5px solid ${a?sc.border:"#1a2840"}`,background:a?sc.grad:"#070e1a",color:a?sc.text:"#3d5a7a",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{opt.code} <span style={{fontSize:9,opacity:.7,marginLeft:4}}>{opt.label}</span></button>
               })}
             </div>
           </div>
-
-          {/* Sektor */}
-          {isShift && (
-            <div>
-              <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Sektor (opsional)</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                {[...ROSTER_SECTORS,"—"].map(s => {
-                  const active = s==="—" ? !sec : sec===s
-                  return (
-                    <button key={s} onClick={() => setSec(s==="—" ? "" : s)}
-                      style={{
-                        padding:"4px 12px", borderRadius:5, fontFamily:"inherit",
-                        border:`1px solid ${active ? "#3b82f6" : "#1a2840"}`,
-                        background:active ? "#1e3a5f" : "#070e1a",
-                        color:active ? "#7dd3fc" : "#2a3a50",
-                        fontSize:11, fontWeight:700, cursor:"pointer",
-                      }}
-                    >{s}</button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Pilih Tanggal */}
+          {/* Tanggal */}
           <div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase"}}>
-                Pilih Tanggal <span style={{color:"#7dd3fc"}}>({selDays.length} dipilih)</span>
-              </div>
+              <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase"}}>Pilih Tanggal <span style={{color:"#7dd3fc"}}>({selDays.length})</span></div>
               <div style={{display:"flex",gap:5}}>
-                <button onClick={() => setSD(Array.from({length:days},(_,i)=>i+1))} style={smBtn}>Semua</button>
-                <button onClick={() => setSD(dayHeaders.filter(d=>d.isWeekend).map(d=>d.day))} style={smBtn}>Weekend</button>
-                <button onClick={() => setSD(dayHeaders.filter(d=>!d.isWeekend).map(d=>d.day))} style={smBtn}>Weekday</button>
-                <button onClick={() => setSD([])} style={{...smBtn,color:"#ef4444",borderColor:"#450a0a"}}>Reset</button>
+                <button onClick={()=>setSD(Array.from({length:days},(_,i)=>i+1))} style={smBtn}>Semua</button>
+                <button onClick={()=>setSD(dayHeaders.filter(d=>d.isWeekend).map(d=>d.day))} style={smBtn}>Weekend</button>
+                <button onClick={()=>setSD(dayHeaders.filter(d=>!d.isWeekend).map(d=>d.day))} style={smBtn}>Weekday</button>
+                <button onClick={()=>setSD([])} style={{...smBtn,color:"#ef4444"}}>Reset</button>
               </div>
             </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-              {dayHeaders.map(({day,name,isWeekend}) => {
-                const sel = selDays.includes(day)
-                return (
-                  <button key={day} onClick={() => toggleDay(day)}
-                    style={{
-                      width:40, height:40, borderRadius:6, cursor:"pointer", fontFamily:"inherit",
-                      border:`1.5px solid ${sel ? "#3b82f6" : isWeekend ? "#0f1a28" : "#1a2840"}`,
-                      background:sel ? "#1e3a5f" : isWeekend ? "#060c14" : "#070e1a",
-                      color:sel ? "#7dd3fc" : isWeekend ? "#1a2840" : "#3d5a7a",
-                      fontSize:10, fontWeight:700,
-                      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1,
-                    }}
-                  >
-                    <span style={{fontSize:6,opacity:.7}}>{name}</span>
-                    <span style={{fontSize:12}}>{day}</span>
-                  </button>
-                )
+              {dayHeaders.map(({day,name,isWeekend})=>{
+                const sel=selDays.includes(day)
+                return <button key={day} onClick={()=>setSD(p=>p.includes(day)?p.filter(x=>x!==day):[...p,day])} style={{width:40,height:40,borderRadius:6,cursor:"pointer",fontFamily:"inherit",border:`1.5px solid ${sel?"#3b82f6":isWeekend?"#0f1a28":"#1a2840"}`,background:sel?"#1e3a5f":isWeekend?"#060c14":"#070e1a",color:sel?"#7dd3fc":isWeekend?"#1a2840":"#3d5a7a",fontSize:10,fontWeight:700,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:1}}><span style={{fontSize:6,opacity:.7}}>{name}</span><span style={{fontSize:12}}>{day}</span></button>
               })}
             </div>
           </div>
-
-          {/* Pilih Personel */}
+          {/* Personel */}
           <div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase"}}>
-                Pilih Personel <span style={{color:"#7dd3fc"}}>({selPpl.length} dipilih)</span>
-              </div>
+              <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase"}}>Pilih Personel <span style={{color:"#7dd3fc"}}>({selPpl.length})</span></div>
               <div style={{display:"flex",gap:5}}>
-                <button onClick={() => setSP(personnel.map(p=>p.id))} style={smBtn}>Semua</button>
-                <button onClick={() => setSP([])} style={{...smBtn,color:"#ef4444",borderColor:"#450a0a"}}>Reset</button>
+                <button onClick={()=>setSP(personnel.map(p=>p.id))} style={smBtn}>Semua</button>
+                <button onClick={()=>setSP([])} style={{...smBtn,color:"#ef4444"}}>Reset</button>
               </div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:3,maxHeight:200,overflowY:"auto"}}>
-              {personnel.map(p => {
-                const sel = selPpl.includes(p.id)
-                return (
-                  <button key={p.id} onClick={() => togglePer(p.id)}
-                    style={{
-                      display:"flex", alignItems:"center", gap:10, fontFamily:"inherit",
-                      padding:"6px 10px", borderRadius:6, cursor:"pointer", textAlign:"left",
-                      border:`1px solid ${sel ? "#3b82f6" : "#1a2840"}`,
-                      background:sel ? "#0e1d35" : "#070e1a",
-                      color:sel ? "#93c5fd" : "#3d5a7a",
-                    }}
-                  >
-                    <span style={{
-                      fontSize:9, fontWeight:800,
-                      background:sel ? "#1e3a5f" : "#0f1623",
-                      border:`1px solid ${sel ? "#3b82f6" : "#1a2840"}`,
-                      color:sel ? "#7dd3fc" : "#2a3a50",
-                      padding:"1px 6px", borderRadius:3, letterSpacing:1, minWidth:28, textAlign:"center",
-                    }}>{p.init}</span>
-                    <span style={{fontSize:11,fontWeight:sel?700:400}}>{p.name}</span>
-                    {sel && <span style={{marginLeft:"auto",color:"#3b82f6"}}>✓</span>}
-                  </button>
-                )
+            <div style={{display:"flex",flexDirection:"column",gap:3,maxHeight:180,overflowY:"auto"}}>
+              {personnel.map(p=>{
+                const sel=selPpl.includes(p.id)
+                return <button key={p.id} onClick={()=>setSP(prev=>prev.includes(p.id)?prev.filter(x=>x!==p.id):[...prev,p.id])} style={{display:"flex",alignItems:"center",gap:10,fontFamily:"inherit",padding:"6px 10px",borderRadius:6,cursor:"pointer",textAlign:"left",border:`1px solid ${sel?"#3b82f6":"#1a2840"}`,background:sel?"#0e1d35":"#070e1a",color:sel?"#93c5fd":"#3d5a7a"}}>
+                  <span style={{fontSize:9,fontWeight:800,background:sel?"#1e3a5f":"#0f1623",border:`1px solid ${sel?"#3b82f6":"#1a2840"}`,color:sel?"#7dd3fc":"#2a3a50",padding:"1px 6px",borderRadius:3,letterSpacing:1,minWidth:28,textAlign:"center"}}>{p.init}</span>
+                  <span style={{fontSize:11,fontWeight:sel?700:400}}>{p.name}</span>
+                  {sel&&<span style={{marginLeft:"auto",color:"#3b82f6"}}>✓</span>}
+                </button>
               })}
             </div>
           </div>
         </div>
-
         <div style={{padding:"12px 20px",borderTop:"1px solid #0f1a2a",display:"flex",gap:8,alignItems:"center"}}>
-          {canApply && (
-            <span style={{fontSize:10,color:"#3d5a7a",flex:1}}>
-              {selPpl.length} orang × {selDays.length} hari = <span style={{color:"#7dd3fc",fontWeight:700}}>{selPpl.length*selDays.length} cell</span> akan diubah
-            </span>
-          )}
-          <button onClick={onClose}
-            style={{padding:"8px 18px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",background:"transparent",border:"1px solid #1a2840",color:"#3d5a7a",fontSize:11,marginLeft:canApply?"0":"auto"}}
-          >Batal</button>
-          <button
-            onClick={() => canApply && onApply({status:st,sector:isShift?sec:null,days:selDays,personIds:selPpl})}
-            disabled={!canApply}
-            style={{
-              padding:"8px 22px", borderRadius:7, fontFamily:"inherit",
-              cursor:canApply?"pointer":"not-allowed",
-              background:canApply?"linear-gradient(135deg,#1d4ed8,#1e40af)":"#0f1a2a",
-              border:"none", color:canApply?"#fff":"#1e2d45",
-              fontSize:11, fontWeight:800, letterSpacing:1,
-            }}
-          >TERAPKAN</button>
+          {canApply&&<span style={{fontSize:10,color:"#3d5a7a",flex:1}}>{selPpl.length}×{selDays.length} = <span style={{color:"#7dd3fc",fontWeight:700}}>{selPpl.length*selDays.length} cell</span></span>}
+          <button onClick={onClose} style={{padding:"8px 18px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",background:"transparent",border:"1px solid #1a2840",color:"#3d5a7a",fontSize:11,marginLeft:canApply?"0":"auto"}}>Batal</button>
+          <button onClick={()=>canApply&&onApply({status:st,sector:["S1","S2","S3","S4","S5"].includes(st)?sec:null,days:selDays,personIds:selPpl})} disabled={!canApply} style={{padding:"8px 22px",borderRadius:7,fontFamily:"inherit",cursor:canApply?"pointer":"not-allowed",background:canApply?"linear-gradient(135deg,#1d4ed8,#1e40af)":"#0f1a2a",border:"none",color:canApply?"#fff":"#1e2d45",fontSize:11,fontWeight:800,letterSpacing:1}}>TERAPKAN</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ── Roster Cell ──
-const RCell = ({ value, onClick, isWeekend, isTodayCol }) => {
-  const s  = value?.status
-  const sc = s ? ROSTER_COLORS[s] : null
+// ── Unit Roster Table ──
+const RosterUnitTable = ({ unit, personnel, rosterMap, dayHeaders, isTodayFn, canEdit, onCellClick }) => {
+  const SECTORS = ["TWR","APP","GND","DEL","ACC","FIS"]
   return (
-    <td onClick={onClick} style={{padding:"4px 3px",background:isWeekend?"#060c17":"transparent",verticalAlign:"middle"}}>
-      <div
-        style={{
-          minWidth:52, height:54,
-          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4,
-          borderRadius:8, cursor:"pointer",
-          border:`1.5px solid ${isTodayCol ? "#60a5fa" : sc ? sc.border : "#0d1828"}`,
-          background:sc ? sc.grad : "transparent",
-          boxShadow:sc ? `0 3px 10px ${sc.dot}28` : "none",
-          outline:isTodayCol ? "2px solid #3b82f640" : "none", outlineOffset:1,
-          transition:"filter .1s",
-        }}
-        onMouseEnter={e => e.currentTarget.style.filter="brightness(1.15)"}
-        onMouseLeave={e => e.currentTarget.style.filter="none"}
-      >
-        {s ? (
-          <>
-            <span style={{fontSize:12,fontWeight:800,color:sc.text,letterSpacing:.5,lineHeight:1}}>{s}</span>
-            {value?.sector && (
-              <span style={{
-                fontSize:8,fontWeight:700,color:sc.dot,letterSpacing:.5,
-                background:`${sc.dot}20`,padding:"1px 5px",borderRadius:3,
-                lineHeight:1.5,border:`1px solid ${sc.dot}35`,
-              }}>{value.sector}</span>
-            )}
-          </>
-        ) : (
-          <span style={{color:"#141f30",fontSize:16}}>·</span>
-        )}
+    <div style={{marginBottom:20}}>
+      {/* Unit header */}
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",background:"#070e1c",borderRadius:"8px 8px 0 0",border:"1px solid #0d1828",borderBottom:"none"}}>
+        <div style={{width:3,height:18,borderRadius:2,background:unit==="TWR"?"#3b82f6":"#10b981"}}/>
+        <span style={{fontSize:11,fontWeight:800,color:unit==="TWR"?"#7dd3fc":"#6ee7b7",letterSpacing:3,textTransform:"uppercase"}}>{unit}</span>
+        <span style={{fontSize:9,color:"#2a3a50",letterSpacing:1}}>{personnel.length} personel</span>
       </div>
-    </td>
+      <div style={{overflowX:"auto",border:"1px solid #0d1828",borderRadius:"0 0 8px 8px",boxShadow:"0 4px 20px #00000060"}}>
+        <table style={{borderCollapse:"separate",borderSpacing:0,minWidth:"100%",fontSize:11}}>
+          <thead>
+            <tr style={{background:"#060d1a"}}>
+              <th style={{position:"sticky",left:0,zIndex:20,background:"#060d1a",padding:"8px 10px",textAlign:"left",borderBottom:"1px solid #0d1828",borderRight:"1px solid #0d1828",width:170,minWidth:170}}>
+                <span style={{color:"#1a2840",fontSize:8,letterSpacing:2,textTransform:"uppercase"}}>Nama</span>
+              </th>
+              <th style={{position:"sticky",left:170,zIndex:20,background:"#060d1a",padding:"8px 6px",textAlign:"center",borderBottom:"1px solid #0d1828",borderRight:"1px solid #0d1828",width:40,minWidth:40}}>
+                <span style={{color:"#1a2840",fontSize:8}}>Init</span>
+              </th>
+              {dayHeaders.map(({day,name,isWeekend})=>(
+                <th key={day} style={{padding:"6px 2px 5px",textAlign:"center",borderBottom:"1px solid #0d1828",background:isTodayFn(day)?"#0d1f3a":"#060d1a",minWidth:56,position:"relative"}}>
+                  <div style={{fontSize:6,color:isWeekend?"#141f30":"#1a2840",letterSpacing:1,textTransform:"uppercase"}}>{name}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:isTodayFn(day)?"#3b82f6":isWeekend?"#141f30":"#2a3a50",lineHeight:1}}>{day}</div>
+                  {isTodayFn(day)&&<div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:14,height:2,background:"#3b82f6",borderRadius:1}}/>}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {personnel.map((person,pi)=>(
+              <tr key={person.id} style={{background:pi%2===0?"#070e1c":"#050c18",transition:"background .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#09142a"}
+                onMouseLeave={e=>e.currentTarget.style.background=pi%2===0?"#070e1c":"#050c18"}
+              >
+                <td style={{position:"sticky",left:0,zIndex:5,background:"inherit",padding:"3px 10px",borderRight:"1px solid #0d1828",borderBottom:"1px solid #060c17",whiteSpace:"nowrap"}}>
+                  <span style={{fontSize:11,fontWeight:600,color:"#4b6882"}}>{person.name}</span>
+                </td>
+                <td style={{position:"sticky",left:170,zIndex:5,background:"inherit",padding:"3px 6px",textAlign:"center",borderRight:"1px solid #0d1828",borderBottom:"1px solid #060c17"}}>
+                  <span style={{fontSize:9,fontWeight:700,color:"#1a2840",background:"#0b1220",border:"1px solid #141f30",padding:"2px 4px",borderRadius:4,letterSpacing:1}}>{person.init}</span>
+                </td>
+                {dayHeaders.map(({day,isWeekend})=>{
+                  const val = rosterMap[person.id]?.[day]
+                  const s   = val?.status
+                  const sc  = s ? RC2[s] : null
+                  return (
+                    <td key={day} onClick={canEdit?()=>onCellClick(person.id,day,unit):undefined}
+                      style={{padding:"3px 2px",background:isWeekend?"#060c17":"transparent",verticalAlign:"middle"}}
+                    >
+                      <div style={{minWidth:50,height:50,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,borderRadius:7,cursor:canEdit?"pointer":"default",border:`1.5px solid ${isTodayFn(day)?"#60a5fa":sc?sc.border:"#0d1828"}`,background:sc?sc.grad:"transparent",boxShadow:sc?`0 2px 8px ${sc.dot}28`:"none",outline:isTodayFn(day)?"2px solid #3b82f640":"none",outlineOffset:1,transition:"filter .1s"}}
+                        onMouseEnter={e=>{if(canEdit)e.currentTarget.style.filter="brightness(1.15)"}}
+                        onMouseLeave={e=>{e.currentTarget.style.filter="none"}}
+                      >
+                        {s?(<>
+                          <span style={{fontSize:11,fontWeight:800,color:sc.text,letterSpacing:.5,lineHeight:1}}>{s}</span>
+                          {val?.sector&&<span style={{fontSize:7,fontWeight:700,color:sc.dot,letterSpacing:.5,background:`${sc.dot}20`,padding:"1px 4px",borderRadius:3,lineHeight:1.5,border:`1px solid ${sc.dot}35`}}>{val.sector}</span>}
+                        </>):(
+                          <span style={{color:"#141f30",fontSize:14}}>·</span>
+                        )}
+                      </div>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 
 // ── Main CabangRoster ──
 const CabangRoster = () => {
-  const ctx = useApp()
+  const ctx   = useApp()
   const today = new Date()
   const user  = ctx.user
 
   const [viewYear,  setVY] = useState(today.getFullYear())
   const [viewMonth, setVM] = useState(today.getMonth()+1)
+  const [activeUnit, setAU] = useState("TWR") // for bulk/editor context
 
-  const [personnel, setPersonnel] = useState([])
-  const [rosterMap, setRosterMap] = useState({})
-  const [rosterIds, setRosterIds] = useState({})
+  // rosterMap: { unit: { personnelId: { day: {status,sector} } } }
+  const [rosterMap, setRosterMap] = useState({TWR:{},APP:{}})
+  const [rosterIds, setRosterIds] = useState({TWR:{},APP:{}})
+
+  // personnel per unit
+  const [personnelByUnit, setPBU] = useState({TWR:[],APP:[]})
 
   const [loading,  setLoading]  = useState(false)
   const [saving,   setSaving]   = useState(false)
-  const [editing,  setEditing]  = useState(null)
-  const [showBulk, setShowBulk] = useState(false)
+  const [editing,  setEditing]  = useState(null) // {personId,day,unit,rect}
+  const [bulkUnit, setBulkUnit] = useState(null) // "TWR"|"APP"|null
   const [unsaved,  setUnsaved]  = useState(false)
   const [toast,    setToast]    = useState(null)
 
-  const showToast = (msg, type="info", ms=3500) => {
-    setToast({msg,type})
-    setTimeout(() => setToast(null), ms)
-  }
+  const showToast = (msg,type="info",ms=3500) => { setToast({msg,type}); setTimeout(()=>setToast(null),ms) }
 
-  const days = rGetDays(viewYear, viewMonth)
-
-  const dayHeaders = Array.from({length:days},(_,i) => {
-    const d = new Date(viewYear, viewMonth-1, i+1)
-    return {day:i+1, name:R_DAY_NAMES[d.getDay()], isWeekend:d.getDay()===0||d.getDay()===6}
+  const days = rv2Days(viewYear, viewMonth)
+  const dayHeaders = Array.from({length:days},(_,i)=>{
+    const d = new Date(viewYear,viewMonth-1,i+1)
+    return {day:i+1,name:RV2_DAY[d.getDay()],isWeekend:d.getDay()===0||d.getDay()===6}
   })
+  const isTodayFn = (day) => today.getFullYear()===viewYear&&today.getMonth()+1===viewMonth&&today.getDate()===day
 
-  const isTodayCol = (day) =>
-    today.getFullYear()===viewYear && today.getMonth()+1===viewMonth && today.getDate()===day
+  // Load personnel from context — split by unit
+  useEffect(()=>{
+    const all = ctx.personnel.filter(p=>p.branch_code===user.branch_code&&p.is_active!==false)
+    // Try to split by unit field, fallback: first 33→TWR rest→APP
+    const twr = all.filter(p=>(p.unit||"").toUpperCase()==="TWR")
+    const app = all.filter(p=>(p.unit||"").toUpperCase()==="APP")
+    if (twr.length>0||app.length>0) {
+      setPBU({
+        TWR: twr.map(p=>({...p,init:rv2Init(p.name)})),
+        APP: app.map(p=>({...p,init:rv2Init(p.name)})),
+      })
+    } else {
+      // Fallback: split by count from Excel (33 TWR, 40 APP) 
+      const sorted = all.map(p=>({...p,init:rv2Init(p.name)}))
+      setPBU({
+        TWR: sorted.slice(0,33),
+        APP: sorted.slice(33),
+      })
+    }
+  },[ctx.personnel,user.branch_code])
 
-  // Load personnel dari context (sudah di-load App level)
-  useEffect(() => {
-    const ppl = ctx.personnel
-      .filter(p => p.branch_code === user.branch_code && p.is_active !== false)
-      .map(p => ({...p, init:rMakeInit(p.name)}))
-    setPersonnel(ppl)
-  }, [ctx.personnel, user.branch_code])
-
-  // Load roster dari Supabase
-  const loadRoster = async () => {
-    if (!personnel.length) return
+  // Load roster
+  const loadRoster = async() => {
+    const allPpl = [...(personnelByUnit.TWR||[]),...(personnelByUnit.APP||[])]
+    if (!allPpl.length) return
     setLoading(true)
-    const {data, error} = await supabase
+    const {data,error} = await supabase
       .from("rosters")
-      .select("id,personnel_id,schedule")
-      .eq("branch_code", user.branch_code)
-      .eq("year", viewYear)
-      .eq("month", viewMonth)
+      .select("id,personnel_id,unit,schedule")
+      .eq("branch_code",user.branch_code)
+      .eq("year",viewYear)
+      .eq("month",viewMonth)
 
-    if (error) { showToast("Gagal memuat roster: "+error.message,"error"); setLoading(false); return }
+    if (error) { showToast("Gagal memuat: "+error.message,"error"); setLoading(false); return }
 
-    const map={}, ids={}
-    ;(data||[]).forEach(row => {
+    const newMap = {TWR:{},APP:{}}
+    const newIds = {TWR:{},APP:{}}
+    ;(data||[]).forEach(row=>{
+      const u = (row.unit||"APP").toUpperCase()
+      if (!newMap[u]) return
       const sch={}
-      Object.entries(row.schedule||{}).forEach(([k,v]) => { sch[parseInt(k)]=v })
-      map[row.personnel_id]=sch
-      ids[row.personnel_id]=row.id
+      Object.entries(row.schedule||{}).forEach(([k,v])=>{ sch[parseInt(k)]=v })
+      newMap[u][row.personnel_id] = sch
+      newIds[u][row.personnel_id] = row.id
     })
-    setRosterMap(map)
-    setRosterIds(ids)
+    setRosterMap(newMap)
+    setRosterIds(newIds)
     setUnsaved(false)
     setLoading(false)
   }
 
-  useEffect(() => { loadRoster() }, [personnel, viewYear, viewMonth])
+  useEffect(()=>{ loadRoster() },[personnelByUnit,viewYear,viewMonth])
 
-  // Edit cell
-  const updateCell = (personId, day, value) => {
-    setRosterMap(prev => ({...prev,[personId]:{...(prev[personId]||{}),[day]:value}}))
+  // Update cell
+  const updateCell = (personId,day,unit,value) => {
+    setRosterMap(prev=>({...prev,[unit]:{...prev[unit],[personId]:{...(prev[unit]?.[personId]||{}),[day]:value}}}))
     setUnsaved(true)
   }
 
-  const handleCellClick = (personId, day, e) => {
+  const handleCellClick = (personId,day,unit) => (e) => {
     const rect = e.currentTarget.closest("td").getBoundingClientRect()
-    setEditing({personId, day, rect})
+    setEditing({personId,day,unit,rect})
+    setAU(unit)
   }
 
-  const handleCellSave = ({status, sector}) => {
+  const handleCellSave = ({status,sector}) => {
     if (!editing) return
-    updateCell(editing.personId, editing.day, status ? {status,sector} : null)
+    updateCell(editing.personId,editing.day,editing.unit,status?{status,sector}:null)
     setEditing(null)
   }
 
-  // Bulk apply
-  const handleBulkApply = ({status, sector, days:bDays, personIds}) => {
-    setRosterMap(prev => {
-      const next={...prev}
-      personIds.forEach(pid => {
-        next[pid]={...(next[pid]||{})}
-        bDays.forEach(d => { next[pid][d] = status ? {status,sector} : null })
+  const handleBulkApply = ({status,sector,days:bDays,personIds},unit) => {
+    setRosterMap(prev=>{
+      const next={...prev,[unit]:{...prev[unit]}}
+      personIds.forEach(pid=>{
+        next[unit][pid]={...(next[unit][pid]||{})}
+        bDays.forEach(d=>{ next[unit][pid][d]=status?{status,sector}:null })
       })
       return next
     })
-    setShowBulk(false)
+    setBulkUnit(null)
     setUnsaved(true)
-    showToast(`${personIds.length} orang × ${bDays.length} hari berhasil diatur`, "info")
+    showToast(`${personIds.length}×${bDays.length} cell diatur`,"info")
   }
 
-  // Save to Supabase
-  const handleSave = async () => {
-    if (!personnel.length) return
+  // Save all
+  const handleSave = async() => {
     setSaving(true)
     try {
-      const upserts = personnel.map(p => {
-        const base = {
-          branch_code: user.branch_code,
-          personnel_id: p.id,
-          personnel_name: p.name,
-          year: viewYear,
-          month: viewMonth,
-          schedule: rosterMap[p.id]||{},
-          updated_by: user.display_name||user.username||"system",
-        }
-        if (rosterIds[p.id]) base.id = rosterIds[p.id]
-        else base.created_by = user.display_name||user.username||"system"
-        return base
-      })
-
-      const {error} = await supabase
-        .from("rosters")
-        .upsert(upserts, {onConflict:"branch_code,personnel_id,year,month"})
-
+      const upserts = []
+      for (const unit of ROSTER_UNITS) {
+        const ppl = personnelByUnit[unit]||[]
+        ppl.forEach(p=>{
+          const base = {
+            branch_code: user.branch_code,
+            personnel_id: p.id,
+            personnel_name: p.name,
+            unit,
+            year: viewYear,
+            month: viewMonth,
+            schedule: rosterMap[unit]?.[p.id]||{},
+            updated_by: user.display_name||user.username||"system",
+          }
+          if (rosterIds[unit]?.[p.id]) base.id=rosterIds[unit][p.id]
+          else base.created_by = user.display_name||"system"
+          upserts.push(base)
+        })
+      }
+      const {error} = await supabase.from("rosters").upsert(upserts,{onConflict:"branch_code,personnel_id,unit,year,month"})
       if (error) throw error
-
-      logAudit("ROSTER_SAVE", `Simpan roster ${R_MONTH_NAMES[viewMonth-1]} ${viewYear} (${personnel.length} personel)`, user)
-      showToast("Roster berhasil disimpan!", "success")
+      logAudit("ROSTER_SAVE",`Simpan roster ${RV2_MONTH[viewMonth-1]} ${viewYear} (TWR+APP)`,user)
+      showToast("Roster berhasil disimpan!","success")
       setUnsaved(false)
       await loadRoster()
-    } catch(err) {
-      showToast("Gagal menyimpan: "+err.message, "error")
-    } finally {
-      setSaving(false)
-    }
+    } catch(err) { showToast("Gagal: "+err.message,"error") }
+    finally { setSaving(false) }
   }
 
   const changeMonth = (delta) => {
-    if (unsaved && !window.confirm("Ada perubahan belum disimpan. Pindah bulan?")) return
-    let m=viewMonth+delta, y=viewYear
-    if (m>12){m=1;y++} if (m<1){m=12;y--}
-    setVM(m); setVY(y); setUnsaved(false)
+    if (unsaved&&!window.confirm("Ada perubahan belum disimpan. Lanjutkan?")) return
+    let m=viewMonth+delta,y=viewYear
+    if(m>12){m=1;y++} if(m<1){m=12;y--}
+    setVM(m);setVY(y);setUnsaved(false)
   }
   const goToday = () => {
-    if (unsaved && !window.confirm("Ada perubahan belum disimpan. Lanjutkan?")) return
-    setVM(today.getMonth()+1); setVY(today.getFullYear()); setUnsaved(false)
+    if (unsaved&&!window.confirm("Ada perubahan belum disimpan?")) return
+    setVM(today.getMonth()+1);setVY(today.getFullYear());setUnsaved(false)
   }
 
-  // Summary hari ini
+  // Today summary
   const todaySummary = (() => {
     if (viewYear!==today.getFullYear()||viewMonth!==today.getMonth()+1) return null
-    const d=today.getDate(), counts={S1:0,S2:0,S3:0,L:0,CUTI:0,DIKLAT:0}
-    personnel.forEach(p => { const s=rosterMap[p.id]?.[d]?.status; if(s&&s in counts) counts[s]++ })
+    const d=today.getDate()
+    const counts={S1:0,S2:0,S3:0,S4:0,S5:0,L:0}
+    ROSTER_UNITS.forEach(u=>{
+      ;(personnelByUnit[u]||[]).forEach(p=>{
+        const s=rosterMap[u]?.[p.id]?.[d]?.status
+        if(s&&s in counts) counts[s]++
+      })
+    })
     return counts
   })()
 
-  const toastColors = {success:"#16a34a",error:"#dc2626",info:"#2563eb"}
+  const totalPersonnel = (personnelByUnit.TWR?.length||0)+(personnelByUnit.APP?.length||0)
+  const tcol = {success:"#16a34a",error:"#dc2626",info:"#2563eb"}
 
   return (
     <div className="page-content" style={{fontFamily:"'JetBrains Mono','Fira Code','Courier New',monospace"}}>
-      <style>{`
-        @keyframes rToastIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
-        @keyframes rUnsaved { 0%,100%{opacity:1} 50%{opacity:.6} }
-      `}</style>
-      <Header title="Roster Dinas" sub={`Jadwal dinas ATC — ${user.branch_code} · ${R_MONTH_NAMES[viewMonth-1]} ${viewYear}`}/>
+      <style>{`@keyframes rv2Toast{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}} @keyframes rv2Blink{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
+      <Header title="Roster Dinas" sub={`TWR & APP — ${user.branch_code?.toUpperCase()} · ${RV2_MONTH[viewMonth-1]} ${viewYear}`}/>
 
-      {/* Summary hari ini */}
-      {todaySummary && personnel.length > 0 && (
-        <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-          {Object.entries(todaySummary).map(([k,v]) => {
-            const sc=ROSTER_COLORS[k], so=ROSTER_STATUS.find(o=>o.code===k)
-            return (
-              <div key={k} style={{display:"flex",alignItems:"center",gap:8,background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:8,padding:"5px 12px"}}>
-                <span style={{fontSize:10,fontWeight:800,color:sc.text,letterSpacing:1}}>{k}</span>
-                <span style={{fontSize:20,fontWeight:900,color:sc.dot,lineHeight:1}}>{v}</span>
-                <span style={{fontSize:8,color:sc.text,opacity:.6}}>{so?.label}</span>
-              </div>
-            )
+      {/* Summary */}
+      {todaySummary&&totalPersonnel>0&&(
+        <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+          {Object.entries(todaySummary).filter(([,v])=>v>0).map(([k,v])=>{
+            const sc=RC2[k]
+            return <div key={k} style={{display:"flex",alignItems:"center",gap:8,background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:8,padding:"5px 12px"}}>
+              <span style={{fontSize:10,fontWeight:800,color:sc.text,letterSpacing:1}}>{k}</span>
+              <span style={{fontSize:18,fontWeight:900,color:sc.dot,lineHeight:1}}>{v}</span>
+            </div>
           })}
           <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto",background:"#0b1220",border:"1px solid #1a2840",borderRadius:8,padding:"5px 12px"}}>
             <Pulse s={6}/>
-            <span style={{fontSize:9,color:"#3d5a7a"}}>
-              Hari ini: {R_DAY_NAMES[today.getDay()]}, {today.getDate()} {R_MONTH_NAMES[today.getMonth()]} {today.getFullYear()}
-            </span>
+            <span style={{fontSize:9,color:"#3d5a7a"}}>{RV2_DAY[today.getDay()]}, {today.getDate()} {RV2_MONTH[today.getMonth()]} {today.getFullYear()}</span>
           </div>
         </div>
       )}
 
       {/* Toolbar */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:10}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <button onClick={() => changeMonth(-1)} className="btn btn-ghost btn-sm" style={{fontSize:18,padding:"2px 10px"}}>‹</button>
-          <span style={{fontSize:12,fontWeight:700,color:"#7dd3fc",letterSpacing:2,minWidth:155,textAlign:"center",textTransform:"uppercase"}}>
-            {R_MONTH_NAMES[viewMonth-1]} {viewYear}
-          </span>
-          <button onClick={() => changeMonth(1)} className="btn btn-ghost btn-sm" style={{fontSize:18,padding:"2px 10px"}}>›</button>
+          <button onClick={()=>changeMonth(-1)} className="btn btn-ghost btn-sm" style={{fontSize:18,padding:"2px 10px"}}>‹</button>
+          <span style={{fontSize:12,fontWeight:700,color:"#7dd3fc",letterSpacing:2,minWidth:155,textAlign:"center",textTransform:"uppercase"}}>{RV2_MONTH[viewMonth-1]} {viewYear}</span>
+          <button onClick={()=>changeMonth(1)} className="btn btn-ghost btn-sm" style={{fontSize:18,padding:"2px 10px"}}>›</button>
           <button onClick={goToday} className="btn btn-ghost btn-sm">Bulan Ini</button>
-          {unsaved && (
-            <span style={{fontSize:9,padding:"2px 10px",borderRadius:99,background:"#451a03",border:"1px solid #d97706",color:"#fcd34d",letterSpacing:1,fontWeight:700,animation:"rUnsaved 2s ease infinite"}}>
-              ● BELUM DISIMPAN
-            </span>
-          )}
+          {unsaved&&<span style={{fontSize:9,padding:"2px 10px",borderRadius:99,background:"#451a03",border:"1px solid #d97706",color:"#fcd34d",letterSpacing:1,fontWeight:700,animation:"rv2Blink 2s ease infinite"}}>● BELUM DISIMPAN</span>}
         </div>
-
-        {/* Legend + actions */}
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
           {/* Legend */}
           <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
-            {ROSTER_STATUS.map(opt => {
-              const sc=ROSTER_COLORS[opt.code]
-              return (
-                <div key={opt.code} style={{display:"flex",alignItems:"center",gap:4}}>
-                  <div style={{width:28,height:18,borderRadius:4,background:sc.grad,border:`1px solid ${sc.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <span style={{fontSize:7,fontWeight:800,color:sc.text}}>{opt.code}</span>
-                  </div>
-                  <span style={{fontSize:9,color:"#3d5a7a"}}>{opt.label}</span>
+            {ROSTER_STATUS_V2.map(opt=>{
+              const sc=RC2[opt.code]
+              return <div key={opt.code} style={{display:"flex",alignItems:"center",gap:3}}>
+                <div style={{width:26,height:17,borderRadius:4,background:sc.grad,border:`1px solid ${sc.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <span style={{fontSize:7,fontWeight:800,color:sc.text}}>{opt.code}</span>
                 </div>
-              )
+                <span style={{fontSize:8,color:"#3d5a7a"}}>{opt.label}</span>
+              </div>
             })}
           </div>
-
-          <button onClick={() => setShowBulk(true)} className="btn btn-ghost btn-sm"
-            style={{background:"#0b1a2e",border:"1px solid #1d4ed8",color:"#7dd3fc",fontFamily:"inherit"}}
-          >⚡ Bulk Input</button>
-
-          <button onClick={handleSave} disabled={saving||!unsaved}
-            className={unsaved&&!saving ? "btn btn-primary btn-sm" : "btn btn-ghost btn-sm"}
-            style={{fontFamily:"inherit",opacity:saving||!unsaved?.5:1}}
-          >
-            {saving ? "⏳ Menyimpan..." : "💾 Simpan"}
+          <button onClick={()=>handleSave()} disabled={saving||!unsaved} className={unsaved&&!saving?"btn btn-primary btn-sm":"btn btn-ghost btn-sm"} style={{fontFamily:"inherit",opacity:saving||!unsaved?.5:1}}>
+            {saving?"⏳ Menyimpan...":"💾 Simpan"}
           </button>
         </div>
       </div>
 
-      {/* Loading */}
-      {loading && (
-        <div style={{textAlign:"center",padding:"50px",color:"#3d5a7a",fontSize:11,letterSpacing:2}}>
-          <span className="login-spinner"/> MEMUAT ROSTER...
+      {loading&&<div style={{textAlign:"center",padding:"50px",color:"#3d5a7a",fontSize:11,letterSpacing:2}}><span className="login-spinner"/> MEMUAT...</div>}
+
+      {!loading&&totalPersonnel>0&&ROSTER_UNITS.map(unit=>(
+        <div key={unit}>
+          {/* Unit bulk button */}
+          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:4}}>
+            <button onClick={()=>{setAU(unit);setBulkUnit(unit)}} className="btn btn-ghost btn-sm" style={{background:"#0b1a2e",border:"1px solid #1d4ed8",color:"#7dd3fc",fontFamily:"inherit",fontSize:10}}>
+              ⚡ Bulk Input {unit}
+            </button>
+          </div>
+          <RosterUnitTable
+            unit={unit}
+            personnel={personnelByUnit[unit]||[]}
+            rosterMap={rosterMap[unit]||{}}
+            dayHeaders={dayHeaders}
+            isTodayFn={isTodayFn}
+            canEdit={true}
+            onCellClick={handleCellClick}
+          />
+        </div>
+      ))}
+
+      {!loading&&totalPersonnel===0&&(
+        <div className="panel"><div className="panel-body"><div className="empty-state"><I n="calendar" s={44}/><p>Tidak ada personel untuk cabang ini</p></div></div></div>
+      )}
+
+      {/* Footer */}
+      {totalPersonnel>0&&!loading&&(
+        <div style={{marginTop:8,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+          <span style={{fontSize:9,color:"#141f30"}}>TWR: {personnelByUnit.TWR?.length||0} · APP: {personnelByUnit.APP?.length||0} · {days} hari</span>
+          {unsaved&&<span style={{fontSize:9,color:"#d97706"}}>● Ada perubahan belum tersimpan</span>}
         </div>
       )}
 
-      {/* Table */}
-      {!loading && personnel.length > 0 && (
-        <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #0d1828",boxShadow:"0 4px 40px #00000080"}}>
-          <table style={{borderCollapse:"separate",borderSpacing:0,minWidth:"100%",fontSize:11}}>
-            <thead>
-              <tr style={{background:"#060d1a"}}>
-                <th style={{position:"sticky",left:0,zIndex:20,background:"#060d1a",padding:"10px 10px 8px",textAlign:"left",borderBottom:"1px solid #0d1828",borderRight:"1px solid #0d1828",width:175,minWidth:175}}>
-                  <span style={{color:"#1a2840",fontSize:8,letterSpacing:2,textTransform:"uppercase"}}>Nama</span>
-                </th>
-                <th style={{position:"sticky",left:175,zIndex:20,background:"#060d1a",padding:"10px 6px 8px",textAlign:"center",borderBottom:"1px solid #0d1828",borderRight:"1px solid #0d1828",width:42,minWidth:42}}>
-                  <span style={{color:"#1a2840",fontSize:8,letterSpacing:1}}>Init</span>
-                </th>
-                {dayHeaders.map(({day,name,isWeekend}) => (
-                  <th key={day} style={{padding:"8px 2px 6px",textAlign:"center",borderBottom:"1px solid #0d1828",background:isTodayCol(day)?"#0d1f3a":"#060d1a",minWidth:58,position:"relative"}}>
-                    <div style={{fontSize:7,color:isWeekend?"#141f30":"#1a2840",letterSpacing:1,marginBottom:2,textTransform:"uppercase"}}>{name}</div>
-                    <div style={{fontSize:12,fontWeight:700,color:isTodayCol(day)?"#3b82f6":isWeekend?"#141f30":"#2a3a50",lineHeight:1}}>{day}</div>
-                    {isTodayCol(day) && <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:16,height:2,background:"#3b82f6",borderRadius:1}}/>}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {personnel.map((person,pi) => (
-                <tr key={person.id}
-                  style={{background:pi%2===0?"#070e1c":"#050c18",transition:"background .1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background="#09142a"}
-                  onMouseLeave={e=>e.currentTarget.style.background=pi%2===0?"#070e1c":"#050c18"}
-                >
-                  <td style={{position:"sticky",left:0,zIndex:5,background:"inherit",padding:"4px 10px",borderRight:"1px solid #0d1828",borderBottom:"1px solid #060c17",whiteSpace:"nowrap"}}>
-                    <span style={{fontSize:11,fontWeight:600,color:"#4b6882",letterSpacing:.3}}>{person.name}</span>
-                  </td>
-                  <td style={{position:"sticky",left:175,zIndex:5,background:"inherit",padding:"4px 6px",textAlign:"center",borderRight:"1px solid #0d1828",borderBottom:"1px solid #060c17"}}>
-                    <span style={{fontSize:9,fontWeight:700,color:"#1a2840",background:"#0b1220",border:"1px solid #141f30",padding:"2px 5px",borderRadius:4,letterSpacing:1}}>
-                      {person.init}
-                    </span>
-                  </td>
-                  {dayHeaders.map(({day,isWeekend}) => (
-                    <RCell key={day}
-                      value={rosterMap[person.id]?.[day]}
-                      isWeekend={isWeekend}
-                      isTodayCol={isTodayCol(day)}
-                      onClick={(e) => handleCellClick(person.id, day, e)}
-                    />
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {!loading && personnel.length === 0 && (
-        <div className="panel"><div className="panel-body"><div className="empty-state"><I n="calendar" s={44}/><p>Tidak ada personel aktif untuk cabang ini</p></div></div></div>
-      )}
-
-      {/* Footer info */}
-      {personnel.length > 0 && !loading && (
-        <div style={{marginTop:10,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
-          <span style={{fontSize:9,color:"#141f30",letterSpacing:1}}>
-            {personnel.length} personel · {days} hari · klik cell untuk edit
-          </span>
-          {unsaved && <span style={{fontSize:9,color:"#d97706"}}>● Ada perubahan belum tersimpan — tekan Simpan</span>}
-        </div>
-      )}
-
-      {/* Popups */}
-      {editing && (
-        <RCellEditor
-          value={rosterMap[editing.personId]?.[editing.day]}
+      {/* Cell Editor */}
+      {editing&&(
+        <RC2Editor
+          value={rosterMap[editing.unit]?.[editing.personId]?.[editing.day]}
           anchorRect={editing.rect}
           onSave={handleCellSave}
-          onClose={() => setEditing(null)}
+          onClose={()=>setEditing(null)}
         />
       )}
 
-      {showBulk && (
-        <RBulkModal
-          personnel={personnel}
+      {/* Bulk Modal */}
+      {bulkUnit&&(
+        <RC2Bulk
+          personnel={personnelByUnit[bulkUnit]||[]}
           days={days}
           dayHeaders={dayHeaders}
-          onApply={handleBulkApply}
-          onClose={() => setShowBulk(false)}
+          onApply={(args)=>handleBulkApply(args,bulkUnit)}
+          onClose={()=>setBulkUnit(null)}
         />
       )}
 
       {/* Toast */}
-      {toast && (
-        <div style={{
-          position:"fixed",bottom:24,right:20,zIndex:3000,
-          background:"#0b1220",border:`1px solid ${toastColors[toast.type]||toastColors.info}`,
-          borderRadius:8,padding:"10px 18px",boxShadow:"0 8px 30px #000a",
-          fontFamily:"'JetBrains Mono','Courier New',monospace",
-          fontSize:11,color:"#e2e8f0",display:"flex",alignItems:"center",gap:8,
-          animation:"rToastIn .2s ease",
-        }}>
-          <span style={{color:toastColors[toast.type]||toastColors.info,fontSize:14}}>
-            {toast.type==="success"?"✓":toast.type==="error"?"✕":"ℹ"}
-          </span>
+      {toast&&(
+        <div style={{position:"fixed",bottom:24,right:20,zIndex:3000,background:"#0b1220",border:`1px solid ${tcol[toast.type]||tcol.info}`,borderRadius:8,padding:"10px 18px",boxShadow:"0 8px 30px #000a",fontFamily:"'JetBrains Mono','Courier New',monospace",fontSize:11,color:"#e2e8f0",display:"flex",alignItems:"center",gap:8,animation:"rv2Toast .2s ease"}}>
+          <span style={{color:tcol[toast.type]||tcol.info,fontSize:14}}>{toast.type==="success"?"✓":toast.type==="error"?"✕":"ℹ"}</span>
           {toast.msg}
         </div>
       )}
@@ -2942,527 +2770,7 @@ const ROMAN_COLORS = {
   "CUTI":{bg:"#fee2e2",fg:"#dc2626"},
 }
 
-const RosterGenerator = () => {
-  const ctx = useApp()
-  const isAdmin = ctx.user.role === "admin"
 
-  // For admin: pick branch; for cabang: use own branch
-  const [selectedBranch, setSelectedBranch] = useState(isAdmin ? (ctx.branches[0]?.code||"") : ctx.user.branch_code)
-  const br = ctx.branches.find(b => b.code === selectedBranch) || {units:["APP","TWR"],name:""}
-  const brPersonnel = ctx.personnel.filter(p => p.branch_code === selectedBranch)
-
-  const now = new Date()
-  const [selMonth, setSelMonth] = useState(now.getMonth()+1)
-  const [selYear, setSelYear] = useState(now.getFullYear())
-
-  // Personnel with group assignments
-  const [personnelConfig, setPersonnelConfig] = useState([])
-  const [cutiMap, setCutiMap] = useState({}) // { personnel_id: [day1, day2, ...] }
-  const [cutiInput, setCutiInput] = useState({}) // { personnel_id: "1,5,10" }
-
-  // Generation state
-  const [generated, setGenerated] = useState(null) // { monthRoster, records }
-  const [generating, setGenerating] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saveResult, setSaveResult] = useState(null) // {ok, count, skipped}
-  const [activeTab, setActiveTab] = useState("config") // config | preview | save
-  const [previewDate, setPreviewDate] = useState(null)
-  const [conflict, setConflict] = useState([]) // existing roster dates in selected month
-
-  // Init personnel config when branch/personnel changes
-  useEffect(() => {
-    if (!brPersonnel.length) return
-    setPersonnelConfig(brPersonnel.map((p,i) => ({
-      ...p,
-      roster_group: i % 10,
-      unit: p.unit || br.units?.[0] || "APP",
-      default_sector: "",
-      default_cwp: "Controller",
-      include: true,
-    })))
-    setCutiMap({})
-    setCutiInput({})
-    setGenerated(null)
-    setSaveResult(null)
-    setActiveTab("config")
-  }, [selectedBranch, selMonth, selYear])
-
-  // Check existing rosters for conflict
-  useEffect(() => {
-    const fetchConflict = async () => {
-      const firstDay = `${selYear}-${String(selMonth).padStart(2,"0")}-01`
-      const lastDay = `${selYear}-${String(selMonth).padStart(2,"0")}-${new Date(selYear,selMonth,0).getDate()}`
-      const {data} = await supabase.from("rosters").select("roster_date").eq("branch_code",selectedBranch).gte("roster_date",firstDay).lte("roster_date",lastDay)
-      if (data) setConflict([...new Set(data.map(r=>r.roster_date))])
-    }
-    if (selectedBranch) fetchConflict()
-  }, [selectedBranch, selMonth, selYear])
-
-  const daysInMonth = new Date(selYear, selMonth, 0).getDate()
-
-  const updatePersonnel = (id, key, val) => {
-    setPersonnelConfig(prev => prev.map(p => p.id===id ? {...p,[key]:val} : p))
-  }
-
-  const parseCutiDays = (str) => {
-    if (!str?.trim()) return []
-    return str.split(/[,\s]+/).map(s=>parseInt(s)).filter(n => !isNaN(n) && n>=1 && n<=daysInMonth)
-  }
-
-  const updateCuti = (id, val) => {
-    setCutiInput(prev => ({...prev,[id]:val}))
-    setCutiMap(prev => ({...prev,[id]:parseCutiDays(val)}))
-  }
-
-  const generate = () => {
-    setGenerating(true)
-    setTimeout(() => {
-      try {
-        const activePersonnel = personnelConfig.filter(p => p.include)
-        const monthRoster = buildMonthRoster(selYear, selMonth, activePersonnel, cutiMap)
-        const records = rosterToRecords(monthRoster, selectedBranch, ctx.user.id)
-        setGenerated({monthRoster, records})
-        setActiveTab("preview")
-        // Set preview to first day
-        const firstDate = `${selYear}-${String(selMonth).padStart(2,"0")}-01`
-        setPreviewDate(firstDate)
-      } catch(e) { alert("Error: "+e.message) }
-      setGenerating(false)
-    }, 400)
-  }
-
-  const saveToSupabase = async (overwrite=false) => {
-    if (!generated) return
-    setSaving(true)
-    setSaveResult(null)
-    try {
-      const {records} = generated
-      let skipped = 0, saved = 0
-
-      if (overwrite) {
-        // Delete existing for this month/branch first
-        const firstDay = `${selYear}-${String(selMonth).padStart(2,"0")}-01`
-        const lastDay = `${selYear}-${String(selMonth).padStart(2,"0")}-${daysInMonth}`
-        await supabase.from("rosters").delete().eq("branch_code",selectedBranch).gte("roster_date",firstDay).lte("roster_date",lastDay)
-      }
-
-      // Batch insert in chunks of 50
-      for (let i=0; i<records.length; i+=50) {
-        const chunk = records.slice(i, i+50)
-        const {error} = await supabase.from("rosters").insert(chunk)
-        if (error) { skipped += chunk.length } else { saved += chunk.length }
-      }
-
-      logAudit("ROSTER_GENERATE", `${MONTH_NAMES[selMonth-1]} ${selYear} — ${selectedBranch} — ${saved} records`, ctx.user)
-      setSaveResult({ok:true, count:saved, skipped})
-      setActiveTab("save")
-      // Refresh conflict list
-      const firstDay = `${selYear}-${String(selMonth).padStart(2,"0")}-01`
-      const lastDay = `${selYear}-${String(selMonth).padStart(2,"0")}-${daysInMonth}`
-      const {data} = await supabase.from("rosters").select("roster_date").eq("branch_code",selectedBranch).gte("roster_date",firstDay).lte("roster_date",lastDay)
-      if (data) setConflict([...new Set(data.map(r=>r.roster_date))])
-      await ctx.reload()
-    } catch(e) { setSaveResult({ok:false, msg:e.message}) }
-    setSaving(false)
-  }
-
-  // Compute stats per personel
-  const computeStats = (personId) => {
-    if (!generated) return null
-    const counts = {I:0,II:0,III:0,IV:0,V:0,CUTI:0,total:0}
-    const p = personnelConfig.find(x=>x.id===personId)
-    if (!p) return counts
-    const cutiDays = cutiMap[personId] || []
-    for (let d=1; d<=daysInMonth; d++) {
-      const sh = getShiftForDay(p.roster_group, d, cutiDays)
-      if (sh === "CUTI") { counts.CUTI++; continue }
-      if (sh !== "-") { counts[sh] = (counts[sh]||0)+1; counts.total++ }
-    }
-    return counts
-  }
-
-  const Tab = ({id,label,icon}) => (
-    <button onClick={()=>setActiveTab(id)} style={{
-      padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,
-      display:"flex",alignItems:"center",gap:6,
-      background:activeTab===id?"var(--accent)":"transparent",
-      color:activeTab===id?"#fff":"var(--fg-muted)",
-    }}>
-      <I n={icon} s={14}/>{label}
-    </button>
-  )
-
-  // Preview calendar grid for a specific date
-  const CalendarPreview = () => {
-    const weeks = []
-    const firstDow = new Date(selYear, selMonth-1, 1).getDay()
-    let cells = Array(firstDow).fill(null)
-    for (let d=1; d<=daysInMonth; d++) cells.push(d)
-    while (cells.length % 7 !== 0) cells.push(null)
-    for (let i=0; i<cells.length; i+=7) weeks.push(cells.slice(i,i+7))
-
-    return (
-      <div style={{overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-          <thead>
-            <tr>{DAY_NAMES.map(d=><th key={d} style={{padding:"4px 2px",textAlign:"center",color:"var(--fg-muted)",fontWeight:600,fontSize:10}}>{d}</th>)}</tr>
-          </thead>
-          <tbody>
-            {weeks.map((wk,wi)=>(
-              <tr key={wi}>
-                {wk.map((day,di)=>{
-                  if (!day) return <td key={di}/>
-                  const dateStr = `${selYear}-${String(selMonth).padStart(2,"0")}-${String(day).padStart(2,"0")}`
-                  const shifts = generated?.monthRoster[dateStr]
-                  const hasPagi = shifts?.Pagi?.length>0
-                  const hasSiang = shifts?.Siang?.length>0
-                  const hasMalam = shifts?.Malam?.length>0
-                  const isConflict = conflict.includes(dateStr)
-                  const isSelected = previewDate===dateStr
-                  return (
-                    <td key={di} onClick={()=>setPreviewDate(dateStr)} style={{
-                      padding:"4px 2px",textAlign:"center",cursor:"pointer",
-                      background:isSelected?"var(--accent)33":"transparent",
-                      borderRadius:6,
-                    }}>
-                      <div style={{fontWeight:700,fontSize:12,color:isSelected?"var(--accent)":"var(--fg)",marginBottom:2}}>{day}</div>
-                      <div style={{display:"flex",gap:2,justifyContent:"center",flexWrap:"wrap"}}>
-                        {hasPagi && <span style={{fontSize:8,background:"#dbeafe",color:"#1d4ed8",borderRadius:3,padding:"0 3px"}}>P</span>}
-                        {hasSiang && <span style={{fontSize:8,background:"#fef9c3",color:"#a16207",borderRadius:3,padding:"0 3px"}}>S</span>}
-                        {hasMalam && <span style={{fontSize:8,background:"#ede9fe",color:"#6d28d9",borderRadius:3,padding:"0 3px"}}>M</span>}
-                        {isConflict && !generated && <span style={{fontSize:8,background:"#fee2e2",color:"#dc2626",borderRadius:3,padding:"0 3px"}}>!</span>}
-                      </div>
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
-
-  // Detail view for selected date
-  const DayDetail = () => {
-    if (!previewDate || !generated) return <div style={{color:"var(--fg-muted)",fontSize:13,padding:16}}>Klik tanggal untuk melihat detail</div>
-    const shifts = generated.monthRoster[previewDate]
-    const dayNum = parseInt(previewDate.split("-")[2])
-    const dow = DAY_NAMES[new Date(previewDate).getDay()]
-    return (
-      <div>
-        <div style={{fontWeight:700,fontSize:14,marginBottom:12,color:"var(--fg)"}}>{dow}, {dayNum} {MONTH_NAMES[selMonth-1]} {selYear}</div>
-        {["Pagi","Siang","Malam"].map(sh => {
-          const sc = SHIFT_CONFIG[sh]
-          const people = shifts[sh]||[]
-          return (
-            <div key={sh} style={{marginBottom:12,padding:"10px 12px",borderRadius:8,border:`1px solid ${sc.color}44`,background:sc.bg}}>
-              <div style={{fontSize:11,fontWeight:700,color:sc.color,marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
-                <ShiftBadge shift={sh} small/>
-                <span style={{fontSize:10,opacity:.7}}>{sc.hours}</span>
-                <span style={{marginLeft:"auto",fontSize:10,background:sc.color+"22",padding:"1px 8px",borderRadius:10}}>{people.length} ATC</span>
-              </div>
-              {people.length===0 ? <div style={{fontSize:12,color:"var(--fg-muted)",fontStyle:"italic"}}>Tidak ada personel</div> :
-              people.map((p,i) => (
-                <div key={i} style={{fontSize:12,display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                  <span style={{fontWeight:600,color:"var(--fg)"}}>{p.name}</span>
-                  <span style={{fontSize:10,background:"var(--bg)",padding:"1px 6px",borderRadius:4,color:"var(--fg-muted)"}}>{p.unit}</span>
-                  <span style={{fontSize:10,color:"var(--fg-muted)"}}>{p.sector}</span>
-                  <span style={{fontSize:10,background:ROMAN_COLORS[p.roman_shift]?.bg,color:ROMAN_COLORS[p.roman_shift]?.fg,padding:"1px 6px",borderRadius:4,marginLeft:"auto"}}>{p.roman_shift}</span>
-                </div>
-              ))}
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
-  return (
-    <div className="page-content">
-      <Header title="Generate Roster" sub="Buat jadwal dinas otomatis berbasis pola shift"/>
-
-      {/* Branch selector for admin */}
-      {isAdmin && (
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-          <span className="monitor-label"><I n="building" s={12}/> CABANG</span>
-          <select className="br-select" value={selectedBranch} onChange={e=>setSelectedBranch(e.target.value)}>
-            <option value="">— Pilih Cabang —</option>
-            {ctx.branches.map(b=><option key={b.code} value={b.code}>{b.code} — {b.city}</option>)}
-          </select>
-        </div>
-      )}
-
-      {/* Month/Year picker */}
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-        <I n="calendar" s={16}/>
-        <select value={selMonth} onChange={e=>{setSelMonth(+e.target.value);setGenerated(null)}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}>
-          {MONTH_NAMES.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
-        </select>
-        <input type="number" value={selYear} min={2024} max={2030} onChange={e=>{setSelYear(+e.target.value);setGenerated(null)}} style={{width:80,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}/>
-        {conflict.length>0 && (
-          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:"#f59e0b",background:"#fef3c7",padding:"4px 10px",borderRadius:8}}>
-            <I n="warn" s={13}/> {conflict.length} hari sudah ada roster — akan di-overwrite jika disimpan
-          </div>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div style={{display:"flex",gap:4,marginBottom:20,padding:"4px",background:"var(--bg)",borderRadius:10,width:"fit-content"}}>
-        <Tab id="config" label="Konfigurasi" icon="checklist"/>
-        <Tab id="preview" label={`Preview${generated?` (${generated.records.length} records)`:""}`} icon="eye"/>
-        <Tab id="save" label="Simpan" icon="download"/>
-      </div>
-
-      {/* ═══ TAB: KONFIGURASI ═══ */}
-      {activeTab==="config" && (
-        <div>
-          <div className="stats-grid" style={{marginBottom:20}}>
-            <Stat icon="building" label="Cabang" value={selectedBranch||"—"} sub={br.name} color="#38bdf8"/>
-            <Stat icon="calendar" label="Bulan" value={`${MONTH_NAMES[selMonth-1]} ${selYear}`} sub={`${daysInMonth} hari`} color="#8b5cf6"/>
-            <Stat icon="mic" label="Personel Aktif" value={personnelConfig.filter(p=>p.include).length} sub={`dari ${personnelConfig.length}`} color="#10b981"/>
-            <Stat icon="plane" label="Estimasi Records" value={personnelConfig.filter(p=>p.include).length > 0 ? daysInMonth * 3 : 0} sub="roster entries" color="#f59e0b"/>
-          </div>
-
-          {brPersonnel.length===0 ? (
-            <div className="panel"><div className="panel-body"><div className="empty-state"><I n="building" s={44}/><p>Pilih cabang yang memiliki data personel</p></div></div></div>
-          ) : (
-            <div className="panel">
-              <div className="panel-header">
-                <h2 className="panel-title"><I n="checklist" s={16}/> Konfigurasi Personel & Grup Rotasi</h2>
-                <span className="panel-counter">{personnelConfig.filter(p=>p.include).length} aktif</span>
-              </div>
-              <div className="panel-body">
-                <div style={{fontSize:12,color:"var(--fg-muted)",marginBottom:12,padding:"8px 12px",background:"var(--bg)",borderRadius:8,display:"flex",alignItems:"flex-start",gap:8}}>
-                  <I n="warn" s={14}/>
-                  <div>Sistem menggunakan pola rotasi 5-shift Surabaya: <strong>2 hari kerja + 2 hari libur</strong>, rotasi I→V→IV→III→II. Assign tiap personel ke grup (0–9) sesuai pola yang berlaku.</div>
-                </div>
-                <div style={{overflowX:"auto"}}>
-                  <table className="data-table">
-                    <thead><tr>
-                      <th style={{width:32}}>✓</th>
-                      <th>Nama</th>
-                      <th>Unit</th>
-                      <th style={{width:80}}>Grup</th>
-                      <th>Pola Shift (5 hari)</th>
-                      <th>Sektor Default</th>
-                      <th>Hari Cuti</th>
-                    </tr></thead>
-                    <tbody>
-                      {personnelConfig.map(p => {
-                        const preview5 = genPattern(APP_GROUPS[p.roster_group]?.startShift||0, APP_GROUPS[p.roster_group]?.offset||0).slice(0,10)
-                        return (
-                          <tr key={p.id} style={{opacity:p.include?1:.4}}>
-                            <td><input type="checkbox" checked={p.include} onChange={e=>updatePersonnel(p.id,"include",e.target.checked)}/></td>
-                            <td><strong style={{fontSize:13}}>{p.name}</strong></td>
-                            <td>
-                              <select value={p.unit} onChange={e=>updatePersonnel(p.id,"unit",e.target.value)} style={{padding:"3px 6px",borderRadius:5,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:11}}>
-                                {(br.units||["APP","TWR"]).map(u=><option key={u}>{u}</option>)}
-                              </select>
-                            </td>
-                            <td>
-                              <select value={p.roster_group} onChange={e=>updatePersonnel(p.id,"roster_group",+e.target.value)} style={{padding:"3px 6px",borderRadius:5,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:11,width:56}}>
-                                {APP_GROUPS.map(g=><option key={g.id} value={g.id}>{g.id}</option>)}
-                              </select>
-                            </td>
-                            <td>
-                              <div style={{display:"flex",gap:2}}>
-                                {preview5.map((sh,i)=>(
-                                  <span key={i} style={{
-                                    fontSize:10,fontWeight:600,padding:"1px 5px",borderRadius:4,
-                                    background:ROMAN_COLORS[sh]?.bg||"transparent",
-                                    color:ROMAN_COLORS[sh]?.fg||"#94a3b8",
-                                  }}>{sh}</span>
-                                ))}
-                              </div>
-                            </td>
-                            <td>
-                              <input value={p.default_sector} onChange={e=>updatePersonnel(p.id,"default_sector",e.target.value)} placeholder="Sector 1" style={{padding:"3px 8px",borderRadius:5,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:11,width:90}}/>
-                            </td>
-                            <td>
-                              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                                <input
-                                  value={cutiInput[p.id]||""}
-                                  onChange={e=>updateCuti(p.id,e.target.value)}
-                                  placeholder="1,5,15..."
-                                  style={{padding:"3px 8px",borderRadius:5,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:11,width:80}}
-                                />
-                                {(cutiMap[p.id]?.length>0) && (
-                                  <span style={{fontSize:10,color:"#dc2626",background:"#fee2e2",padding:"1px 6px",borderRadius:4}}>{cutiMap[p.id].length}H</span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div style={{marginTop:20,display:"flex",gap:10,alignItems:"center"}}>
-                  <button className="btn btn-primary" onClick={generate} disabled={generating||personnelConfig.filter(p=>p.include).length===0} style={{gap:6,display:"flex",alignItems:"center"}}>
-                    <I n="magic" s={15}/> {generating?"Generating...":"Generate Jadwal"}
-                  </button>
-                  <span style={{fontSize:12,color:"var(--fg-muted)"}}>
-                    {personnelConfig.filter(p=>p.include).length} personel × {daysInMonth} hari
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ═══ TAB: PREVIEW ═══ */}
-      {activeTab==="preview" && (
-        <div>
-          {!generated ? (
-            <div className="panel"><div className="panel-body"><div className="empty-state"><I n="calendar" s={44}/><p>Generate jadwal terlebih dahulu di tab Konfigurasi</p></div></div></div>
-          ) : (
-            <div>
-              {/* Stats */}
-              <div className="stats-grid" style={{marginBottom:20}}>
-                <Stat icon="calendar" label="Total Records" value={generated.records.length} sub="roster entries" color="#38bdf8"/>
-                <Stat icon="mic" label="Personel" value={personnelConfig.filter(p=>p.include).length} color="#10b981"/>
-                <Stat icon="plane" label="Hari Kerja" value={`${daysInMonth} hari`} sub={`${MONTH_NAMES[selMonth-1]} ${selYear}`} color="#f59e0b"/>
-                <Stat icon="warn" label="Hari Konflik" value={conflict.length} sub="sudah ada roster" color={conflict.length>0?"#ef4444":"#10b981"}/>
-              </div>
-
-              {/* Calendar + day detail */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
-                <div className="panel">
-                  <div className="panel-header"><h2 className="panel-title"><I n="calendar" s={15}/> Kalender {MONTH_NAMES[selMonth-1]} {selYear}</h2></div>
-                  <div className="panel-body"><CalendarPreview/></div>
-                </div>
-                <div className="panel">
-                  <div className="panel-header"><h2 className="panel-title"><I n="log" s={15}/> Detail Hari</h2></div>
-                  <div className="panel-body"><DayDetail/></div>
-                </div>
-              </div>
-
-              {/* Per-personel stats */}
-              <div className="panel">
-                <div className="panel-header"><h2 className="panel-title"><I n="chart" s={15}/> Rekap Shift Per Personel</h2></div>
-                <div className="panel-body">
-                  <div style={{overflowX:"auto"}}>
-                    <table className="data-table">
-                      <thead><tr>
-                        <th>Nama</th><th>Unit</th><th>Grup</th>
-                        {["I","II","III","IV","V"].map(s=><th key={s} style={{textAlign:"center"}}><span style={{padding:"1px 6px",borderRadius:4,background:ROMAN_COLORS[s]?.bg,color:ROMAN_COLORS[s]?.fg,fontSize:11}}>{s}</span></th>)}
-                        <th style={{textAlign:"center"}}>Cuti</th>
-                        <th style={{textAlign:"center"}}>Total HK</th>
-                        <th style={{textAlign:"center"}}>Jam</th>
-                      </tr></thead>
-                      <tbody>
-                        {personnelConfig.filter(p=>p.include).map(p=>{
-                          const stats = computeStats(p.id)
-                          return (
-                            <tr key={p.id}>
-                              <td><strong>{p.name}</strong></td>
-                              <td><span className="unit-tag">{p.unit}</span></td>
-                              <td style={{textAlign:"center",fontSize:12,color:"var(--fg-muted)"}}>{p.roster_group}</td>
-                              {["I","II","III","IV","V"].map(s=><td key={s} style={{textAlign:"center",fontSize:12}}>{stats?.[s]||0}</td>)}
-                              <td style={{textAlign:"center",fontSize:12,color:"#dc2626"}}>{stats?.CUTI||0}</td>
-                              <td style={{textAlign:"center",fontWeight:700}}>{stats?.total||0}</td>
-                              <td style={{textAlign:"center",fontSize:12,color:"var(--fg-muted)"}}>{(stats?.total||0)*4}h</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{marginTop:16,display:"flex",gap:10}}>
-                <button className="btn btn-ghost" onClick={()=>setActiveTab("config")}><I n="edit" s={14}/> Ubah Konfigurasi</button>
-                <button className="btn btn-primary" onClick={()=>setActiveTab("save")} style={{display:"flex",alignItems:"center",gap:6}}>
-                  <I n="download" s={14}/> Lanjut Simpan
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ═══ TAB: SIMPAN ═══ */}
-      {activeTab==="save" && (
-        <div>
-          {!generated ? (
-            <div className="panel"><div className="panel-body"><div className="empty-state"><I n="download" s={44}/><p>Generate jadwal terlebih dahulu</p></div></div></div>
-          ) : saveResult?.ok ? (
-            <div className="panel" style={{border:"2px solid #10b981"}}>
-              <div className="panel-body">
-                <div style={{textAlign:"center",padding:"24px 0"}}>
-                  <div style={{fontSize:48,marginBottom:12}}>✅</div>
-                  <div style={{fontSize:18,fontWeight:700,color:"#10b981",marginBottom:6}}>Roster Berhasil Disimpan!</div>
-                  <div style={{fontSize:14,color:"var(--fg-muted)",marginBottom:20}}>{saveResult.count} records disimpan ke database{saveResult.skipped>0?` (${saveResult.skipped} gagal)`:""}</div>
-                  <div style={{display:"flex",gap:10,justifyContent:"center"}}>
-                    <button className="btn btn-ghost" onClick={()=>{setGenerated(null);setActiveTab("config");setSaveResult(null)}}><I n="refresh" s={14}/> Generate Bulan Lain</button>
-                    <button className="btn btn-primary" onClick={()=>ctx.goPage("roster")}><I n="calendar" s={14}/> Lihat Roster</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="panel" style={{marginBottom:16}}>
-                <div className="panel-header"><h2 className="panel-title"><I n="warn" s={15}/> Konfirmasi Simpan</h2></div>
-                <div className="panel-body">
-                  <div style={{fontSize:14,marginBottom:16}}>
-                    Roster <strong>{MONTH_NAMES[selMonth-1]} {selYear}</strong> untuk cabang <strong>{selectedBranch}</strong> akan disimpan:
-                  </div>
-                  <div className="stats-grid">
-                    <Stat icon="calendar" label="Total Records" value={generated.records.length} color="#38bdf8"/>
-                    <Stat icon="mic" label="Personel" value={personnelConfig.filter(p=>p.include).length} color="#10b981"/>
-                    <Stat icon="warn" label="Konflik" value={conflict.length} sub={conflict.length>0?"akan di-overwrite":""} color={conflict.length>0?"#ef4444":"#10b981"}/>
-                  </div>
-
-                  {conflict.length>0 && (
-                    <div style={{marginTop:16,padding:"12px 16px",background:"#fef2f2",borderRadius:8,fontSize:13,color:"#dc2626",display:"flex",alignItems:"flex-start",gap:8}}>
-                      <I n="warn" s={16}/>
-                      <div>
-                        <strong>Peringatan:</strong> Sudah ada {conflict.length} hari dengan roster di bulan ini. Jika klik <strong>"Simpan & Overwrite"</strong>, semua roster lama di bulan ini akan dihapus dan diganti dengan yang baru.
-                      </div>
-                    </div>
-                  )}
-
-                  {saveResult?.ok===false && (
-                    <div style={{marginTop:12,padding:"10px 14px",background:"#fef2f2",borderRadius:8,fontSize:13,color:"#dc2626"}}>
-                      Error: {saveResult.msg}
-                    </div>
-                  )}
-
-                  <div style={{marginTop:20,display:"flex",gap:10,flexWrap:"wrap"}}>
-                    <button className="btn btn-ghost" onClick={()=>setActiveTab("preview")}><I n="eye" s={14}/> Kembali ke Preview</button>
-                    {conflict.length===0 ? (
-                      <button className="btn btn-primary" onClick={()=>saveToSupabase(false)} disabled={saving} style={{display:"flex",alignItems:"center",gap:6}}>
-                        <I n="download" s={14}/> {saving?"Menyimpan...":"Simpan ke Database"}
-                      </button>
-                    ) : (
-                      <>
-                        <button className="btn btn-primary" onClick={()=>saveToSupabase(false)} disabled={saving} style={{display:"flex",alignItems:"center",gap:6}}>
-                          <I n="plus" s={14}/> {saving?"Menyimpan...":"Tambahkan Saja"}
-                        </button>
-                        <button className="btn btn-primary" onClick={()=>saveToSupabase(true)} disabled={saving} style={{background:"#ef4444",display:"flex",alignItems:"center",gap:6}}>
-                          <I n="warn" s={14}/> {saving?"Menyimpan...":"Simpan & Overwrite"}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ============================================================
-// MAIN APP
-// ============================================================
 export default function App() {
   const [session,setSession] = useState(null)
   const [user,setUser] = useState(null)
@@ -3536,8 +2844,8 @@ export default function App() {
   if (!user) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat profil...</p><span className="login-spinner"/></div>
 
   const pageMap = user.role === "admin"
-    ? {dashboard:AdminDash,mon_roster:AdminMonRoster,mon_log:AdminMonLog,mon_today:AdminMonToday,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit,roster_gen:RosterGenerator}
-    : {dashboard:CabangDash,roster:CabangRoster,roster_gen:RosterGenerator,log:CabangLog,rekap:CabangRekap,handover:CabangHandover}
+    ? {dashboard:AdminDash,mon_roster:AdminMonRoster,mon_log:AdminMonLog,mon_today:AdminMonToday,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
+    : {dashboard:CabangDash,roster:CabangRoster,log:CabangLog,rekap:CabangRekap,handover:CabangHandover}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
