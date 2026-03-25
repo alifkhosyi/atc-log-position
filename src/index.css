@@ -25,3 +25,297 @@
 .monitor-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;padding:4px 10px;background:rgba(139,92,246,.1);color:var(--purple);border-radius:5px;display:inline-flex;align-items:center;gap:4px}.br-select{padding:7px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:var(--font);cursor:pointer;outline:none}.br-select:focus{border-color:var(--accent)}
 .loading-screen{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--text3);background:var(--bg)}.loading-screen p{font-size:14px}
 @media(max-width:768px){.sidebar{position:fixed;z-index:100;left:0;top:0;bottom:0}.sidebar-collapsed{transform:translateX(-100%);width:0;min-width:0}.stats-grid{grid-template-columns:repeat(2,1fr)}.topbar{flex-direction:column}.form-grid{grid-template-columns:1fr}.position-grid,.branch-grid{grid-template-columns:repeat(2,1fr)}.page-content{padding:16px}}@media(max-width:480px){.stats-grid,.position-grid,.branch-grid{grid-template-columns:1fr}}
+/* ============================================================
+   THEME ADDITIONS — tambahkan ke index.css yang sudah ada
+   Light mode & dark mode CSS variables
+   ============================================================ */
+
+/* Default: dark mode (existing behavior) */
+:root, [data-theme="dark"] {
+  --bg: #0a0f1e;
+  --bg2: #0d1526;
+  --card: #0f1a2e;
+  --border: #1a2840;
+  --fg: #e2e8f0;
+  --fg-muted: #64748b;
+  --fg-sub: #334155;
+  --primary: #3b82f6;
+  --primary-bg: #1e3a5f;
+  --sidebar-bg: #070d1a;
+  --sidebar-border: #0f1828;
+  --sidebar-text: #4b6882;
+  --sidebar-active-bg: #0f1f3d;
+  --sidebar-active-text: #7dd3fc;
+  --sidebar-hover: #0a1527;
+  --topbar-bg: #070d1a;
+  --topbar-border: #0f1828;
+  --panel-bg: #0a1020;
+  --panel-border: #121e30;
+  --input-bg: #0b1525;
+  --input-border: #1a2840;
+  --btn-ghost-bg: transparent;
+  --btn-ghost-border: #1a2840;
+  --btn-ghost-text: #4b6882;
+  --stat-bg: #0a1020;
+  --login-bg: #050c18;
+  --unit-tag-bg: #0f1a2e;
+  --unit-tag-text: #3b82f6;
+  --unit-tag-border: #1a2840;
+  --table-stripe: #07101e;
+  --table-hover: #0a1527;
+}
+
+/* Light mode */
+[data-theme="light"] {
+  --bg: #f8fafc;
+  --bg2: #f1f5f9;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --fg: #0f172a;
+  --fg-muted: #64748b;
+  --fg-sub: #94a3b8;
+  --primary: #2563eb;
+  --primary-bg: #eff6ff;
+  --sidebar-bg: #1e293b;
+  --sidebar-border: #334155;
+  --sidebar-text: #94a3b8;
+  --sidebar-active-bg: #0f172a;
+  --sidebar-active-text: #7dd3fc;
+  --sidebar-hover: #0f172a;
+  --topbar-bg: #ffffff;
+  --topbar-border: #e2e8f0;
+  --panel-bg: #ffffff;
+  --panel-border: #e2e8f0;
+  --input-bg: #ffffff;
+  --input-border: #e2e8f0;
+  --btn-ghost-bg: transparent;
+  --btn-ghost-border: #e2e8f0;
+  --btn-ghost-text: #64748b;
+  --stat-bg: #f8fafc;
+  --login-bg: #0f172a;
+  --unit-tag-bg: #eff6ff;
+  --unit-tag-text: #1d4ed8;
+  --unit-tag-border: #bfdbfe;
+  --table-stripe: #f8fafc;
+  --table-hover: #eff6ff;
+}
+
+/* Apply variables to existing classes */
+[data-theme="light"] .sidebar {
+  background: var(--sidebar-bg);
+  border-color: var(--sidebar-border);
+}
+[data-theme="light"] .sidebar-item {
+  color: var(--sidebar-text);
+}
+[data-theme="light"] .sidebar-item:hover {
+  background: var(--sidebar-hover);
+  color: #e2e8f0;
+}
+[data-theme="light"] .sidebar-item-active {
+  background: var(--sidebar-active-bg) !important;
+  color: var(--sidebar-active-text) !important;
+}
+[data-theme="light"] .topbar {
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border);
+  color: var(--fg);
+}
+[data-theme="light"] .topbar-title {
+  color: var(--fg);
+}
+[data-theme="light"] .topbar-sub {
+  color: var(--fg-muted);
+}
+[data-theme="light"] .topbar-pill {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+}
+[data-theme="light"] .panel {
+  background: var(--panel-bg);
+  border-color: var(--panel-border);
+}
+[data-theme="light"] .panel-header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+[data-theme="light"] .panel-title {
+  color: var(--fg);
+}
+[data-theme="light"] .stat-card {
+  background: var(--stat-bg);
+  border-color: var(--border);
+}
+[data-theme="light"] .stat-label {
+  color: var(--fg-muted);
+}
+[data-theme="light"] .stat-value {
+  color: var(--fg);
+}
+[data-theme="light"] .btn-ghost {
+  background: var(--btn-ghost-bg);
+  border-color: var(--btn-ghost-border);
+  color: var(--btn-ghost-text);
+}
+[data-theme="light"] .btn-ghost:hover {
+  background: var(--bg2);
+  color: var(--fg);
+}
+[data-theme="light"] .field label {
+  color: var(--fg-muted);
+}
+[data-theme="light"] .field input,
+[data-theme="light"] .field select,
+[data-theme="light"] .field textarea {
+  background: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--fg);
+}
+[data-theme="light"] .field input:focus,
+[data-theme="light"] .field select:focus {
+  border-color: var(--primary);
+}
+[data-theme="light"] .unit-tag {
+  background: var(--unit-tag-bg);
+  color: var(--unit-tag-text);
+  border-color: var(--unit-tag-border);
+}
+[data-theme="light"] .page-content {
+  background: var(--bg);
+  color: var(--fg);
+}
+[data-theme="light"] .main-area {
+  background: var(--bg);
+}
+[data-theme="light"] .empty-state {
+  color: var(--fg-muted);
+}
+[data-theme="light"] .table th {
+  background: var(--bg2);
+  color: var(--fg-muted);
+  border-color: var(--border);
+}
+[data-theme="light"] .table td {
+  border-color: var(--border);
+  color: var(--fg);
+}
+[data-theme="light"] .table tr:nth-child(even) td {
+  background: var(--table-stripe);
+}
+[data-theme="light"] .table tr:hover td {
+  background: var(--table-hover);
+}
+[data-theme="light"] .sidebar-section {
+  color: var(--sidebar-text);
+}
+[data-theme="light"] .sidebar-user-name {
+  color: #e2e8f0;
+}
+[data-theme="light"] .sidebar-user-role {
+  color: var(--sidebar-text);
+}
+[data-theme="light"] .sidebar-logout {
+  color: var(--sidebar-text);
+}
+[data-theme="light"] .sidebar-logout:hover {
+  color: #ef4444;
+}
+
+/* Smooth transitions */
+.sidebar, .topbar, .panel, .panel-header, .stat-card,
+.main-area, .page-content, .field input, .field select,
+.btn-ghost, .unit-tag {
+  transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* ── Sync original CSS variables dengan theme ── */
+[data-theme="light"] {
+  --bg: #f8fafc;
+  --bg2: #ffffff;
+  --bg3: #f1f5f9;
+  --bg4: #e2e8f0;
+  --border: #e2e8f0;
+  --border2: #cbd5e1;
+  --text: #0f172a;
+  --text2: #334155;
+  --text3: #64748b;
+  --accent: #2563eb;
+  --accent2: #1d4ed8;
+  --green: #16a34a;
+  --red: #dc2626;
+  --orange: #d97706;
+  --purple: #7c3aed;
+}
+
+[data-theme="light"] body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+[data-theme="light"] .main-area {
+  background: var(--bg);
+}
+
+[data-theme="light"] .page-content {
+  background: var(--bg);
+}
+
+[data-theme="light"] .loading-screen {
+  background: var(--bg);
+}
+
+[data-theme="light"] .login-bg {
+  background: radial-gradient(ellipse at 30% 20%, #1e3a5f, #0f172a 50%, #070d1a);
+}
+
+[data-theme="light"] .data-table td {
+  color: var(--text2);
+}
+
+[data-theme="light"] .data-table tr:hover td {
+  background: rgba(37, 99, 235, 0.04);
+}
+
+[data-theme="light"] .branch-card {
+  background: var(--bg3);
+}
+
+[data-theme="light"] .position-card {
+  background: var(--bg3);
+}
+
+[data-theme="light"] .handover-card {
+  background: var(--bg3);
+}
+
+[data-theme="light"] .filter-btn {
+  background: var(--bg2);
+  color: var(--text3);
+}
+
+[data-theme="light"] .chart-bar-track {
+  background: var(--bg3);
+}
+
+[data-theme="light"] .panel-counter {
+  background: var(--bg3);
+  color: var(--text3);
+}
+
+[data-theme="light"] .br-select {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+[data-theme="light"] .topbar-pill strong {
+  color: var(--green);
+}
+
+/* Smooth transitions untuk semua elemen utama */
+body, .main-area, .page-content, .panel, .panel-header,
+.stat-card, .sidebar, .topbar, .data-table td, .data-table th,
+.branch-card, .position-card, .handover-card, .field input,
+.field select, .field textarea, .btn-ghost, .filter-btn {
+  transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
