@@ -290,290 +290,705 @@ const ShiftBadge = ({shift,small}) => {
 // ============================================================
 // CABANG: ROSTER
 // ============================================================
-const CabangRoster = () => {
-  const ctx = useApp()
-  const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {units:["TWR"]}
-  const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
-  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
 
-  const [rosters,setRosters] = useState([])
-  const [loading,setLoading] = useState(true)
-  const [selDate,setSelDate] = useState(new Date().toISOString().slice(0,10))
-  const [showForm,setShowForm] = useState(false)
-  const [editItem,setEditItem] = useState(null)
-  const [saving,setSaving] = useState(false)
-  // Override modal
-  const [overrideItem,setOverrideItem] = useState(null) // {roster, slot: 1|2}
-  const [overrideForm,setOverrideForm] = useState({name:"",unit:"",sector:"",cwp:"",reason:""})
-  const [savingOvr,setSavingOvr] = useState(false)
+// ============================================================
+// CABANG: ROSTER (new — per bulan, JSONB schedule)
+// ============================================================
+const ROSTER_SECTORS = ["TWR", "APP", "GND", "DEL", "ACC", "FIS"]
 
-  const initSlot = () => ({name:"",unit:br.units[0]||"TWR",sector:"",cwp:""})
-  const [form,setForm] = useState({shift:"Pagi",slot1:initSlot(),slot2:initSlot()})
+const ROSTER_STATUS = [
+  { code: "S1", label: "Shift 1" },
+  { code: "S2", label: "Shift 2" },
+  { code: "S3", label: "Shift 3" },
+  { code: "L",  label: "Libur"   },
+  { code: "CUTI",   label: "Cuti"   },
+  { code: "DIKLAT", label: "Diklat" },
+]
 
-  const fetchRosters = async () => {
-    setLoading(true)
-    const {data} = await supabase.from("rosters").select("*")
-      .eq("branch_code",ctx.user.branch_code)
-      .gte("roster_date",selDate).lte("roster_date",selDate)
-      .order("shift")
-    setRosters(data||[])
-    setLoading(false)
-  }
-  useEffect(() => { fetchRosters() },[selDate])
+const ROSTER_COLORS = {
+  S1:     { bg:"#052e16", border:"#4ade80", text:"#bbf7d0", dot:"#60a5fa", grad:"linear-gradient(145deg,#0a3d20,#052e16)" },
+  S2:     { bg:"#14532d", border:"#22c55e", text:"#86efac", dot:"#3b82f6", grad:"linear-gradient(145deg,#14532d,#0d3d21)" },
+  S3:     { bg:"#166534", border:"#15803d", text:"#4ade80", dot:"#2563eb", grad:"linear-gradient(145deg,#166534,#0f4d27)" },
+  L:      { bg:"#450a0a", border:"#dc2626", text:"#fca5a5", dot:"#ef4444", grad:"linear-gradient(145deg,#5c0f0f,#3b0808)" },
+  CUTI:   { bg:"#451a03", border:"#d97706", text:"#fcd34d", dot:"#f59e0b", grad:"linear-gradient(145deg,#451a03,#3b1502)" },
+  DIKLAT: { bg:"#2e1065", border:"#7c3aed", text:"#c4b5fd", dot:"#8b5cf6", grad:"linear-gradient(145deg,#2e1065,#250d55)" },
+}
 
-  const getSectorList = (unit) => mySectors.filter(s => s.unit===unit)
-  const getCwpList = (unit,sectorName) => {
-    const sec = mySectors.find(s => s.unit===unit && s.name===sectorName)
-    return sec ? sec.cwps : ["Controller","Assistant"]
-  }
+const R_DAY_NAMES   = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"]
+const R_MONTH_NAMES = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"]
 
-  const setSlot = (slot,key,val) => {
-    setForm(f => ({...f,[slot]:{...f[slot],[key]:val, ...(key==="unit"?{sector:"",cwp:""}:{}), ...(key==="sector"?{cwp:""}:{})}}))
-  }
+const rGetDays = (y,m) => new Date(y,m,0).getDate()
+const rMakeInit = (name) => {
+  const w = name.trim().split(/\s+/)
+  return w.length >= 2 ? (w[0][0]+w[1][0]).toUpperCase() : name.slice(0,2).toUpperCase()
+}
 
-  const saveRoster = async () => {
-    if (saving) return
-    setSaving(true)
-    const payload = {
-      branch_code: ctx.user.branch_code,
-      roster_date: selDate,
-      shift: form.shift,
-      atc1_name: form.slot1.name||null,
-      atc1_unit: form.slot1.unit||null,
-      atc1_sector: form.slot1.sector||null,
-      atc1_cwp: form.slot1.cwp||null,
-      atc2_name: form.slot2.name||null,
-      atc2_unit: form.slot2.unit||null,
-      atc2_sector: form.slot2.sector||null,
-      atc2_cwp: form.slot2.cwp||null,
-      created_by: ctx.user.id,
-    }
-    let error
-    if (editItem) {
-      ;({error} = await supabase.from("rosters").update({...payload,updated_at:new Date().toISOString()}).eq("id",editItem.id))
-    } else {
-      ;({error} = await supabase.from("rosters").insert(payload))
-    }
-    if (error) alert("Error: "+error.message)
-    else {
-      logAudit(editItem?"ROSTER_UPDATE":"ROSTER_CREATE", `${selDate} ${form.shift}`, ctx.user)
-      setShowForm(false); setEditItem(null); setForm({shift:"Pagi",slot1:initSlot(),slot2:initSlot()}); await fetchRosters()
-    }
-    setSaving(false)
-  }
+// ── Cell Editor Popup ──
+const RCellEditor = ({ value, onSave, onClose, anchorRect }) => {
+  const [st, setSt]   = useState(value?.status || "")
+  const [sec, setSec] = useState(value?.sector || "")
+  const ref = useRef(null)
+  const isShift = ["S1","S2","S3"].includes(st)
 
-  const editRoster = (r) => {
-    setEditItem(r)
-    setForm({
-      shift: r.shift,
-      slot1:{name:r.atc1_name||"",unit:r.atc1_unit||br.units[0]||"TWR",sector:r.atc1_sector||"",cwp:r.atc1_cwp||""},
-      slot2:{name:r.atc2_name||"",unit:r.atc2_unit||br.units[0]||"TWR",sector:r.atc2_sector||"",cwp:r.atc2_cwp||""},
-    })
-    setShowForm(true)
-  }
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [onClose])
 
-  const deleteRoster = async (id) => {
-    if (!confirm("Hapus roster ini?")) return
-    await supabase.from("rosters").delete().eq("id",id)
-    logAudit("ROSTER_DELETE","ID:"+id.slice(0,8),ctx.user)
-    await fetchRosters()
-  }
-
-  const openOverride = (roster,slot) => {
-    const name = slot===1 ? roster.atc1_name : roster.atc2_name
-    const unit = slot===1 ? roster.atc1_unit : roster.atc2_unit
-    const sector = slot===1 ? roster.atc1_sector : roster.atc2_sector
-    const cwp = slot===1 ? roster.atc1_cwp : roster.atc2_cwp
-    setOverrideItem({roster,slot})
-    setOverrideForm({name:name||"",unit:unit||br.units[0]||"TWR",sector:sector||"",cwp:cwp||"",reason:""})
-  }
-
-  const saveOverride = async () => {
-    if (!overrideForm.reason.trim()) { alert("Alasan override wajib diisi"); return }
-    setSavingOvr(true)
-    const {roster,slot} = overrideItem
-    const patch = slot===1
-      ? {atc1_name:overrideForm.name,atc1_unit:overrideForm.unit,atc1_sector:overrideForm.sector,atc1_cwp:overrideForm.cwp}
-      : {atc2_name:overrideForm.name,atc2_unit:overrideForm.unit,atc2_sector:overrideForm.sector,atc2_cwp:overrideForm.cwp}
-    const {error} = await supabase.from("rosters").update({
-      ...patch,
-      is_overridden:true,
-      override_reason:overrideForm.reason,
-      overridden_by:ctx.user.display_name,
-      overridden_at:new Date().toISOString(),
-      updated_at:new Date().toISOString(),
-    }).eq("id",roster.id)
-    if (error) alert("Error: "+error.message)
-    else {
-      logAudit("ROSTER_OVERRIDE",`Slot ${slot} ${roster.shift} — Alasan: ${overrideForm.reason}`,ctx.user)
-      setOverrideItem(null); await fetchRosters()
-    }
-    setSavingOvr(false)
-  }
-
-  const SlotForm = ({slotKey,label}) => {
-    const s = form[slotKey]
-    const sectors = getSectorList(s.unit)
-    const cwps = getCwpList(s.unit,s.sector)
-    return (
-      <div style={{background:"var(--bg)",borderRadius:10,padding:14,border:"1px solid var(--border)"}}>
-        <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",marginBottom:10,textTransform:"uppercase",letterSpacing:".5px"}}>{label}</div>
-        <div className="form-grid" style={{gridTemplateColumns:"1fr 1fr"}}>
-          <div className="field"><label>Nama ATC</label>
-            <select value={s.name} onChange={e => setSlot(slotKey,"name",e.target.value)}>
-              <option value="">— Kosong —</option>
-              {myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-            </select>
-          </div>
-          <div className="field"><label>Unit</label>
-            <select value={s.unit} onChange={e => setSlot(slotKey,"unit",e.target.value)}>
-              {br.units.map(u => <option key={u}>{u}</option>)}
-            </select>
-          </div>
-          <div className="field"><label>Sektor</label>
-            <select value={s.sector} onChange={e => setSlot(slotKey,"sector",e.target.value)}>
-              <option value="">— Pilih —</option>
-              {sectors.map(s2 => <option key={s2.id} value={s2.name}>{s2.name}</option>)}
-            </select>
-          </div>
-          <div className="field"><label>CWP</label>
-            <select value={s.cwp} onChange={e => setSlot(slotKey,"cwp",e.target.value)}>
-              <option value="">— Pilih —</option>
-              {cwps.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const existingShifts = rosters.map(r => r.shift)
-  const currentShift = getShiftNow()
+  const top  = Math.min(anchorRect.bottom + 6, window.innerHeight - 320)
+  const left = Math.max(4, Math.min(anchorRect.left - 70, window.innerWidth - 250))
 
   return (
-    <div className="page-content">
-      <Header title="Roster" sub={"Jadwal dinas ATC — "+ctx.user.branch_code}/>
-
-      {/* Date nav */}
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-        <button className="btn btn-ghost btn-sm" onClick={() => { const d=new Date(selDate); d.setDate(d.getDate()-1); setSelDate(d.toISOString().slice(0,10)) }}>‹ Prev</button>
-        <input type="date" value={selDate} onChange={e => setSelDate(e.target.value)} style={{padding:"6px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}/>
-        <button className="btn btn-ghost btn-sm" onClick={() => { const d=new Date(selDate); d.setDate(d.getDate()+1); setSelDate(d.toISOString().slice(0,10)) }}>Next ›</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => setSelDate(new Date().toISOString().slice(0,10))}>Hari Ini</button>
-        {!showForm && <button className="btn btn-primary btn-sm" onClick={() => {setEditItem(null);setForm({shift:"Pagi",slot1:initSlot(),slot2:initSlot()});setShowForm(true)}} style={{marginLeft:"auto"}}><I n="plus" s={14}/> Tambah Roster</button>}
-      </div>
-
-      {/* Form */}
-      {showForm && <div className="panel" style={{animation:"fadeIn .3s ease",marginBottom:20}}>
-        <div className="panel-header"><h2 className="panel-title"><I n="calendar" s={16}/> {editItem?"Edit":"Buat"} Roster — {selDate}</h2></div>
-        <div className="panel-body">
-          <div className="field" style={{marginBottom:16,maxWidth:200}}>
-            <label>Shift</label>
-            <select value={form.shift} onChange={e => setForm(f => ({...f,shift:e.target.value}))}>
-              {SHIFT_NAMES.filter(s => editItem || !existingShifts.includes(s)).map(s => <option key={s} value={s}>{s} ({SHIFT_CONFIG[s].hours})</option>)}
-            </select>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-            <SlotForm slotKey="slot1" label="ATC Slot 1"/>
-            <SlotForm slotKey="slot2" label="ATC Slot 2"/>
-          </div>
-          <div style={{display:"flex",gap:10}}>
-            <button className="btn btn-ghost" onClick={() => {setShowForm(false);setEditItem(null)}}>Batal</button>
-            <button className="btn btn-primary" onClick={saveRoster} disabled={saving}><I n="calendar" s={15}/> {saving?"Menyimpan...":editItem?"Update Roster":"Simpan Roster"}</button>
-          </div>
-        </div>
-      </div>}
-
-      {/* Roster cards */}
-      {loading ? <div className="empty-state"><span className="login-spinner"/></div> :
-      rosters.length===0 ? <div className="panel"><div className="panel-body"><div className="empty-state"><I n="calendar" s={44}/><p>Belum ada roster untuk tanggal ini</p></div></div></div> :
-      <div style={{display:"flex",flexDirection:"column",gap:14}}>
-        {SHIFT_NAMES.map(shiftName => {
-          const r = rosters.find(x => x.shift===shiftName)
-          if (!r) return null
-          const isNow = shiftName === currentShift && selDate === new Date().toISOString().slice(0,10)
-          const sc = SHIFT_CONFIG[shiftName]
+    <div ref={ref} style={{
+      position:"fixed", zIndex:1000, top, left,
+      width:235, background:"#0b1220",
+      border:"1px solid #1e2d45", borderRadius:10,
+      boxShadow:"0 12px 50px #000c", padding:"14px 14px 12px",
+      fontFamily:"'JetBrains Mono','Courier New',monospace",
+    }}>
+      <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,marginBottom:10,textTransform:"uppercase"}}>Atur Jadwal</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
+        {ROSTER_STATUS.map(opt => {
+          const active = st === opt.code
+          const sc = ROSTER_COLORS[opt.code]
           return (
-            <div key={r.id} className="panel" style={{border:isNow?`2px solid ${sc.color}`:"1px solid var(--border)",boxShadow:isNow?`0 0 16px ${sc.color}22`:"none"}}>
-              <div className="panel-header" style={{background:isNow?sc.bg:"transparent"}}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {isNow && <Pulse s={8}/>}
-                  <ShiftBadge shift={shiftName}/>
-                  {isNow && <span style={{fontSize:11,fontWeight:600,color:sc.color}}>SHIFT AKTIF</span>}
-                  {r.is_overridden && <span style={{fontSize:10,background:"#fef2f2",color:"#dc2626",padding:"2px 8px",borderRadius:10,fontWeight:700}}>⚠ Override</span>}
-                </div>
-                <div style={{display:"flex",gap:6}}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => editRoster(r)}><I n="edit" s={13}/></button>
-                  <button className="btn btn-ghost btn-sm" style={{color:"#ef4444"}} onClick={() => deleteRoster(r.id)}><I n="x" s={13}/></button>
-                </div>
-              </div>
-              <div className="panel-body">
-                {r.is_overridden && <div style={{fontSize:11,color:"#dc2626",background:"#fef2f2",padding:"6px 12px",borderRadius:8,marginBottom:12}}>Override oleh {r.overridden_by}: {r.override_reason}</div>}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                  {[{slot:1,name:r.atc1_name,unit:r.atc1_unit,sector:r.atc1_sector,cwp:r.atc1_cwp},
-                    {slot:2,name:r.atc2_name,unit:r.atc2_unit,sector:r.atc2_sector,cwp:r.atc2_cwp}].map(s => (
-                    <div key={s.slot} style={{background:"var(--bg)",borderRadius:10,padding:12,border:"1px solid var(--border)"}}>
-                      <div style={{fontSize:10,fontWeight:700,color:"var(--fg-muted)",marginBottom:6,textTransform:"uppercase"}}>Slot {s.slot}</div>
-                      {s.name ? <>
-                        <div style={{fontSize:15,fontWeight:700,color:"var(--fg)",marginBottom:4}}>{s.name}</div>
-                        <div style={{fontSize:12,color:"var(--fg-muted)"}}><span className="unit-tag" style={{fontSize:10}}>{s.unit}</span> {s.sector} — {s.cwp}</div>
-                        <button className="btn btn-ghost btn-sm" style={{marginTop:8,fontSize:11}} onClick={() => openOverride(r,s.slot)}><I n="swap" s={12}/> Override</button>
-                      </> : <div style={{fontSize:12,color:"var(--fg-muted)",fontStyle:"italic"}}>Kosong</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <button key={opt.code}
+              onClick={() => { setSt(opt.code); if (!["S1","S2","S3"].includes(opt.code)) setSec("") }}
+              style={{
+                padding:"5px 10px", borderRadius:6,
+                border:`1px solid ${active ? sc.border : "#1a2840"}`,
+                background: active ? sc.grad : "#0a1020",
+                color: active ? sc.text : "#3d5a7a",
+                fontSize:11, fontWeight:800, cursor:"pointer",
+                letterSpacing:.5, transition:"all .12s", fontFamily:"inherit",
+              }}
+            >{opt.code}</button>
           )
         })}
-      </div>}
+        <button onClick={() => { setSt(""); setSec("") }}
+          style={{
+            padding:"5px 10px", borderRadius:6, fontFamily:"inherit",
+            border:`1px solid ${!st ? "#334155" : "#1a2840"}`,
+            background:!st ? "#1e2d45" : "#0a1020",
+            color:!st ? "#94a3b8" : "#2a3a50",
+            fontSize:11, fontWeight:700, cursor:"pointer",
+          }}
+        >Kosong</button>
+      </div>
 
-      {/* Override Modal */}
-      {overrideItem && (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-          <div style={{background:"var(--card)",borderRadius:16,padding:24,maxWidth:400,width:"100%",boxShadow:"0 24px 48px rgba(0,0,0,.3)"}}>
-            <h3 style={{margin:"0 0 4px",fontSize:16,fontWeight:700}}>Override Manual</h3>
-            <p style={{margin:"0 0 16px",fontSize:12,color:"var(--fg-muted)"}}>Slot {overrideItem.slot} — Shift {overrideItem.roster.shift}</p>
-            <div className="field"><label>Nama ATC Pengganti</label>
-              <select value={overrideForm.name} onChange={e => setOverrideForm(f=>({...f,name:e.target.value}))}>
-                <option value="">— Pilih —</option>
-                {myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-              </select>
-            </div>
-            <div className="form-grid" style={{gridTemplateColumns:"1fr 1fr"}}>
-              <div className="field"><label>Unit</label>
-                <select value={overrideForm.unit} onChange={e => setOverrideForm(f=>({...f,unit:e.target.value,sector:"",cwp:""}))}>
-                  {br.units.map(u => <option key={u}>{u}</option>)}
-                </select>
-              </div>
-              <div className="field"><label>Sektor</label>
-                <select value={overrideForm.sector} onChange={e => setOverrideForm(f=>({...f,sector:e.target.value,cwp:""}))}>
-                  <option value="">— Pilih —</option>
-                  {getSectorList(overrideForm.unit).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="field"><label>CWP</label>
-              <select value={overrideForm.cwp} onChange={e => setOverrideForm(f=>({...f,cwp:e.target.value}))}>
-                <option value="">— Pilih —</option>
-                {getCwpList(overrideForm.unit,overrideForm.sector).map(c => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="field"><label>Alasan Override <span style={{color:"#ef4444"}}>*</span></label>
-              <input value={overrideForm.reason} onChange={e => setOverrideForm(f=>({...f,reason:e.target.value}))} placeholder="Contoh: Sakit, Tukar shift, Cuti mendadak..."/>
-            </div>
-            <div style={{display:"flex",gap:10,marginTop:16}}>
-              <button className="btn btn-ghost" onClick={() => setOverrideItem(null)}>Batal</button>
-              <button className="btn btn-primary" onClick={saveOverride} disabled={savingOvr||!overrideForm.reason.trim()}>{savingOvr?"Menyimpan...":"Simpan Override"}</button>
+      {isShift && (
+        <>
+          <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,marginBottom:6,textTransform:"uppercase"}}>Sektor</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
+            {[...ROSTER_SECTORS,"—"].map(s => {
+              const active = s==="—" ? !sec : sec===s
+              return (
+                <button key={s} onClick={() => setSec(s==="—" ? "" : s)}
+                  style={{
+                    padding:"3px 9px", borderRadius:5, fontFamily:"inherit",
+                    border:`1px solid ${active ? "#3b82f6" : "#1a2840"}`,
+                    background:active ? "#1e3a5f" : "#0a1020",
+                    color:active ? "#7dd3fc" : "#2a3a50",
+                    fontSize:10, fontWeight:700, cursor:"pointer",
+                  }}
+                >{s}</button>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      <div style={{display:"flex",gap:6}}>
+        <button onClick={() => onSave({ status:st, sector:isShift ? sec : null })}
+          style={{
+            flex:1, padding:"7px 0", borderRadius:6, fontFamily:"inherit",
+            background:"linear-gradient(135deg,#1d4ed8,#1e40af)", border:"none",
+            color:"#fff", fontSize:11, fontWeight:800, cursor:"pointer", letterSpacing:1,
+          }}
+        >SIMPAN</button>
+        <button onClick={onClose}
+          style={{
+            padding:"7px 14px", borderRadius:6, fontFamily:"inherit",
+            background:"transparent", border:"1px solid #1a2840",
+            color:"#3d5a7a", fontSize:11, cursor:"pointer",
+          }}
+        >Batal</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Bulk Input Modal ──
+const RBulkModal = ({ personnel, days, dayHeaders, onApply, onClose }) => {
+  const [st, setSt]      = useState("S1")
+  const [sec, setSec]    = useState("")
+  const [selDays, setSD] = useState([])
+  const [selPpl, setSP]  = useState([])
+  const isShift = ["S1","S2","S3"].includes(st)
+
+  const toggleDay = (d) => setSD(p => p.includes(d) ? p.filter(x=>x!==d) : [...p,d])
+  const togglePer = (id) => setSP(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id])
+  const canApply = st && selDays.length > 0 && selPpl.length > 0
+
+  const smBtn = { padding:"2px 8px", borderRadius:4, cursor:"pointer", background:"#070e1a", border:"1px solid #1a2840", color:"#3d5a7a", fontSize:9, fontWeight:600, fontFamily:"inherit" }
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:2000,background:"#000b",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{
+        background:"#0b1220", border:"1px solid #1e2d45", borderRadius:14,
+        width:"min(740px,100%)", maxHeight:"90vh", overflow:"hidden",
+        display:"flex", flexDirection:"column",
+        fontFamily:"'JetBrains Mono','Courier New',monospace",
+        boxShadow:"0 24px 80px #000a",
+      }}>
+        <div style={{padding:"16px 20px 14px",borderBottom:"1px solid #0f1a2a",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:800,color:"#e2e8f0",letterSpacing:1}}>⚡ Bulk Input Jadwal</div>
+            <div style={{fontSize:9,color:"#3d5a7a",marginTop:3,letterSpacing:1}}>Set jadwal untuk banyak orang / banyak hari sekaligus</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#3d5a7a",fontSize:20,cursor:"pointer",padding:4,lineHeight:1}}>✕</button>
+        </div>
+
+        <div style={{overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:18}}>
+          {/* Status */}
+          <div>
+            <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Status / Shift</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {ROSTER_STATUS.map(opt => {
+                const active = st === opt.code
+                const sc = ROSTER_COLORS[opt.code]
+                return (
+                  <button key={opt.code}
+                    onClick={() => { setSt(opt.code); if (!["S1","S2","S3"].includes(opt.code)) setSec("") }}
+                    style={{
+                      padding:"7px 14px", borderRadius:7, fontFamily:"inherit",
+                      border:`1.5px solid ${active ? sc.border : "#1a2840"}`,
+                      background:active ? sc.grad : "#070e1a",
+                      color:active ? sc.text : "#3d5a7a",
+                      fontSize:12, fontWeight:800, cursor:"pointer", transition:"all .12s",
+                    }}
+                  >
+                    {opt.code} <span style={{fontSize:9,opacity:.7,marginLeft:4}}>{opt.label}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
+
+          {/* Sektor */}
+          {isShift && (
+            <div>
+              <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Sektor (opsional)</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                {[...ROSTER_SECTORS,"—"].map(s => {
+                  const active = s==="—" ? !sec : sec===s
+                  return (
+                    <button key={s} onClick={() => setSec(s==="—" ? "" : s)}
+                      style={{
+                        padding:"4px 12px", borderRadius:5, fontFamily:"inherit",
+                        border:`1px solid ${active ? "#3b82f6" : "#1a2840"}`,
+                        background:active ? "#1e3a5f" : "#070e1a",
+                        color:active ? "#7dd3fc" : "#2a3a50",
+                        fontSize:11, fontWeight:700, cursor:"pointer",
+                      }}
+                    >{s}</button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Pilih Tanggal */}
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase"}}>
+                Pilih Tanggal <span style={{color:"#7dd3fc"}}>({selDays.length} dipilih)</span>
+              </div>
+              <div style={{display:"flex",gap:5}}>
+                <button onClick={() => setSD(Array.from({length:days},(_,i)=>i+1))} style={smBtn}>Semua</button>
+                <button onClick={() => setSD(dayHeaders.filter(d=>d.isWeekend).map(d=>d.day))} style={smBtn}>Weekend</button>
+                <button onClick={() => setSD(dayHeaders.filter(d=>!d.isWeekend).map(d=>d.day))} style={smBtn}>Weekday</button>
+                <button onClick={() => setSD([])} style={{...smBtn,color:"#ef4444",borderColor:"#450a0a"}}>Reset</button>
+              </div>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {dayHeaders.map(({day,name,isWeekend}) => {
+                const sel = selDays.includes(day)
+                return (
+                  <button key={day} onClick={() => toggleDay(day)}
+                    style={{
+                      width:40, height:40, borderRadius:6, cursor:"pointer", fontFamily:"inherit",
+                      border:`1.5px solid ${sel ? "#3b82f6" : isWeekend ? "#0f1a28" : "#1a2840"}`,
+                      background:sel ? "#1e3a5f" : isWeekend ? "#060c14" : "#070e1a",
+                      color:sel ? "#7dd3fc" : isWeekend ? "#1a2840" : "#3d5a7a",
+                      fontSize:10, fontWeight:700,
+                      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:1,
+                    }}
+                  >
+                    <span style={{fontSize:6,opacity:.7}}>{name}</span>
+                    <span style={{fontSize:12}}>{day}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Pilih Personel */}
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <div style={{fontSize:9,color:"#3d5a7a",letterSpacing:2,textTransform:"uppercase"}}>
+                Pilih Personel <span style={{color:"#7dd3fc"}}>({selPpl.length} dipilih)</span>
+              </div>
+              <div style={{display:"flex",gap:5}}>
+                <button onClick={() => setSP(personnel.map(p=>p.id))} style={smBtn}>Semua</button>
+                <button onClick={() => setSP([])} style={{...smBtn,color:"#ef4444",borderColor:"#450a0a"}}>Reset</button>
+              </div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:3,maxHeight:200,overflowY:"auto"}}>
+              {personnel.map(p => {
+                const sel = selPpl.includes(p.id)
+                return (
+                  <button key={p.id} onClick={() => togglePer(p.id)}
+                    style={{
+                      display:"flex", alignItems:"center", gap:10, fontFamily:"inherit",
+                      padding:"6px 10px", borderRadius:6, cursor:"pointer", textAlign:"left",
+                      border:`1px solid ${sel ? "#3b82f6" : "#1a2840"}`,
+                      background:sel ? "#0e1d35" : "#070e1a",
+                      color:sel ? "#93c5fd" : "#3d5a7a",
+                    }}
+                  >
+                    <span style={{
+                      fontSize:9, fontWeight:800,
+                      background:sel ? "#1e3a5f" : "#0f1623",
+                      border:`1px solid ${sel ? "#3b82f6" : "#1a2840"}`,
+                      color:sel ? "#7dd3fc" : "#2a3a50",
+                      padding:"1px 6px", borderRadius:3, letterSpacing:1, minWidth:28, textAlign:"center",
+                    }}>{p.init}</span>
+                    <span style={{fontSize:11,fontWeight:sel?700:400}}>{p.name}</span>
+                    {sel && <span style={{marginLeft:"auto",color:"#3b82f6"}}>✓</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div style={{padding:"12px 20px",borderTop:"1px solid #0f1a2a",display:"flex",gap:8,alignItems:"center"}}>
+          {canApply && (
+            <span style={{fontSize:10,color:"#3d5a7a",flex:1}}>
+              {selPpl.length} orang × {selDays.length} hari = <span style={{color:"#7dd3fc",fontWeight:700}}>{selPpl.length*selDays.length} cell</span> akan diubah
+            </span>
+          )}
+          <button onClick={onClose}
+            style={{padding:"8px 18px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",background:"transparent",border:"1px solid #1a2840",color:"#3d5a7a",fontSize:11,marginLeft:canApply?"0":"auto"}}
+          >Batal</button>
+          <button
+            onClick={() => canApply && onApply({status:st,sector:isShift?sec:null,days:selDays,personIds:selPpl})}
+            disabled={!canApply}
+            style={{
+              padding:"8px 22px", borderRadius:7, fontFamily:"inherit",
+              cursor:canApply?"pointer":"not-allowed",
+              background:canApply?"linear-gradient(135deg,#1d4ed8,#1e40af)":"#0f1a2a",
+              border:"none", color:canApply?"#fff":"#1e2d45",
+              fontSize:11, fontWeight:800, letterSpacing:1,
+            }}
+          >TERAPKAN</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Roster Cell ──
+const RCell = ({ value, onClick, isWeekend, isTodayCol }) => {
+  const s  = value?.status
+  const sc = s ? ROSTER_COLORS[s] : null
+  return (
+    <td onClick={onClick} style={{padding:"4px 3px",background:isWeekend?"#060c17":"transparent",verticalAlign:"middle"}}>
+      <div
+        style={{
+          minWidth:52, height:54,
+          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4,
+          borderRadius:8, cursor:"pointer",
+          border:`1.5px solid ${isTodayCol ? "#60a5fa" : sc ? sc.border : "#0d1828"}`,
+          background:sc ? sc.grad : "transparent",
+          boxShadow:sc ? `0 3px 10px ${sc.dot}28` : "none",
+          outline:isTodayCol ? "2px solid #3b82f640" : "none", outlineOffset:1,
+          transition:"filter .1s",
+        }}
+        onMouseEnter={e => e.currentTarget.style.filter="brightness(1.15)"}
+        onMouseLeave={e => e.currentTarget.style.filter="none"}
+      >
+        {s ? (
+          <>
+            <span style={{fontSize:12,fontWeight:800,color:sc.text,letterSpacing:.5,lineHeight:1}}>{s}</span>
+            {value?.sector && (
+              <span style={{
+                fontSize:8,fontWeight:700,color:sc.dot,letterSpacing:.5,
+                background:`${sc.dot}20`,padding:"1px 5px",borderRadius:3,
+                lineHeight:1.5,border:`1px solid ${sc.dot}35`,
+              }}>{value.sector}</span>
+            )}
+          </>
+        ) : (
+          <span style={{color:"#141f30",fontSize:16}}>·</span>
+        )}
+      </div>
+    </td>
+  )
+}
+
+// ── Main CabangRoster ──
+const CabangRoster = () => {
+  const ctx = useApp()
+  const today = new Date()
+  const user  = ctx.user
+
+  const [viewYear,  setVY] = useState(today.getFullYear())
+  const [viewMonth, setVM] = useState(today.getMonth()+1)
+
+  const [personnel, setPersonnel] = useState([])
+  const [rosterMap, setRosterMap] = useState({})
+  const [rosterIds, setRosterIds] = useState({})
+
+  const [loading,  setLoading]  = useState(false)
+  const [saving,   setSaving]   = useState(false)
+  const [editing,  setEditing]  = useState(null)
+  const [showBulk, setShowBulk] = useState(false)
+  const [unsaved,  setUnsaved]  = useState(false)
+  const [toast,    setToast]    = useState(null)
+
+  const showToast = (msg, type="info", ms=3500) => {
+    setToast({msg,type})
+    setTimeout(() => setToast(null), ms)
+  }
+
+  const days = rGetDays(viewYear, viewMonth)
+
+  const dayHeaders = Array.from({length:days},(_,i) => {
+    const d = new Date(viewYear, viewMonth-1, i+1)
+    return {day:i+1, name:R_DAY_NAMES[d.getDay()], isWeekend:d.getDay()===0||d.getDay()===6}
+  })
+
+  const isTodayCol = (day) =>
+    today.getFullYear()===viewYear && today.getMonth()+1===viewMonth && today.getDate()===day
+
+  // Load personnel dari context (sudah di-load App level)
+  useEffect(() => {
+    const ppl = ctx.personnel
+      .filter(p => p.branch_code === user.branch_code && p.is_active !== false)
+      .map(p => ({...p, init:rMakeInit(p.name)}))
+    setPersonnel(ppl)
+  }, [ctx.personnel, user.branch_code])
+
+  // Load roster dari Supabase
+  const loadRoster = async () => {
+    if (!personnel.length) return
+    setLoading(true)
+    const {data, error} = await supabase
+      .from("rosters")
+      .select("id,personnel_id,schedule")
+      .eq("branch_code", user.branch_code)
+      .eq("year", viewYear)
+      .eq("month", viewMonth)
+
+    if (error) { showToast("Gagal memuat roster: "+error.message,"error"); setLoading(false); return }
+
+    const map={}, ids={}
+    ;(data||[]).forEach(row => {
+      const sch={}
+      Object.entries(row.schedule||{}).forEach(([k,v]) => { sch[parseInt(k)]=v })
+      map[row.personnel_id]=sch
+      ids[row.personnel_id]=row.id
+    })
+    setRosterMap(map)
+    setRosterIds(ids)
+    setUnsaved(false)
+    setLoading(false)
+  }
+
+  useEffect(() => { loadRoster() }, [personnel, viewYear, viewMonth])
+
+  // Edit cell
+  const updateCell = (personId, day, value) => {
+    setRosterMap(prev => ({...prev,[personId]:{...(prev[personId]||{}),[day]:value}}))
+    setUnsaved(true)
+  }
+
+  const handleCellClick = (personId, day, e) => {
+    const rect = e.currentTarget.closest("td").getBoundingClientRect()
+    setEditing({personId, day, rect})
+  }
+
+  const handleCellSave = ({status, sector}) => {
+    if (!editing) return
+    updateCell(editing.personId, editing.day, status ? {status,sector} : null)
+    setEditing(null)
+  }
+
+  // Bulk apply
+  const handleBulkApply = ({status, sector, days:bDays, personIds}) => {
+    setRosterMap(prev => {
+      const next={...prev}
+      personIds.forEach(pid => {
+        next[pid]={...(next[pid]||{})}
+        bDays.forEach(d => { next[pid][d] = status ? {status,sector} : null })
+      })
+      return next
+    })
+    setShowBulk(false)
+    setUnsaved(true)
+    showToast(`${personIds.length} orang × ${bDays.length} hari berhasil diatur`, "info")
+  }
+
+  // Save to Supabase
+  const handleSave = async () => {
+    if (!personnel.length) return
+    setSaving(true)
+    try {
+      const upserts = personnel.map(p => {
+        const base = {
+          branch_code: user.branch_code,
+          personnel_id: p.id,
+          personnel_name: p.name,
+          year: viewYear,
+          month: viewMonth,
+          schedule: rosterMap[p.id]||{},
+          updated_by: user.display_name||user.username||"system",
+        }
+        if (rosterIds[p.id]) base.id = rosterIds[p.id]
+        else base.created_by = user.display_name||user.username||"system"
+        return base
+      })
+
+      const {error} = await supabase
+        .from("rosters")
+        .upsert(upserts, {onConflict:"branch_code,personnel_id,year,month"})
+
+      if (error) throw error
+
+      logAudit("ROSTER_SAVE", `Simpan roster ${R_MONTH_NAMES[viewMonth-1]} ${viewYear} (${personnel.length} personel)`, user)
+      showToast("Roster berhasil disimpan!", "success")
+      setUnsaved(false)
+      await loadRoster()
+    } catch(err) {
+      showToast("Gagal menyimpan: "+err.message, "error")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const changeMonth = (delta) => {
+    if (unsaved && !window.confirm("Ada perubahan belum disimpan. Pindah bulan?")) return
+    let m=viewMonth+delta, y=viewYear
+    if (m>12){m=1;y++} if (m<1){m=12;y--}
+    setVM(m); setVY(y); setUnsaved(false)
+  }
+  const goToday = () => {
+    if (unsaved && !window.confirm("Ada perubahan belum disimpan. Lanjutkan?")) return
+    setVM(today.getMonth()+1); setVY(today.getFullYear()); setUnsaved(false)
+  }
+
+  // Summary hari ini
+  const todaySummary = (() => {
+    if (viewYear!==today.getFullYear()||viewMonth!==today.getMonth()+1) return null
+    const d=today.getDate(), counts={S1:0,S2:0,S3:0,L:0,CUTI:0,DIKLAT:0}
+    personnel.forEach(p => { const s=rosterMap[p.id]?.[d]?.status; if(s&&s in counts) counts[s]++ })
+    return counts
+  })()
+
+  const toastColors = {success:"#16a34a",error:"#dc2626",info:"#2563eb"}
+
+  return (
+    <div className="page-content" style={{fontFamily:"'JetBrains Mono','Fira Code','Courier New',monospace"}}>
+      <style>{`
+        @keyframes rToastIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+        @keyframes rUnsaved { 0%,100%{opacity:1} 50%{opacity:.6} }
+      `}</style>
+      <Header title="Roster Dinas" sub={`Jadwal dinas ATC — ${user.branch_code} · ${R_MONTH_NAMES[viewMonth-1]} ${viewYear}`}/>
+
+      {/* Summary hari ini */}
+      {todaySummary && personnel.length > 0 && (
+        <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+          {Object.entries(todaySummary).map(([k,v]) => {
+            const sc=ROSTER_COLORS[k], so=ROSTER_STATUS.find(o=>o.code===k)
+            return (
+              <div key={k} style={{display:"flex",alignItems:"center",gap:8,background:sc.bg,border:`1px solid ${sc.border}`,borderRadius:8,padding:"5px 12px"}}>
+                <span style={{fontSize:10,fontWeight:800,color:sc.text,letterSpacing:1}}>{k}</span>
+                <span style={{fontSize:20,fontWeight:900,color:sc.dot,lineHeight:1}}>{v}</span>
+                <span style={{fontSize:8,color:sc.text,opacity:.6}}>{so?.label}</span>
+              </div>
+            )
+          })}
+          <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto",background:"#0b1220",border:"1px solid #1a2840",borderRadius:8,padding:"5px 12px"}}>
+            <Pulse s={6}/>
+            <span style={{fontSize:9,color:"#3d5a7a"}}>
+              Hari ini: {R_DAY_NAMES[today.getDay()]}, {today.getDate()} {R_MONTH_NAMES[today.getMonth()]} {today.getFullYear()}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={() => changeMonth(-1)} className="btn btn-ghost btn-sm" style={{fontSize:18,padding:"2px 10px"}}>‹</button>
+          <span style={{fontSize:12,fontWeight:700,color:"#7dd3fc",letterSpacing:2,minWidth:155,textAlign:"center",textTransform:"uppercase"}}>
+            {R_MONTH_NAMES[viewMonth-1]} {viewYear}
+          </span>
+          <button onClick={() => changeMonth(1)} className="btn btn-ghost btn-sm" style={{fontSize:18,padding:"2px 10px"}}>›</button>
+          <button onClick={goToday} className="btn btn-ghost btn-sm">Bulan Ini</button>
+          {unsaved && (
+            <span style={{fontSize:9,padding:"2px 10px",borderRadius:99,background:"#451a03",border:"1px solid #d97706",color:"#fcd34d",letterSpacing:1,fontWeight:700,animation:"rUnsaved 2s ease infinite"}}>
+              ● BELUM DISIMPAN
+            </span>
+          )}
+        </div>
+
+        {/* Legend + actions */}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          {/* Legend */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
+            {ROSTER_STATUS.map(opt => {
+              const sc=ROSTER_COLORS[opt.code]
+              return (
+                <div key={opt.code} style={{display:"flex",alignItems:"center",gap:4}}>
+                  <div style={{width:28,height:18,borderRadius:4,background:sc.grad,border:`1px solid ${sc.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <span style={{fontSize:7,fontWeight:800,color:sc.text}}>{opt.code}</span>
+                  </div>
+                  <span style={{fontSize:9,color:"#3d5a7a"}}>{opt.label}</span>
+                </div>
+              )
+            })}
+          </div>
+
+          <button onClick={() => setShowBulk(true)} className="btn btn-ghost btn-sm"
+            style={{background:"#0b1a2e",border:"1px solid #1d4ed8",color:"#7dd3fc",fontFamily:"inherit"}}
+          >⚡ Bulk Input</button>
+
+          <button onClick={handleSave} disabled={saving||!unsaved}
+            className={unsaved&&!saving ? "btn btn-primary btn-sm" : "btn btn-ghost btn-sm"}
+            style={{fontFamily:"inherit",opacity:saving||!unsaved?.5:1}}
+          >
+            {saving ? "⏳ Menyimpan..." : "💾 Simpan"}
+          </button>
+        </div>
+      </div>
+
+      {/* Loading */}
+      {loading && (
+        <div style={{textAlign:"center",padding:"50px",color:"#3d5a7a",fontSize:11,letterSpacing:2}}>
+          <span className="login-spinner"/> MEMUAT ROSTER...
+        </div>
+      )}
+
+      {/* Table */}
+      {!loading && personnel.length > 0 && (
+        <div style={{overflowX:"auto",borderRadius:10,border:"1px solid #0d1828",boxShadow:"0 4px 40px #00000080"}}>
+          <table style={{borderCollapse:"separate",borderSpacing:0,minWidth:"100%",fontSize:11}}>
+            <thead>
+              <tr style={{background:"#060d1a"}}>
+                <th style={{position:"sticky",left:0,zIndex:20,background:"#060d1a",padding:"10px 10px 8px",textAlign:"left",borderBottom:"1px solid #0d1828",borderRight:"1px solid #0d1828",width:175,minWidth:175}}>
+                  <span style={{color:"#1a2840",fontSize:8,letterSpacing:2,textTransform:"uppercase"}}>Nama</span>
+                </th>
+                <th style={{position:"sticky",left:175,zIndex:20,background:"#060d1a",padding:"10px 6px 8px",textAlign:"center",borderBottom:"1px solid #0d1828",borderRight:"1px solid #0d1828",width:42,minWidth:42}}>
+                  <span style={{color:"#1a2840",fontSize:8,letterSpacing:1}}>Init</span>
+                </th>
+                {dayHeaders.map(({day,name,isWeekend}) => (
+                  <th key={day} style={{padding:"8px 2px 6px",textAlign:"center",borderBottom:"1px solid #0d1828",background:isTodayCol(day)?"#0d1f3a":"#060d1a",minWidth:58,position:"relative"}}>
+                    <div style={{fontSize:7,color:isWeekend?"#141f30":"#1a2840",letterSpacing:1,marginBottom:2,textTransform:"uppercase"}}>{name}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:isTodayCol(day)?"#3b82f6":isWeekend?"#141f30":"#2a3a50",lineHeight:1}}>{day}</div>
+                    {isTodayCol(day) && <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:16,height:2,background:"#3b82f6",borderRadius:1}}/>}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {personnel.map((person,pi) => (
+                <tr key={person.id}
+                  style={{background:pi%2===0?"#070e1c":"#050c18",transition:"background .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="#09142a"}
+                  onMouseLeave={e=>e.currentTarget.style.background=pi%2===0?"#070e1c":"#050c18"}
+                >
+                  <td style={{position:"sticky",left:0,zIndex:5,background:"inherit",padding:"4px 10px",borderRight:"1px solid #0d1828",borderBottom:"1px solid #060c17",whiteSpace:"nowrap"}}>
+                    <span style={{fontSize:11,fontWeight:600,color:"#4b6882",letterSpacing:.3}}>{person.name}</span>
+                  </td>
+                  <td style={{position:"sticky",left:175,zIndex:5,background:"inherit",padding:"4px 6px",textAlign:"center",borderRight:"1px solid #0d1828",borderBottom:"1px solid #060c17"}}>
+                    <span style={{fontSize:9,fontWeight:700,color:"#1a2840",background:"#0b1220",border:"1px solid #141f30",padding:"2px 5px",borderRadius:4,letterSpacing:1}}>
+                      {person.init}
+                    </span>
+                  </td>
+                  {dayHeaders.map(({day,isWeekend}) => (
+                    <RCell key={day}
+                      value={rosterMap[person.id]?.[day]}
+                      isWeekend={isWeekend}
+                      isTodayCol={isTodayCol(day)}
+                      onClick={(e) => handleCellClick(person.id, day, e)}
+                    />
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!loading && personnel.length === 0 && (
+        <div className="panel"><div className="panel-body"><div className="empty-state"><I n="calendar" s={44}/><p>Tidak ada personel aktif untuk cabang ini</p></div></div></div>
+      )}
+
+      {/* Footer info */}
+      {personnel.length > 0 && !loading && (
+        <div style={{marginTop:10,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+          <span style={{fontSize:9,color:"#141f30",letterSpacing:1}}>
+            {personnel.length} personel · {days} hari · klik cell untuk edit
+          </span>
+          {unsaved && <span style={{fontSize:9,color:"#d97706"}}>● Ada perubahan belum tersimpan — tekan Simpan</span>}
+        </div>
+      )}
+
+      {/* Popups */}
+      {editing && (
+        <RCellEditor
+          value={rosterMap[editing.personId]?.[editing.day]}
+          anchorRect={editing.rect}
+          onSave={handleCellSave}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {showBulk && (
+        <RBulkModal
+          personnel={personnel}
+          days={days}
+          dayHeaders={dayHeaders}
+          onApply={handleBulkApply}
+          onClose={() => setShowBulk(false)}
+        />
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position:"fixed",bottom:24,right:20,zIndex:3000,
+          background:"#0b1220",border:`1px solid ${toastColors[toast.type]||toastColors.info}`,
+          borderRadius:8,padding:"10px 18px",boxShadow:"0 8px 30px #000a",
+          fontFamily:"'JetBrains Mono','Courier New',monospace",
+          fontSize:11,color:"#e2e8f0",display:"flex",alignItems:"center",gap:8,
+          animation:"rToastIn .2s ease",
+        }}>
+          <span style={{color:toastColors[toast.type]||toastColors.info,fontSize:14}}>
+            {toast.type==="success"?"✓":toast.type==="error"?"✕":"ℹ"}
+          </span>
+          {toast.msg}
         </div>
       )}
     </div>
   )
 }
 
-// ============================================================
+
 // CABANG: LOG POSITION (with roster auto-fill)
 // ============================================================
 const CabangLog = () => {
