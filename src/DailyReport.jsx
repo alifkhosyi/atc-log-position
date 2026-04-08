@@ -251,12 +251,12 @@ export default function DailyReport() {
     setNotes(data.operational_notes || '');
     if (data.traffic_movements?.length) {
       const m = initMovements();
-      data.traffic_movements.forEach(r => { if (m[r.flight_type]) ALL_COLS.forEach(c => { m[r.flight_type][c.key] = r[c.key] ?? ''; }); });
+      data.traffic_movements.forEach(r => { if (m[r.movement_type]) ALL_COLS.forEach(c => { m[r.movement_type][c.key] = r[c.key] ?? ''; }); });
       setMovements(m);
     }
     if (data.hourly_traffic?.length) {
       const h = Array(24).fill('');
-      data.hourly_traffic.forEach(r => { if (r.hour >= 0 && r.hour < 24) h[r.hour] = r.count ?? ''; });
+      data.hourly_traffic.forEach(r => { if (r.hour_utc >= 0 && r.hour_utc < 24) h[r.hour_utc] = r.total_traffic ?? ''; });
       setHourly(h);
     }
     if (data.operational_disruptions?.length)
@@ -285,12 +285,12 @@ export default function DailyReport() {
         branch_code: userInfo.branch_code, report_date: reportDate, status,
         report_number: secA.reportNumber, period_start: secA.periodStart, period_end: secA.periodEnd,
         unit_name: secA.unitName, manager_name: secA.managerName, location: secA.location, created_by: userInfo.id,
-        condition_general_status: secB.general.status,         condition_general_notes: secB.general.notes,         condition_general_waktu: secB.general.waktu,
-        condition_notam_status: secB.notam.status,             condition_notam_notes: secB.notam.notes,             condition_notam_waktu: secB.notam.waktu,
-        condition_restriction_status: secB.restriction.status, condition_restriction_notes: secB.restriction.notes, condition_restriction_waktu: secB.restriction.waktu,
-        condition_fir_status: secB.fir.status,                 condition_fir_notes: secB.fir.notes,                 condition_fir_waktu: secB.fir.waktu,
-        condition_weather_status: secB.weather.status,         condition_weather_notes: secB.weather.notes,         condition_weather_waktu: secB.weather.waktu,
-        condition_military_status: secB.military.status,       condition_military_notes: secB.military.notes,       condition_military_waktu: secB.military.waktu,
+        condition_general_status: secB.general.status,         condition_general_notes: secB.general.notes,
+        condition_notam_status: secB.notam.status,             condition_notam_notes: secB.notam.notes,
+        condition_restriction_status: secB.restriction.status, condition_restriction_notes: secB.restriction.notes,
+        condition_fir_status: secB.fir.status,                 condition_fir_notes: secB.fir.notes,
+        condition_weather_status: secB.weather.status,         condition_weather_notes: secB.weather.notes,
+        condition_military_status: secB.military.status,       condition_military_notes: secB.military.notes,
         otp_airline_percentage: otp.airline === '' ? null : parseFloat(otp.airline),
         dep_punctuality_percentage: otp.dep === '' ? null : parseFloat(otp.dep),
         arr_punctuality_percentage: otp.arr === '' ? null : parseFloat(otp.arr),
@@ -319,22 +319,22 @@ export default function DailyReport() {
       }
       if (!reportId) throw new Error('Gagal mendapatkan ID laporan. Cek koneksi Supabase dan RLS policy.');
 
-      await supabase.from('traffic_movements').delete().eq('report_id', reportId);
-      await supabase.from('traffic_movements').insert(TRAFFIC_TYPES.map(t => ({ report_id: reportId, flight_type: t.key, ...ALL_COLS.reduce((a, c) => ({ ...a, [c.key]: parseInt(movements[t.key][c.key]) || 0 }), {}) })));
+      await supabase.from('traffic_movements').delete().eq('daily_report_id', reportId);
+      await supabase.from('traffic_movements').insert(TRAFFIC_TYPES.map(t => ({ daily_report_id: reportId, movement_type: t.key, ...ALL_COLS.reduce((a, c) => ({ ...a, [c.key]: parseInt(movements[t.key][c.key]) || 0 }), {}) })));
 
-      const hRows = hourly.map((v, i) => ({ report_id: reportId, hour: i, count: parseInt(v) || 0 })).filter(r => r.count > 0);
-      await supabase.from('hourly_traffic').delete().eq('report_id', reportId);
+      const hRows = hourly.map((v, i) => ({ daily_report_id: reportId, hour_utc: i, total_traffic: parseInt(v) || 0 })).filter(r => r.total_traffic > 0);
+      await supabase.from('hourly_traffic').delete().eq('daily_report_id', reportId);
       if (hRows.length) await supabase.from('hourly_traffic').insert(hRows);
 
-      await supabase.from('operational_disruptions').delete().eq('report_id', reportId);
-      const dRows = disruptions.filter(d => d.total !== '').map(d => ({ report_id: reportId, kategori: d.kategori, total: parseInt(d.total) || 0, tindak_lanjut: d.tindak, keterangan: d.keterangan }));
+      await supabase.from('operational_disruptions').delete().eq('daily_report_id', reportId);
+      const dRows = disruptions.filter(d => d.total !== '').map(d => ({ daily_report_id: reportId, disruption_type: d.kategori, duration_minutes: parseInt(d.total) || 0, description: d.tindak, impact: d.keterangan }));
       if (dRows.length) await supabase.from('operational_disruptions').insert(dRows);
 
-      await supabase.from('communication_systems').delete().eq('report_id', reportId);
-      await supabase.from('communication_systems').insert(COMM_SYSTEMS.map(s => ({ report_id: reportId, system_key: s.key, system_name: s.label, status: secD[s.key].status, notes: secD[s.key].notes })));
+      await supabase.from('communication_systems').delete().eq('daily_report_id', reportId);
+      await supabase.from('communication_systems').insert(COMM_SYSTEMS.map(s => ({ daily_report_id: reportId, system_name: s.label, status: secD[s.key].status, notes: secD[s.key].notes })));
 
-      await supabase.from('incident_reports').delete().eq('report_id', reportId);
-      const iRows = incidents.filter(i => i.jenis || i.waktu).map((i, idx) => ({ report_id: reportId, row_number: idx + 1, incident_time: i.waktu, incident_type: i.jenis, affected_system: i.sistem, duration_minutes: i.durasi, follow_up_action: i.tindakLanjut, keterangan: i.keterangan }));
+      await supabase.from('incident_reports').delete().eq('daily_report_id', reportId);
+      const iRows = incidents.filter(i => i.jenis || i.waktu).map(i => ({ daily_report_id: reportId, incident_time: i.waktu || null, incident_type: i.jenis, affected_system: i.sistem, duration_minutes: parseInt(i.durasi) || null, follow_up_action: i.tindakLanjut, notes: i.keterangan }));
       if (iRows.length) await supabase.from('incident_reports').insert(iRows);
 
       setExistingStatus(status);
