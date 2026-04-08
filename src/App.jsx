@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react"
 import { supabase } from "./supabase.js"
-import Reports from "./Reports.js"
-import DailyReport from "./DailyReport.js"
-import AdminReportMonitoring from "./AdminReportMonitoring.js"
+import Reports from './Reports'
+import DailyReport from './DailyReport'
+import AdminReportMonitoring from './AdminReportMonitoring'
 
 // ============================================================
 // CONTEXT
