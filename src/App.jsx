@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react"
 import { supabase } from "./supabase.js"
+import Reports from "./Reports.js"
+import DailyReport from "./DailyReport.js"
+import AdminReportMonitoring from "./AdminReportMonitoring.js"
 
 // ============================================================
 // CONTEXT
@@ -152,6 +155,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"mon_log",label:"Monitoring Log Position",icon:"monitor"},
     {id:"mon_recap",label:"Monitoring Rekap Traffic",icon:"chart"},
     {id:"mon_handover",label:"Monitoring Handover/Takeover",icon:"checklist"},
+    {id:"mon_reports",label:"Monitoring Daily Reports",icon:"note"},
     {id:"export",label:"Export Laporan",icon:"download"},
     {id:"audit",label:"Audit Log",icon:"shield"},
   ] : [
@@ -159,6 +163,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"log",label:"Log Position",icon:"mic"},
     {id:"rekap",label:"Rekap Traffic",icon:"chart"},
     {id:"handover",label:"Handover/Takeover",icon:"checklist"},
+    {id:"reports",label:"Report",icon:"note"},
   ]
   return (
     <aside className={"sidebar"+(col?" sidebar-collapsed":"")}>
@@ -1900,8 +1905,8 @@ export default function App() {
   if (!user) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat profil...</p><span className="login-spinner"/></div>
 
   const pageMap = user.role === "admin"
-    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
-    : {dashboard:CabangDash,log:CabangLog,rekap:CabangRekap,handover:CabangHandover}
+    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,mon_reports:AdminReportMonitoring,export:AdminExport,audit:AdminAudit}
+    : {dashboard:CabangDash,log:CabangLog,rekap:CabangRekap,handover:CabangHandover,reports:Reports}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
