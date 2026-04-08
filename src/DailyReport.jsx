@@ -297,9 +297,27 @@ export default function DailyReport() {
         operational_notes: notes,
       };
       let reportId = existingId;
-      if (existingId) { await supabase.from('daily_reports').update(payload).eq('id', existingId); }
-      else { const { data: ins } = await supabase.from('daily_reports').insert(payload).select('id').single(); reportId = ins?.id; setExistingId(reportId); }
-      if (!reportId) throw new Error('No report ID');
+      if (existingId) {
+        await supabase.from('daily_reports').update(payload).eq('id', existingId);
+      } else {
+        // Try insert with select — may fail if RLS blocks returning data
+        const { data: ins, error: insErr } = await supabase
+          .from('daily_reports').insert(payload).select('id').single();
+        if (ins?.id) {
+          reportId = ins.id;
+        } else {
+          // Fallback: insert succeeded but RLS blocked select — fetch separately
+          const { data: fetched } = await supabase
+            .from('daily_reports')
+            .select('id')
+            .eq('branch_code', userInfo.branch_code)
+            .eq('report_date', reportDate)
+            .single();
+          reportId = fetched?.id;
+        }
+        if (reportId) setExistingId(reportId);
+      }
+      if (!reportId) throw new Error('Gagal mendapatkan ID laporan. Cek koneksi Supabase dan RLS policy.');
 
       await supabase.from('traffic_movements').delete().eq('report_id', reportId);
       await supabase.from('traffic_movements').insert(TRAFFIC_TYPES.map(t => ({ report_id: reportId, flight_type: t.key, ...ALL_COLS.reduce((a, c) => ({ ...a, [c.key]: parseInt(movements[t.key][c.key]) || 0 }), {}) })));
