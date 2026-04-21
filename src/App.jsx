@@ -1,8 +1,5 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react"
 import { supabase } from "./supabase.js"
-import Reports from './Reports'
-import DailyReport from './DailyReport'
-import AdminReportMonitoring from './AdminReportMonitoring'
 
 // ============================================================
 // CONTEXT
@@ -63,6 +60,7 @@ const ICONS = {
   eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z",
   monitor:"M2 3h20v14H2zM8 21h8M12 17v4",
   building:"M4 2h16v20H4zM9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01",
+  users:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
 }
 const I = ({n,s=18}) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={ICONS[n]||""}/></svg>
 
@@ -154,16 +152,16 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
     {id:"mon_log",label:"Monitoring Log Position",icon:"monitor"},
     {id:"mon_recap",label:"Monitoring Rekap Traffic",icon:"chart"},
+    {id:"mon_personnel",label:"Monitoring Rekap Personel",icon:"users"},
     {id:"mon_handover",label:"Monitoring Handover/Takeover",icon:"checklist"},
-    {id:"mon_reports",label:"Monitoring Daily Reports",icon:"note"},
     {id:"export",label:"Export Laporan",icon:"download"},
     {id:"audit",label:"Audit Log",icon:"shield"},
   ] : [
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
     {id:"log",label:"Log Position",icon:"mic"},
+    {id:"rekap_personnel",label:"Rekap Personel",icon:"users"},
     {id:"rekap",label:"Rekap Traffic",icon:"chart"},
     {id:"handover",label:"Handover/Takeover",icon:"checklist"},
-    {id:"reports",label:"Report",icon:"note"},
   ]
   return (
     <aside className={"sidebar"+(col?" sidebar-collapsed":"")}>
@@ -723,6 +721,177 @@ const CabangRekap = () => {
 }
 
 // ============================================================
+// CABANG: REKAP PERSONEL
+// ============================================================
+const CabangRekapPersonnel = () => {
+  const ctx = useApp()
+  const myLogs = ctx.logs.filter(l => l.branch_code === ctx.user.branch_code && l.off_time)
+  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const [period,setPeriod] = useState("month")
+  const [search,setSearch] = useState("")
+  const [expandedName,setExpandedName] = useState(null)
+  const [sortBy,setSortBy] = useState("hours") // hours | count | traffic
+
+  const filtered = myLogs.filter(l => {
+    const d = (new Date()-new Date(l.on_time))/864e5
+    return period==="today" ? new Date(l.on_time).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
+  })
+
+  // Build per-person stats
+  const byPerson = {}
+  filtered.forEach(l => {
+    const nm = l.atc_name
+    if(!byPerson[nm]) byPerson[nm] = {name:nm,count:0,totalMin:0,dep:0,arr:0,ovf:0,shifts:{Morning:0,Afternoon:0,Night:0},sectors:new Set(),logs:[]}
+    const p = byPerson[nm]
+    p.count++
+    p.totalMin += durMin(l.on_time,l.off_time)
+    p.dep += l.departure_count||0
+    p.arr += l.arrival_count||0
+    p.ovf += l.overfly_count||0
+    if(l.shift) p.shifts[l.shift] = (p.shifts[l.shift]||0)+1
+    if(l.sector) p.sectors.add(l.sector)
+    p.logs.push(l)
+  })
+
+  // Include personnel with 0 activity
+  myPersonnel.forEach(p => {
+    if(!byPerson[p.name]) byPerson[p.name] = {name:p.name,count:0,totalMin:0,dep:0,arr:0,ovf:0,shifts:{Morning:0,Afternoon:0,Night:0},sectors:new Set(),logs:[]}
+  })
+
+  let personList = Object.values(byPerson)
+  if(search) personList = personList.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+
+  // Sort
+  personList.sort((a,b) => {
+    if(sortBy==="hours") return b.totalMin - a.totalMin
+    if(sortBy==="count") return b.count - a.count
+    return (b.dep+b.arr+b.ovf) - (a.dep+a.arr+a.ovf)
+  })
+
+  const totalPersonnel = myPersonnel.length
+  const activePersonnel = Object.values(byPerson).filter(p => p.count > 0).length
+  const totalHours = Math.round(Object.values(byPerson).reduce((a,p) => a+p.totalMin, 0) / 60 * 10) / 10
+  const totalTraffic = Object.values(byPerson).reduce((a,p) => a+p.dep+p.arr+p.ovf, 0)
+  const topMax = personList.length > 0 ? personList[0].totalMin : 1
+
+  const exportCSV = () => {
+    const head = ["Nama","On Mic","Total Jam","Rata-rata (mnt)","DEP","ARR","OVF","Total Traffic","Shift Pagi","Shift Siang","Shift Malam","Sektor"]
+    const rows = personList.map(p => [p.name,p.count,(p.totalMin/60).toFixed(1),p.count?Math.round(p.totalMin/p.count):0,p.dep,p.arr,p.ovf,p.dep+p.arr+p.ovf,p.shifts.Morning||0,p.shifts.Afternoon||0,p.shifts.Night||0,[...p.sectors].join("; ")])
+    const csv = [head.join(","),...rows.map(r => r.join(","))].join("\n")
+    const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"})
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob)
+    a.download = `rekap_personel_${ctx.user.branch_code}_${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(a.href)
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="Rekap Personel" sub={"Statistik personel ATC — "+ctx.user.branch_code}/>
+
+      {/* Filters */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+        <div className="filter-bar" style={{margin:0}}>{[["today","Hari Ini"],["week","7 Hari"],["month","30 Hari"]].map(([k,v]) => <button key={k} className={"filter-btn"+(period===k?" filter-btn-active":"")} onClick={() => setPeriod(k)}>{v}</button>)}</div>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama..." style={{flex:1,minWidth:120,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}/>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}>
+          <option value="hours">Urutkan: Jam Kerja</option>
+          <option value="count">Urutkan: Frekuensi</option>
+          <option value="traffic">Urutkan: Traffic</option>
+        </select>
+      </div>
+
+      {/* Stats */}
+      <div className="stats-grid">
+        <Stat icon="users" label="Total Personel" value={totalPersonnel} sub={activePersonnel+" aktif"} color="#8b5cf6"/>
+        <Stat icon="clock" label="Total Jam Kerja" value={totalHours+" jam"} color="#2563eb"/>
+        <Stat icon="mic" label="Total On Mic" value={filtered.length} sub="periode ini" color="#10b981"/>
+        <Stat icon="plane" label="Total Traffic" value={totalTraffic} color="#f59e0b"/>
+      </div>
+
+      {/* Top 10 Bar Chart */}
+      {personList.filter(p=>p.count>0).length > 0 && <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Top Personel (Jam Kerja)</h2></div>
+        <div className="panel-body"><div className="simple-chart">{personList.filter(p=>p.count>0).slice(0,10).map(p => {
+          const hrs = Math.round(p.totalMin/60*10)/10
+          return <div key={p.name} className="chart-bar-row">
+            <span className="chart-label" style={{minWidth:140,fontSize:11}}>{p.name}</span>
+            <div className="chart-bar-track">
+              <div className="chart-bar-fill" style={{width:((p.totalMin/topMax)*100)+"%"}}>
+                <span className="chart-bar-value">{hrs}h ({p.count}x)</span>
+              </div>
+            </div>
+          </div>
+        })}</div></div>
+      </div>}
+
+      {/* Personnel Table */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Detail Personel</h2><span className="panel-counter">{personList.length}</span></div>
+        <div className="panel-body">
+          {personList.length===0 ? <div className="empty-state"><I n="users" s={44}/><p>Tidak ada data</p></div> :
+          personList.map(p => {
+            const isExp = expandedName === p.name
+            const hrs = Math.round(p.totalMin/60*10)/10
+            const avg = p.count ? Math.round(p.totalMin/p.count) : 0
+            const tc = p.dep+p.arr+p.ovf
+            return (
+              <div key={p.name} className={"handover-card "+(p.count>0?"handover-normal":"handover-normal")} style={{cursor:"pointer",opacity:p.count>0?1:0.5,marginBottom:4}} onClick={() => setExpandedName(isExp?null:p.name)}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontSize:13}}>{isExp?"▾":"▸"}</span>
+                    <strong style={{fontSize:13}}>{p.name}</strong>
+                    {p.count===0 && <span style={{fontSize:10,color:"var(--fg-muted)",fontStyle:"italic"}}>Belum on mic</span>}
+                  </div>
+                  {p.count>0 && <div style={{display:"flex",alignItems:"center",gap:12,fontSize:11,fontWeight:600}}>
+                    <span style={{color:"#2563eb"}}>{hrs} jam</span>
+                    <span style={{color:"#10b981"}}>{p.count}x</span>
+                    <span style={{color:"#0284C7"}}>{p.dep}<span style={{fontWeight:400,fontSize:9}}> D</span></span>
+                    <span style={{color:"#CA8A04"}}>{p.arr}<span style={{fontWeight:400,fontSize:9}}> A</span></span>
+                    <span style={{color:"#64748B"}}>{p.ovf}<span style={{fontWeight:400,fontSize:9}}> O</span></span>
+                  </div>}
+                </div>
+                {isExp && p.count > 0 && (
+                  <div style={{padding:"10px 0 4px",borderTop:"1px solid var(--border)"}}>
+                    {/* Shift distribution */}
+                    <div style={{display:"flex",gap:12,marginBottom:10,fontSize:11}}>
+                      <span>Rata-rata: <strong>{avg} mnt</strong></span>
+                      <span>Pagi: <strong>{p.shifts.Morning||0}</strong></span>
+                      <span>Siang: <strong>{p.shifts.Afternoon||0}</strong></span>
+                      <span>Malam: <strong>{p.shifts.Night||0}</strong></span>
+                      <span>Sektor: <strong>{[...p.sectors].join(", ")||"-"}</strong></span>
+                    </div>
+                    {/* Log detail */}
+                    <div className="table-wrap"><table className="data-table" style={{fontSize:11}}>
+                      <thead><tr><th>Tanggal</th><th>On–Off</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>Durasi</th><th style={{textAlign:"center",color:"#0284C7"}}>D</th><th style={{textAlign:"center",color:"#CA8A04"}}>A</th><th style={{textAlign:"center",color:"#64748B"}}>O</th></tr></thead>
+                      <tbody>{p.logs.sort((a,b)=>new Date(b.on_time)-new Date(a.on_time)).slice(0,20).map(l => (
+                        <tr key={l.id}>
+                          <td style={{whiteSpace:"nowrap"}}>{fmtD(l.on_time)}</td>
+                          <td style={{whiteSpace:"nowrap",color:"var(--fg-muted)"}}>{fmtT(l.on_time)}–{fmtT(l.off_time)}</td>
+                          <td><span className="unit-tag">{l.unit}</span></td>
+                          <td>{l.sector}</td>
+                          <td>{l.cwp}</td>
+                          <td>{durMin(l.on_time,l.off_time)}m</td>
+                          <td style={{textAlign:"center",color:"#0284C7",fontWeight:600}}>{l.departure_count||0}</td>
+                          <td style={{textAlign:"center",color:"#CA8A04",fontWeight:600}}>{l.arrival_count||0}</td>
+                          <td style={{textAlign:"center",color:"#64748B",fontWeight:600}}>{l.overfly_count||0}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table></div>
+                    {p.logs.length > 20 && <div style={{fontSize:10,color:"var(--fg-muted)",marginTop:4}}>Menampilkan 20 terbaru dari {p.logs.length} log</div>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Export */}
+      {personList.filter(p=>p.count>0).length>0 && <button className="btn btn-primary" onClick={exportCSV} style={{marginTop:4}}><I n="download" s={16}/> Export CSV</button>}
+    </div>
+  )
+}
+
+// ============================================================
 // ADMIN: DASHBOARD
 // ============================================================
 const AdminDash = () => {
@@ -1203,6 +1372,190 @@ const AdminMonRecap = () => {
 
       {/* Export */}
       {filtered.length>0 && <button className="btn btn-primary" onClick={exportCSV} style={{marginTop:4}}><I n="download" s={16}/> Export CSV</button>}
+    </div>
+  )
+}
+
+// ============================================================
+// ADMIN: MONITORING REKAP PERSONEL
+// ============================================================
+const AdminMonPersonnel = () => {
+  const ctx = useApp()
+  const [br,setBr] = useState("ALL")
+  const [period,setPeriod] = useState("month")
+  const [search,setSearch] = useState("")
+  const [expandedName,setExpandedName] = useState(null)
+  const [sortBy,setSortBy] = useState("hours")
+
+  const allDone = ctx.logs.filter(l => {
+    if(!l.off_time) return false
+    const brOk = br==="ALL" || l.branch_code===br
+    const d = (new Date()-new Date(l.on_time))/864e5
+    const pOk = period==="today" ? new Date(l.on_time).toDateString()===new Date().toDateString() : period==="week" ? d<=7 : d<=30
+    return brOk && pOk
+  })
+
+  const filteredPersonnel = br==="ALL" ? ctx.personnel : ctx.personnel.filter(p => p.branch_code===br)
+
+  // Build per-person stats
+  const byPerson = {}
+  allDone.forEach(l => {
+    const k = l.atc_name+"||"+l.branch_code
+    if(!byPerson[k]) byPerson[k] = {name:l.atc_name,branch:l.branch_code,count:0,totalMin:0,dep:0,arr:0,ovf:0,shifts:{Morning:0,Afternoon:0,Night:0},sectors:new Set(),logs:[]}
+    const p = byPerson[k]
+    p.count++; p.totalMin += durMin(l.on_time,l.off_time)
+    p.dep += l.departure_count||0; p.arr += l.arrival_count||0; p.ovf += l.overfly_count||0
+    if(l.shift) p.shifts[l.shift] = (p.shifts[l.shift]||0)+1
+    if(l.sector) p.sectors.add(l.sector)
+    p.logs.push(l)
+  })
+
+  // Include personnel with 0 activity
+  filteredPersonnel.forEach(p => {
+    const k = p.name+"||"+p.branch_code
+    if(!byPerson[k]) byPerson[k] = {name:p.name,branch:p.branch_code,count:0,totalMin:0,dep:0,arr:0,ovf:0,shifts:{Morning:0,Afternoon:0,Night:0},sectors:new Set(),logs:[]}
+  })
+
+  let personList = Object.values(byPerson)
+  if(search) personList = personList.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+  personList.sort((a,b) => sortBy==="hours"?b.totalMin-a.totalMin:sortBy==="count"?b.count-a.count:(b.dep+b.arr+b.ovf)-(a.dep+a.arr+a.ovf))
+
+  const activeCount = Object.values(byPerson).filter(p=>p.count>0).length
+  const totalHours = Math.round(Object.values(byPerson).reduce((a,p)=>a+p.totalMin,0)/60*10)/10
+  const totalTraffic = Object.values(byPerson).reduce((a,p)=>a+p.dep+p.arr+p.ovf,0)
+  const topMax = personList.length>0 && personList[0].totalMin>0 ? personList[0].totalMin : 1
+
+  // Per-branch summary
+  const byBranch = {}
+  Object.values(byPerson).filter(p=>p.count>0).forEach(p => {
+    if(!byBranch[p.branch]) byBranch[p.branch] = {personnel:0,hours:0,traffic:0}
+    byBranch[p.branch].personnel++
+    byBranch[p.branch].hours += p.totalMin
+    byBranch[p.branch].traffic += p.dep+p.arr+p.ovf
+  })
+  const brKeys = Object.keys(byBranch).sort((a,b) => byBranch[b].hours-byBranch[a].hours)
+  const brMax = brKeys.length>0 ? byBranch[brKeys[0]].hours : 1
+
+  const getBrName = (code) => { const b=ctx.branches.find(x=>x.code===code); return b?code+" — "+b.city:code }
+
+  return (
+    <div className="page-content">
+      <Header title="Monitoring Rekap Personel" sub="Statistik personel seluruh cabang"/>
+
+      {/* Filters */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
+          <option value="ALL">Semua Cabang</option>
+          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
+        </select>
+        <div className="filter-bar" style={{margin:0}}>{[["today","Hari Ini"],["week","7 Hari"],["month","30 Hari"]].map(([k,v]) => <button key={k} className={"filter-btn"+(period===k?" filter-btn-active":"")} onClick={() => setPeriod(k)}>{v}</button>)}</div>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama..." style={{flex:1,minWidth:120,padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}/>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:12}}>
+          <option value="hours">Jam Kerja</option>
+          <option value="count">Frekuensi</option>
+          <option value="traffic">Traffic</option>
+        </select>
+      </div>
+
+      {/* Stats */}
+      <div className="stats-grid">
+        <Stat icon="users" label="Personel" value={filteredPersonnel.length} sub={activeCount+" aktif"} color="#8b5cf6"/>
+        <Stat icon="clock" label="Total Jam" value={totalHours+" jam"} color="#2563eb"/>
+        <Stat icon="mic" label="Total On Mic" value={allDone.length} color="#10b981"/>
+        <Stat icon="plane" label="Total Traffic" value={totalTraffic} color="#f59e0b"/>
+      </div>
+
+      {/* Per-Branch Summary (only when ALL) */}
+      {br==="ALL" && brKeys.length>0 && <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="building" s={16}/> Jam Kerja Per Cabang</h2><span className="panel-counter">{brKeys.length} cabang</span></div>
+        <div className="panel-body"><div className="simple-chart">{brKeys.map(code => {
+          const d = byBranch[code], hrs = Math.round(d.hours/60*10)/10
+          return <div key={code} className="chart-bar-row">
+            <span className="chart-label" style={{minWidth:130,fontSize:11}}>{getBrName(code)}</span>
+            <div className="chart-bar-track">
+              <div className="chart-bar-fill" style={{width:(d.hours/brMax*100)+"%"}}>
+                <span className="chart-bar-value">{hrs}h • {d.personnel} org • {d.traffic} traffic</span>
+              </div>
+            </div>
+          </div>
+        })}</div></div>
+      </div>}
+
+      {/* Top 10 */}
+      {personList.filter(p=>p.count>0).length>0 && <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Top 10 Personel</h2></div>
+        <div className="panel-body"><div className="simple-chart">{personList.filter(p=>p.count>0).slice(0,10).map(p => {
+          const hrs = Math.round(p.totalMin/60*10)/10
+          return <div key={p.name+p.branch} className="chart-bar-row">
+            <span className="chart-label" style={{minWidth:140,fontSize:11}}>{p.name}{br==="ALL"?<span style={{color:"var(--fg-muted)",fontSize:9,marginLeft:4}}>({p.branch})</span>:""}</span>
+            <div className="chart-bar-track">
+              <div className="chart-bar-fill" style={{width:(p.totalMin/topMax*100)+"%"}}>
+                <span className="chart-bar-value">{hrs}h ({p.count}x)</span>
+              </div>
+            </div>
+          </div>
+        })}</div></div>
+      </div>}
+
+      {/* Personnel Detail Table */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">Detail Personel</h2><span className="panel-counter">{personList.length}</span></div>
+        <div className="panel-body">
+          {personList.length===0 ? <div className="empty-state"><I n="users" s={44}/><p>Tidak ada data</p></div> :
+          personList.map(p => {
+            const isExp = expandedName === p.name+p.branch
+            const hrs = Math.round(p.totalMin/60*10)/10
+            const avg = p.count ? Math.round(p.totalMin/p.count) : 0
+            return (
+              <div key={p.name+p.branch} className="handover-card handover-normal" style={{cursor:"pointer",opacity:p.count>0?1:0.45,marginBottom:4}} onClick={() => setExpandedName(isExp?null:p.name+p.branch)}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontSize:13}}>{isExp?"▾":"▸"}</span>
+                    <strong style={{fontSize:13}}>{p.name}</strong>
+                    {br==="ALL" && <span style={{fontSize:10,color:"var(--fg-muted)",background:"var(--bg)",padding:"1px 6px",borderRadius:6}}>{p.branch}</span>}
+                    {p.count===0 && <span style={{fontSize:10,color:"var(--fg-muted)",fontStyle:"italic"}}>Belum on mic</span>}
+                  </div>
+                  {p.count>0 && <div style={{display:"flex",alignItems:"center",gap:10,fontSize:11,fontWeight:600}}>
+                    <span style={{color:"#2563eb"}}>{hrs}h</span>
+                    <span style={{color:"#10b981"}}>{p.count}x</span>
+                    <span style={{color:"#0284C7"}}>{p.dep}<span style={{fontWeight:400,fontSize:9}}>D</span></span>
+                    <span style={{color:"#CA8A04"}}>{p.arr}<span style={{fontWeight:400,fontSize:9}}>A</span></span>
+                    <span style={{color:"#64748B"}}>{p.ovf}<span style={{fontWeight:400,fontSize:9}}>O</span></span>
+                  </div>}
+                </div>
+                {isExp && p.count>0 && (
+                  <div style={{padding:"10px 0 4px",borderTop:"1px solid var(--border)"}}>
+                    <div style={{display:"flex",gap:12,marginBottom:10,fontSize:11}}>
+                      <span>Rata-rata: <strong>{avg} mnt</strong></span>
+                      <span>Pagi: <strong>{p.shifts.Morning||0}</strong></span>
+                      <span>Siang: <strong>{p.shifts.Afternoon||0}</strong></span>
+                      <span>Malam: <strong>{p.shifts.Night||0}</strong></span>
+                      <span>Sektor: <strong>{[...p.sectors].join(", ")||"-"}</strong></span>
+                    </div>
+                    <div className="table-wrap"><table className="data-table" style={{fontSize:11}}>
+                      <thead><tr><th>Tanggal</th><th>On–Off</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>Durasi</th><th style={{textAlign:"center",color:"#0284C7"}}>D</th><th style={{textAlign:"center",color:"#CA8A04"}}>A</th><th style={{textAlign:"center",color:"#64748B"}}>O</th></tr></thead>
+                      <tbody>{p.logs.sort((a,b)=>new Date(b.on_time)-new Date(a.on_time)).slice(0,20).map(l => (
+                        <tr key={l.id}>
+                          <td style={{whiteSpace:"nowrap"}}>{fmtD(l.on_time)}</td>
+                          <td style={{whiteSpace:"nowrap",color:"var(--fg-muted)"}}>{fmtT(l.on_time)}–{fmtT(l.off_time)}</td>
+                          <td><span className="unit-tag">{l.unit}</span></td>
+                          <td>{l.sector}</td><td>{l.cwp}</td>
+                          <td>{durMin(l.on_time,l.off_time)}m</td>
+                          <td style={{textAlign:"center",color:"#0284C7",fontWeight:600}}>{l.departure_count||0}</td>
+                          <td style={{textAlign:"center",color:"#CA8A04",fontWeight:600}}>{l.arrival_count||0}</td>
+                          <td style={{textAlign:"center",color:"#64748B",fontWeight:600}}>{l.overfly_count||0}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table></div>
+                    {p.logs.length>20 && <div style={{fontSize:10,color:"var(--fg-muted)",marginTop:4}}>20 terbaru dari {p.logs.length}</div>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
@@ -1905,8 +2258,8 @@ export default function App() {
   if (!user) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat profil...</p><span className="login-spinner"/></div>
 
   const pageMap = user.role === "admin"
-    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_handover:AdminMonHandover,mon_reports:AdminReportMonitoring,export:AdminExport,audit:AdminAudit}
-    : {dashboard:CabangDash,log:CabangLog,rekap:CabangRekap,handover:CabangHandover,reports:Reports}
+    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_personnel:AdminMonPersonnel,mon_handover:AdminMonHandover,export:AdminExport,audit:AdminAudit}
+    : {dashboard:CabangDash,log:CabangLog,rekap_personnel:CabangRekapPersonnel,rekap:CabangRekap,handover:CabangHandover}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
