@@ -466,8 +466,8 @@ function ReportDetail({ report, onBack }) {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────
-export default function AdminReportMonitoring() {
+// ─── Main Component (Daily) ──────────────────────────────────
+function DailyMonitoring() {
   const [branches, setBranches]         = useState([]);
   const [reports, setReports]           = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -676,6 +676,257 @@ export default function AdminReportMonitoring() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Monthly Monitoring ──────────────────────────────────────
+function MonthlyMonitoring() {
+  const [branches, setBranches] = useState([]);
+  const [yearMonth, setYearMonth] = useState(new Date().toISOString().substring(0, 7));
+  const [filterBranch, setFilterBranch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [dailyReports, setDailyReports] = useState([]);
+  const [positionLogs, setPositionLogs] = useState([]);
+  const [checklists, setChecklists] = useState([]);
+  const [expandedBranch, setExpandedBranch] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('branches').select('code,name,city').order('code');
+      setBranches(data || []);
+    })();
+  }, []);
+
+  useEffect(() => { loadData(); }, [yearMonth, filterBranch]);
+
+  const loadData = async () => {
+    setLoading(true);
+    const startDate = yearMonth + '-01';
+    const endDate = yearMonth + '-31';
+    let drQ = supabase.from('daily_reports').select('id,branch_code,report_date,status,manager_name,condition_general_status,condition_weather_status,condition_notam_status,operational_notes,traffic_movements(*)').gte('report_date', startDate).lte('report_date', endDate);
+    let plQ = supabase.from('position_logs').select('id,branch_code,atc_name,unit,sector,shift,on_time,off_time,departure_count,arrival_count,overfly_count').gte('on_time', startDate+'T00:00:00').lte('on_time', endDate+'T23:59:59').not('off_time','is',null);
+    let clQ = supabase.from('handover_checklists').select('id,branch_id,checklist_date,shift,traffic_situation_status,conflict_solution_status,weather_status,facilities_status,coordination_status,others_status').gte('checklist_date', startDate).lte('checklist_date', endDate);
+    if (filterBranch) {
+      drQ = drQ.eq('branch_code', filterBranch);
+      plQ = plQ.eq('branch_code', filterBranch);
+    }
+    const [drRes, plRes, clRes] = await Promise.all([drQ, plQ, clQ]);
+    setDailyReports(drRes.data || []);
+    setPositionLogs(plRes.data || []);
+    setChecklists(clRes.data || []);
+    setLoading(false);
+  };
+
+  const monthName = new Date(yearMonth + '-01').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const daysInMonth = new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]), 0).getDate();
+  const filteredBranches = filterBranch ? branches.filter(b => b.code === filterBranch) : branches;
+
+  // Aggregate per branch
+  const branchData = {};
+  filteredBranches.forEach(b => {
+    branchData[b.code] = { reports: 0, submitted: 0, draft: 0, dep: 0, arr: 0, ovf: 0, onMic: 0, totalMin: 0, personnel: new Set(), clOk: 0, clNotOk: 0, incidents: 0 };
+  });
+
+  dailyReports.forEach(dr => {
+    const d = branchData[dr.branch_code];
+    if (!d) return;
+    d.reports++;
+    if (dr.status === 'submitted') d.submitted++;
+    else d.draft++;
+    (dr.traffic_movements || []).forEach(tm => {
+      ALL_COLS.forEach(c => { d[c.key === 'depDom' || c.key === 'depInt' ? 'dep' : c.key === 'arrDom' || c.key === 'arrInt' ? 'arr' : 'ovf'] += parseInt(tm[c.key]) || 0; });
+    });
+  });
+
+  positionLogs.forEach(l => {
+    const d = branchData[l.branch_code];
+    if (!d) return;
+    d.onMic++;
+    d.dep += l.departure_count || 0;
+    d.arr += l.arrival_count || 0;
+    d.ovf += l.overfly_count || 0;
+    d.totalMin += l.off_time ? Math.round((new Date(l.off_time) - new Date(l.on_time)) / 60000) : 0;
+    d.personnel.add(l.atc_name);
+  });
+
+  const CL_ITEMS = ['traffic_situation', 'conflict_solution', 'weather', 'facilities', 'coordination', 'others'];
+  checklists.forEach(cl => {
+    // Match branch by branch_id — we don't have branch_code in checklists easily
+    // So we count globally or match via accounts
+    CL_ITEMS.forEach(it => {
+      const st = cl[it + '_status'];
+      if (st === 'OK') { /* counted globally below */ }
+    });
+  });
+
+  // Global stats
+  const totalReports = dailyReports.length;
+  const totalSubmitted = dailyReports.filter(r => r.status === 'submitted').length;
+  const totalDraft = dailyReports.filter(r => r.status === 'draft').length;
+  const totalBelum = filteredBranches.length * daysInMonth - totalReports;
+  const totalDep = positionLogs.reduce((a, l) => a + (l.departure_count || 0), 0);
+  const totalArr = positionLogs.reduce((a, l) => a + (l.arrival_count || 0), 0);
+  const totalOvf = positionLogs.reduce((a, l) => a + (l.overfly_count || 0), 0);
+  const totalTraffic = totalDep + totalArr + totalOvf;
+  const totalOnMic = positionLogs.length;
+  const totalHours = Math.round(positionLogs.reduce((a, l) => a + (l.off_time ? (new Date(l.off_time) - new Date(l.on_time)) / 3600000 : 0), 0) * 10) / 10;
+
+  // Sort branches by traffic
+  const sortedBranches = [...filteredBranches].sort((a, b) => {
+    const da = branchData[a.code] || {}, db = branchData[b.code] || {};
+    return (db.dep + db.arr + db.ovf) - (da.dep + da.arr + da.ovf);
+  });
+
+  const maxTraffic = Math.max(1, ...sortedBranches.map(b => {
+    const d = branchData[b.code] || {};
+    return (d.dep || 0) + (d.arr || 0) + (d.ovf || 0);
+  }));
+
+  return (
+    <div style={{ paddingBottom: 40 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <span style={{ fontSize: 20 }}>📅</span>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--fg)' }}>Monitoring Monthly Reports</h2>
+          </div>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--fg-muted)' }}>Rekap bulanan semua cabang — {monthName}</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Cabang</div>
+            <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} style={{ padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)', fontSize: 12, minWidth: 160 }}>
+              <option value="">Semua Cabang</option>
+              {branches.map(b => <option key={b.code} value={b.code}>{b.code} — {b.city}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Bulan</div>
+            <input type="month" value={yearMonth} onChange={e => setYearMonth(e.target.value)} style={{ padding: '7px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)', fontSize: 12 }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
+        {[
+          { label: 'Total Traffic', val: totalTraffic, color: '#38bdf8', icon: '✈️' },
+          { label: 'On Mic', val: totalOnMic, color: '#10b981', icon: '🎙️', sub: totalHours + ' jam' },
+          { label: 'Daily Reports', val: totalSubmitted + '/' + (filteredBranches.length * daysInMonth), color: '#8b5cf6', icon: '📋' },
+          { label: 'Handover CL', val: checklists.length, color: '#f59e0b', icon: '📝' },
+        ].map(({ label, val, color, icon, sub }) => (
+          <div key={label} style={{ background: 'var(--card)', border: `1px solid ${color}33`, borderRadius: 12, padding: '16px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: `0 0 16px ${color}12` }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{icon}</div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 3 }}>{label}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color, lineHeight: 1 }}>{val}</div>
+              {sub && <div style={{ fontSize: 10, color: 'var(--fg-muted)', marginTop: 2 }}>{sub}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* DEP / ARR / OVF breakdown */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
+        {[['Departure', totalDep, '#0EA5E9'], ['Arrival', totalArr, '#F59E0B'], ['Overfly', totalOvf, '#64748B']].map(([l, v, c]) => (
+          <div key={l} style={{ background: 'var(--card)', borderRadius: 10, padding: '14px', textAlign: 'center', borderTop: `3px solid ${c}` }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: c }}>{v}</div>
+            <div style={{ fontSize: 11, color: 'var(--fg-muted)', fontWeight: 600 }}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg-muted)' }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>⏳</div><p>Memuat data...</p>
+        </div>
+      ) : (
+        <>
+          {/* Branch Cards */}
+          <Panel title="Rekap Per Cabang" badge={sortedBranches.length + ' cabang'}>
+            {sortedBranches.map(b => {
+              const d = branchData[b.code] || {};
+              const traffic = (d.dep || 0) + (d.arr || 0) + (d.ovf || 0);
+              const hrs = Math.round((d.totalMin || 0) / 60 * 10) / 10;
+              const isExp = expandedBranch === b.code;
+              const pct = d.reports > 0 ? Math.round(d.submitted / d.reports * 100) : 0;
+
+              return (
+                <div key={b.code} style={{ background: 'var(--bg)', borderRadius: 10, border: '1px solid var(--border)', marginBottom: 8, overflow: 'hidden' }}>
+                  <div onClick={() => setExpandedBranch(isExp ? null : b.code)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 13 }}>{isExp ? '▾' : '▸'}</span>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--fg)' }}>{b.code}</span>
+                      <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{b.city}</span>
+                      {d.reports > 0 && <StatusBadge status={pct === 100 ? 'submitted' : pct > 0 ? 'draft' : 'belum'} />}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, fontWeight: 600 }}>
+                      <span style={{ color: '#0EA5E9' }}>{d.dep || 0} <span style={{ fontWeight: 400, fontSize: 9 }}>DEP</span></span>
+                      <span style={{ color: '#F59E0B' }}>{d.arr || 0} <span style={{ fontWeight: 400, fontSize: 9 }}>ARR</span></span>
+                      <span style={{ color: '#64748B' }}>{d.ovf || 0} <span style={{ fontWeight: 400, fontSize: 9 }}>OVF</span></span>
+                      <span style={{ color: 'var(--fg)', fontSize: 14, fontWeight: 800 }}>{traffic}</span>
+                    </div>
+                  </div>
+
+                  {/* Traffic bar */}
+                  {traffic > 0 && <div style={{ height: 4, display: 'flex', gap: 1, marginLeft: 16, marginRight: 16, marginBottom: isExp ? 0 : 8 }}>
+                    <div style={{ width: (d.dep / traffic * 100) + '%', background: '#0EA5E9', borderRadius: 2 }} />
+                    <div style={{ width: (d.arr / traffic * 100) + '%', background: '#F59E0B', borderRadius: 2 }} />
+                    <div style={{ width: (d.ovf / traffic * 100) + '%', background: '#64748B', borderRadius: 2 }} />
+                  </div>}
+
+                  {isExp && (
+                    <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8, marginBottom: 12 }}>
+                        <MiniStat label="Daily Reports" value={d.reports + '/' + daysInMonth} color="#8b5cf6" />
+                        <MiniStat label="Submitted" value={d.submitted} color="#10b981" />
+                        <MiniStat label="Draft" value={d.draft} color="#f59e0b" />
+                        <MiniStat label="On Mic" value={d.onMic} color="#38bdf8" />
+                        <MiniStat label="Jam Kerja" value={hrs + 'h'} color="#0EA5E9" />
+                        <MiniStat label="Personel" value={d.personnel?.size || 0} color="#EC4899" />
+                      </div>
+
+                      {/* Personnel list for this branch */}
+                      {d.personnel?.size > 0 && (
+                        <div style={{ fontSize: 11, color: 'var(--fg-muted)', marginTop: 8 }}>
+                          <strong>Personel aktif:</strong> {[...(d.personnel || [])].join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </Panel>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Wrapper with Tabs ───────────────────────────────────────
+export default function AdminReportMonitoring() {
+  const [tab, setTab] = useState('daily');
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
+        <button onClick={() => setTab('daily')} style={{
+          padding: '8px 16px', background: tab === 'daily' ? '#2563eb' : 'transparent',
+          color: tab === 'daily' ? 'white' : 'var(--fg)', border: 'none', borderRadius: 6,
+          cursor: 'pointer', fontWeight: 600
+        }}>Daily Report</button>
+        <button onClick={() => setTab('monthly')} style={{
+          padding: '8px 16px', background: tab === 'monthly' ? '#2563eb' : 'transparent',
+          color: tab === 'monthly' ? 'white' : 'var(--fg)', border: 'none', borderRadius: 6,
+          cursor: 'pointer', fontWeight: 600
+        }}>Monthly Report</button>
+      </div>
+
+      {tab === 'daily' && <DailyMonitoring />}
+      {tab === 'monthly' && <MonthlyMonitoring />}
     </div>
   );
 }
