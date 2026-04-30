@@ -385,6 +385,15 @@ const STATUS_CLR = {"OK":{bg:"#dcfce7",fg:"#166534",bd:"#86efac"},"Not OK":{bg:"
 const CabangHandover = () => {
   const ctx = useApp()
   const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const [moAccounts,setMoAccounts] = useState([])
+
+  // Fetch MO accounts for this branch
+  useEffect(() => {
+    (async () => {
+      const {data} = await supabase.from('accounts').select('id,username,display_name,branch_code').eq('branch_code', ctx.user.branch_code).like('username','mo_%').order('username')
+      if(data) setMoAccounts(data)
+    })()
+  },[ctx.user.branch_code])
 
   // ── Checklist state ──
   const [showForm,setShowForm] = useState(false)
@@ -463,7 +472,7 @@ const CabangHandover = () => {
           <div className="form-grid">
             <div className="field"><label>Date</label><input type="date" value={f.checklist_date} onChange={e => set("checklist_date",e.target.value)}/></div>
             <div className="field"><label>Time</label><input type="time" value={f.checklist_time} onChange={e => set("checklist_time",e.target.value)}/></div>
-            <div className="field"><label>Manager on Duty</label><select value={f.manager_on_duty} onChange={e => set("manager_on_duty",e.target.value)}><option value="">— Pilih MOD —</option>{myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
+            <div className="field"><label>Manager on Duty</label><select value={f.manager_on_duty} onChange={e => set("manager_on_duty",e.target.value)}><option value="">— Pilih MOD —</option>{moAccounts.map(m => <option key={m.id} value={m.display_name}>{m.display_name}</option>)}</select></div>
             <div className="field"><label>Shift</label><select value={f.shift} onChange={e => set("shift",e.target.value)}><option value="">Pilih...</option><option value="Pagi">Pagi</option><option value="Siang">Siang</option><option value="Malam">Malam</option></select></div>
           </div>
           <div style={{overflowX:"auto",margin:"20px 0"}}>
