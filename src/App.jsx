@@ -2241,7 +2241,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     loadData()
-    const i = setInterval(loadData, 15000)
+    const i = setInterval(loadData, 30000)
     return () => clearInterval(i)
   }, [user])
 
