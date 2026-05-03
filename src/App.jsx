@@ -409,16 +409,37 @@ const CabangHandover = () => {
     facilities_status:"OK",facilities_notes:"",
     coordination_status:"OK",coordination_notes:"",
     others_status:"N/A",others_notes:"",
-    incoming_personnel:"",outgoing_personnel:"",
+    incoming_list:[""],outgoing_list:[""],
   })
   const [f,setF] = useState(initForm())
   const set = (k,v) => setF(p => ({...p,[k]:v}))
+
+  // Helpers for multi-select incoming/outgoing
+  const allSelected = [...f.incoming_list, ...f.outgoing_list].filter(n => n.trim())
+  const setListItem = (listKey, idx, val) => {
+    setF(p => { const arr = [...p[listKey]]; arr[idx] = val; return {...p, [listKey]: arr} })
+  }
+  const addListItem = (listKey) => {
+    setF(p => p[listKey].length < 30 ? {...p, [listKey]: [...p[listKey], ""]} : p)
+  }
+  const removeListItem = (listKey, idx) => {
+    setF(p => { const arr = p[listKey].filter((_,i) => i !== idx); return {...p, [listKey]: arr.length === 0 ? [""] : arr} })
+  }
+  const availablePersonnel = (listKey, idx) => {
+    const currentVal = f[listKey][idx]
+    return myPersonnel.filter(p => !allSelected.includes(p.name) || p.name === currentVal)
+  }
   const myChecklists = ctx.handoverChecklists.filter(c => c.branch_id === ctx.user.id)
 
   const submitCL = async () => {
-    if(!f.manager_on_duty.trim()||!f.incoming_personnel.trim()||!f.outgoing_personnel.trim()){alert("Mohon isi Manager on Duty, Incoming & Outgoing Personnel");return}
+    const incList = f.incoming_list.filter(n => n.trim())
+    const outList = f.outgoing_list.filter(n => n.trim())
+    if(!f.manager_on_duty.trim()||incList.length===0||outList.length===0){alert("Mohon isi Manager on Duty, minimal 1 Incoming & 1 Outgoing Personnel");return}
     setSavingCL(true)
-    const {error} = await supabase.from("handover_checklists").insert({...f, branch_id:ctx.user.id, created_by:ctx.user.id})
+    const submitData = {...f, incoming_personnel: incList.join(", "), outgoing_personnel: outList.join(", ")}
+    delete submitData.incoming_list
+    delete submitData.outgoing_list
+    const {error} = await supabase.from("handover_checklists").insert({...submitData, branch_id:ctx.user.id, created_by:ctx.user.id})
     if(error) alert("Error: "+error.message)
     else {logAudit("CHECKLIST_CREATE","Shift "+f.shift+" MOD:"+f.manager_on_duty,ctx.user);setF(initForm());setShowForm(false);await ctx.reload()}
     setSavingCL(false)
@@ -497,13 +518,31 @@ const CabangHandover = () => {
             </table>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,padding:"20px 0",borderTop:"2px solid var(--border)"}}>
-            <div style={{textAlign:"center"}}>
-              <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Incoming Personnel</div>
-              <select value={f.incoming_personnel} onChange={e => set("incoming_personnel",e.target.value)} style={{padding:"10px",borderRadius:4,border:"1px solid var(--border)",borderBottom:"2px solid var(--fg)",fontSize:14,fontWeight:600,textAlign:"center",width:"100%",background:"var(--card)",color:"var(--fg)"}}><option value="">— Pilih —</option>{myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Incoming Personnel ({f.incoming_list.filter(n=>n.trim()).length})</div>
+              {f.incoming_list.map((name, idx) => (
+                <div key={idx} style={{display:"flex",gap:4,marginBottom:6,alignItems:"center"}}>
+                  <select value={name} onChange={e => setListItem("incoming_list",idx,e.target.value)} style={{flex:1,padding:"8px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}>
+                    <option value="">— Pilih —</option>
+                    {availablePersonnel("incoming_list",idx).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                  {f.incoming_list.length > 1 && <button type="button" onClick={() => removeListItem("incoming_list",idx)} style={{width:28,height:28,borderRadius:6,border:"1px solid var(--border)",background:"transparent",color:"#ef4444",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}
+                </div>
+              ))}
+              {f.incoming_list.length < 30 && <button type="button" onClick={() => addListItem("incoming_list")} className="btn btn-ghost btn-sm" style={{fontSize:11,marginTop:2}}>+ Add More</button>}
             </div>
-            <div style={{textAlign:"center"}}>
-              <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Outgoing Personnel</div>
-              <select value={f.outgoing_personnel} onChange={e => set("outgoing_personnel",e.target.value)} style={{padding:"10px",borderRadius:4,border:"1px solid var(--border)",borderBottom:"2px solid var(--fg)",fontSize:14,fontWeight:600,textAlign:"center",width:"100%",background:"var(--card)",color:"var(--fg)"}}><option value="">— Pilih —</option>{myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:"var(--fg-muted)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Outgoing Personnel ({f.outgoing_list.filter(n=>n.trim()).length})</div>
+              {f.outgoing_list.map((name, idx) => (
+                <div key={idx} style={{display:"flex",gap:4,marginBottom:6,alignItems:"center"}}>
+                  <select value={name} onChange={e => setListItem("outgoing_list",idx,e.target.value)} style={{flex:1,padding:"8px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}>
+                    <option value="">— Pilih —</option>
+                    {availablePersonnel("outgoing_list",idx).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                  {f.outgoing_list.length > 1 && <button type="button" onClick={() => removeListItem("outgoing_list",idx)} style={{width:28,height:28,borderRadius:6,border:"1px solid var(--border)",background:"transparent",color:"#ef4444",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}
+                </div>
+              ))}
+              {f.outgoing_list.length < 30 && <button type="button" onClick={() => addListItem("outgoing_list")} className="btn btn-ghost btn-sm" style={{fontSize:11,marginTop:2}}>+ Add More</button>}
             </div>
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:12}}>
@@ -545,8 +584,8 @@ const CabangHandover = () => {
                     ))}</tbody>
                   </table>
                   <div style={{display:"flex",gap:24,marginTop:12,padding:12,background:"var(--bg)",borderRadius:8}}>
-                    <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase"}}>Incoming</div><div style={{fontSize:14,fontWeight:700,marginTop:4,paddingTop:4,borderTop:"1.5px solid var(--fg)",display:"inline-block",minWidth:100}}>{cl.incoming_personnel}</div></div>
-                    <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase"}}>Outgoing</div><div style={{fontSize:14,fontWeight:700,marginTop:4,paddingTop:4,borderTop:"1.5px solid var(--fg)",display:"inline-block",minWidth:100}}>{cl.outgoing_personnel}</div></div>
+                    <div style={{flex:1}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase",marginBottom:4}}>Incoming ({(cl.incoming_personnel||"").split(",").filter(n=>n.trim()).length})</div>{(cl.incoming_personnel||"").split(",").map((n,i) => n.trim() && <div key={i} style={{fontSize:13,fontWeight:600,color:"var(--fg)",padding:"2px 0"}}>• {n.trim()}</div>)}</div>
+                    <div style={{flex:1}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase",marginBottom:4}}>Outgoing ({(cl.outgoing_personnel||"").split(",").filter(n=>n.trim()).length})</div>{(cl.outgoing_personnel||"").split(",").map((n,i) => n.trim() && <div key={i} style={{fontSize:13,fontWeight:600,color:"var(--fg)",padding:"2px 0"}}>• {n.trim()}</div>)}</div>
                   </div>
                 </div>
               )}
@@ -1660,8 +1699,8 @@ const AdminMonHandover = () => {
                       ))}</tbody>
                     </table>
                     <div style={{display:"flex",gap:24,marginTop:12,padding:12,background:"var(--bg)",borderRadius:8}}>
-                      <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase"}}>Incoming</div><div style={{fontSize:14,fontWeight:700,marginTop:4,paddingTop:4,borderTop:"1.5px solid var(--fg)",display:"inline-block",minWidth:100}}>{cl.incoming_personnel}</div></div>
-                      <div style={{flex:1,textAlign:"center"}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase"}}>Outgoing</div><div style={{fontSize:14,fontWeight:700,marginTop:4,paddingTop:4,borderTop:"1.5px solid var(--fg)",display:"inline-block",minWidth:100}}>{cl.outgoing_personnel}</div></div>
+                      <div style={{flex:1}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase",marginBottom:4}}>Incoming ({(cl.incoming_personnel||"").split(",").filter(n=>n.trim()).length})</div>{(cl.incoming_personnel||"").split(",").map((n,i) => n.trim() && <div key={i} style={{fontSize:13,fontWeight:600,color:"var(--fg)",padding:"2px 0"}}>• {n.trim()}</div>)}</div>
+                      <div style={{flex:1}}><div style={{fontSize:10,fontWeight:600,color:"var(--fg-muted)",textTransform:"uppercase",marginBottom:4}}>Outgoing ({(cl.outgoing_personnel||"").split(",").filter(n=>n.trim()).length})</div>{(cl.outgoing_personnel||"").split(",").map((n,i) => n.trim() && <div key={i} style={{fontSize:13,fontWeight:600,color:"var(--fg)",padding:"2px 0"}}>• {n.trim()}</div>)}</div>
                     </div>
                   </div>
                 )}
