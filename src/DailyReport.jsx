@@ -64,7 +64,7 @@ const SECTIONS = [
   { id: 'A', label: 'Identifikasi',  icon: '📄' },
   { id: 'B', label: 'Kondisi Ops',   icon: '🌐' },
   { id: 'C', label: 'Traffic',       icon: '✈️' },
-  { id: 'D', label: 'Komunikasi',    icon: '📡' },
+  { id: 'D', label: 'Peralatan',    icon: '📡' },
   { id: 'E', label: 'Insiden',       icon: '⚠️' },
   { id: 'F', label: 'Catatan',       icon: '📝' },
 ];
@@ -73,7 +73,7 @@ const emptyTrafficRow = () => ALL_COLS.reduce((a, c) => ({ ...a, [c.key]: '' }),
 const emptyIncident   = () => ({ waktu: '', jenis: '', sistem: '', durasi: '', tindakLanjut: '', keterangan: '' });
 const initMovements   = () => TRAFFIC_TYPES.reduce((a, t) => ({ ...a, [t.key]: emptyTrafficRow() }), {});
 const initSecB        = () => OPERATIONAL_ASPECTS.reduce((a, x) => ({ ...a, [x.key]: { status: 'Normal', notes: '', waktu: '' } }), {});
-const initSecD        = () => COMM_SYSTEMS.reduce((a, s) => ({ ...a, [s.key]: { status: 'Operational', notes: '' } }), {});
+const initSecD        = () => COMM_SYSTEMS.reduce((a, s) => ({ ...a, [s.key]: { status: 'Normal', notes: '' } }), {});
 
 // ─── Sub-components ───────────────────────────────────────────
 const StatusBadge = ({ status }) => {
@@ -82,7 +82,6 @@ const StatusBadge = ({ status }) => {
     Perhatian: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
     Gangguan: { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
     Operational: { bg: 'rgba(16,185,129,0.15)', color: '#10b981' },
-    Degraded: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
     Unserviceable: { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
     draft: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
     submitted: { bg: 'rgba(16,185,129,0.15)', color: '#10b981' },
@@ -189,18 +188,17 @@ export default function DailyReport() {
   const [existingId, setExistingId]         = useState(null);
   const [existingStatus, setExistingStatus] = useState(null);
 
-  const [secA, setSecA]             = useState({ reportNumber: '', periodStart: '0000', periodEnd: '2359', unitName: '', managerName: '', location: '' });
+  const [secA, setSecA]             = useState({ reportNumber: '', unitName: '', managerName: '', location: '' });
   const [secB, setSecB]             = useState(initSecB());
   const [movements, setMovements]   = useState(initMovements());
   const [hourly, setHourly]         = useState(Array(24).fill(''));
-  const [disruptions, setDisruptions] = useState([
-    { kategori: 'BOS', total: '', tindak: '', keterangan: '' },
-    { kategori: 'BOC', total: '', tindak: '', keterangan: '' },
-    { kategori: 'INCONVENIENCE', total: '', tindak: '', keterangan: '' },
-  ]);
   const [otp, setOtp]               = useState({ airline: '', dep: '', arr: '' });
   const [secD, setSecD]             = useState(initSecD());
-  const [incidents, setIncidents]   = useState(Array(5).fill(null).map(emptyIncident));
+  const [commSystems, setCommSystems] = useState(() => {
+    try { const saved = localStorage.getItem('commSystems_custom'); if (saved) return JSON.parse(saved); } catch {}
+    return [...COMM_SYSTEMS];
+  });
+  const [incidents, setIncidents]   = useState([emptyIncident()]);
   const [notes, setNotes]           = useState('');
 
   useEffect(() => {
@@ -211,7 +209,7 @@ export default function DailyReport() {
       if (!acc) return;
       setUserInfo(acc);
       const { data: br } = await supabase.from('branches').select('*').eq('code', acc.branch_code).single();
-      if (br) { setBranchInfo(br); setSecA(p => ({ ...p, unitName: br.name || '', location: br.city || '' })); }
+      if (br) { setBranchInfo(br); setSecA(p => ({ ...p, unitName: br.name || '', location: br.city || '', managerName: acc.display_name || '' })); }
     })();
   }, []);
 
@@ -230,15 +228,14 @@ export default function DailyReport() {
   }, [reportDate, userInfo]);
 
   const resetForm = () => {
-    setSecA(p => ({ ...p, reportNumber: '', periodStart: '0000', periodEnd: '2359', managerName: '' }));
+    setSecA(p => ({ ...p, reportNumber: '' }));
     setSecB(initSecB()); setMovements(initMovements()); setHourly(Array(24).fill(''));
-    setDisruptions([{ kategori: 'BOS', total: '', tindak: '', keterangan: '' }, { kategori: 'BOC', total: '', tindak: '', keterangan: '' }, { kategori: 'INCONVENIENCE', total: '', tindak: '', keterangan: '' }]);
     setOtp({ airline: '', dep: '', arr: '' }); setSecD(initSecD());
-    setIncidents(Array(5).fill(null).map(emptyIncident)); setNotes('');
+    setIncidents([emptyIncident()]); setNotes('');
   };
 
   const populateForm = (data) => {
-    setSecA({ reportNumber: data.report_number || '', periodStart: data.period_start || '0000', periodEnd: data.period_end || '2359', unitName: data.unit_name || '', managerName: data.manager_name || '', location: data.location || '' });
+    setSecA(p => ({ ...p, reportNumber: data.report_number || '', unitName: data.unit_name || p.unitName, managerName: data.manager_name || p.managerName, location: data.location || p.location }));
     setSecB({
       general:     { status: data.condition_general_status || 'Normal',     notes: data.condition_general_notes || '',     waktu: data.condition_general_waktu || '' },
       notam:       { status: data.condition_notam_status || 'Normal',       notes: data.condition_notam_notes || '',       waktu: data.condition_notam_waktu || '' },
@@ -259,17 +256,13 @@ export default function DailyReport() {
       data.hourly_traffic.forEach(r => { if (r.hour_utc >= 0 && r.hour_utc < 24) h[r.hour_utc] = r.total_traffic ?? ''; });
       setHourly(h);
     }
-    if (data.operational_disruptions?.length)
-      setDisruptions(data.operational_disruptions.map(d => ({ kategori: d.kategori, total: d.total ?? '', tindak: d.tindak_lanjut || '', keterangan: d.keterangan || '' })));
     if (data.communication_systems?.length) {
       const d = initSecD();
       data.communication_systems.forEach(s => { if (d[s.system_key]) d[s.system_key] = { status: s.status, notes: s.notes || '' }; });
       setSecD(d);
     }
     if (data.incident_reports?.length) {
-      const inc = Array(5).fill(null).map(emptyIncident);
-      data.incident_reports.forEach((r, i) => { if (i < 5) inc[i] = { waktu: r.incident_time || '', jenis: r.incident_type || '', sistem: r.affected_system || '', durasi: r.duration_minutes || '', tindakLanjut: r.follow_up_action || '', keterangan: r.keterangan || '' }; });
-      setIncidents(inc);
+      setIncidents(data.incident_reports.map(r => ({ waktu: r.incident_time || '', jenis: r.incident_type || '', sistem: r.affected_system || '', durasi: r.duration_minutes || '', tindakLanjut: r.follow_up_action || '', keterangan: r.keterangan || '' })));
     }
   };
 
@@ -281,9 +274,10 @@ export default function DailyReport() {
     if (!userInfo) return;
     setSaving(true); setSaveMsg(null);
     try {
+      const autoReportNumber = secA.reportNumber || `RPT/${userInfo.branch_code}/${reportDate.replace(/-/g, '')}`;
       const payload = {
         branch_code: userInfo.branch_code, report_date: reportDate, status,
-        report_number: secA.reportNumber, period_start: secA.periodStart, period_end: secA.periodEnd,
+        report_number: autoReportNumber,
         unit_name: secA.unitName, manager_name: secA.managerName, location: secA.location, created_by: userInfo.id,
         condition_general_status: secB.general.status,         condition_general_notes: secB.general.notes,
         condition_notam_status: secB.notam.status,             condition_notam_notes: secB.notam.notes,
@@ -326,12 +320,8 @@ export default function DailyReport() {
       await supabase.from('hourly_traffic').delete().eq('daily_report_id', reportId);
       if (hRows.length) await supabase.from('hourly_traffic').insert(hRows);
 
-      await supabase.from('operational_disruptions').delete().eq('daily_report_id', reportId);
-      const dRows = disruptions.filter(d => d.total !== '').map(d => ({ daily_report_id: reportId, disruption_type: d.kategori, duration_minutes: parseInt(d.total) || 0, description: d.tindak, impact: d.keterangan }));
-      if (dRows.length) await supabase.from('operational_disruptions').insert(dRows);
-
       await supabase.from('communication_systems').delete().eq('daily_report_id', reportId);
-      await supabase.from('communication_systems').insert(COMM_SYSTEMS.map(s => ({ daily_report_id: reportId, system_name: s.label, status: secD[s.key].status, notes: secD[s.key].notes })));
+      await supabase.from('communication_systems').insert(commSystems.map(s => ({ daily_report_id: reportId, system_key: s.key, system_name: s.label, status: secD[s.key]?.status || 'Normal', notes: secD[s.key]?.notes || '' })));
 
       await supabase.from('incident_reports').delete().eq('daily_report_id', reportId);
       const iRows = incidents.filter(i => i.jenis || i.waktu).map(i => ({ daily_report_id: reportId, incident_time: i.waktu || null, incident_type: i.jenis, affected_system: i.sistem, duration_minutes: parseInt(i.durasi) || null, follow_up_action: i.tindakLanjut, notes: i.keterangan }));
@@ -349,11 +339,31 @@ export default function DailyReport() {
   const updateSecD     = (k, f, v)  => setSecD(p => ({ ...p, [k]: { ...p[k], [f]: v } }));
   const updateInc      = (i, f, v)  => setIncidents(p => p.map((x, idx) => idx === i ? { ...x, [f]: v } : x));
 
+  // Persist commSystems changes to localStorage
+  useEffect(() => {
+    try { localStorage.setItem('commSystems_custom', JSON.stringify(commSystems)); } catch {}
+  }, [commSystems]);
+
+  const removeCommSystem = (key) => {
+    setCommSystems(p => p.filter(s => s.key !== key));
+    setSecD(p => { const n = { ...p }; delete n[key]; return n; });
+  };
+
+  const addCommSystem = () => {
+    const id = 'custom_' + Date.now();
+    setCommSystems(p => [...p, { key: id, label: '' }]);
+    setSecD(p => ({ ...p, [id]: { status: 'Normal', notes: '' } }));
+  };
+
+  const renameCommSystem = (key, newLabel) => {
+    setCommSystems(p => p.map(s => s.key === key ? { ...s, label: newLabel } : s));
+  };
+
   const sIdx     = SECTIONS.findIndex(s => s.id === activeSection);
   const goNext   = () => sIdx < SECTIONS.length - 1 && setActiveSection(SECTIONS[sIdx + 1].id);
   const goPrev   = () => sIdx > 0 && setActiveSection(SECTIONS[sIdx - 1].id);
   const bProblems = OPERATIONAL_ASPECTS.filter(a => secB[a.key].status !== 'Normal').length;
-  const dProblems = COMM_SYSTEMS.filter(s => secD[s.key].status !== 'Operational').length;
+  const dProblems = commSystems.filter(s => secD[s.key] && secD[s.key].status !== 'Normal').length;
 
   return (
     <div style={{ paddingBottom: 100 }}>
@@ -426,29 +436,17 @@ export default function DailyReport() {
             <Field label="Tanggal Laporan">
               <Inp type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} />
             </Field>
-            <Field label="Nomor Laporan">
-              <Inp placeholder="Contoh: RPT/WIII/20260408" value={secA.reportNumber}
-                onChange={e => setSecA(p => ({ ...p, reportNumber: e.target.value }))} />
+            <Field label="Nomor Laporan (Auto)">
+              <Inp value={secA.reportNumber || `RPT/${userInfo?.branch_code || '____'}/${reportDate.replace(/-/g, '')}`} disabled
+                style={{ background: 'rgba(56,189,248,0.06)', color: '#38bdf8', fontWeight: 700, cursor: 'not-allowed' }} />
             </Field>
           </div>
-          <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Periode UTC</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Field label="Dari" flex={1}>
-                <Inp placeholder="0000" maxLength={4} value={secA.periodStart} onChange={e => setSecA(p => ({ ...p, periodStart: e.target.value }))} />
-              </Field>
-              <span style={{ color: 'var(--fg-muted)', fontWeight: 700, marginTop: 16 }}>—</span>
-              <Field label="Sampai" flex={1}>
-                <Inp placeholder="2359" maxLength={4} value={secA.periodEnd} onChange={e => setSecA(p => ({ ...p, periodEnd: e.target.value }))} />
-              </Field>
-            </div>
-          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-            <Field label="Unit"><Inp value={secA.unitName} onChange={e => setSecA(p => ({ ...p, unitName: e.target.value }))} /></Field>
-            <Field label="Lokasi"><Inp value={secA.location} onChange={e => setSecA(p => ({ ...p, location: e.target.value }))} /></Field>
+            <Field label="Unit"><Inp value={secA.unitName} disabled style={{ cursor: 'not-allowed', opacity: 0.7 }} /></Field>
+            <Field label="Lokasi"><Inp value={secA.location} disabled style={{ cursor: 'not-allowed', opacity: 0.7 }} /></Field>
           </div>
           <Field label="Manager Operasi">
-            <Inp value={secA.managerName} onChange={e => setSecA(p => ({ ...p, managerName: e.target.value }))} style={{ maxWidth: 400 }} />
+            <Inp value={secA.managerName} disabled style={{ maxWidth: 400, cursor: 'not-allowed', opacity: 0.7 }} />
           </Field>
         </Panel>
       )}
@@ -560,20 +558,7 @@ export default function DailyReport() {
             </div>
           </Panel>
 
-          <Panel badge="C.2" title="Gangguan Operasional Penerbangan">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {disruptions.map((d, i) => (
-                <div key={d.kategori} style={{ display: 'grid', gridTemplateColumns: '130px 90px 1fr 1fr', gap: 10, alignItems: 'center', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.01)' }}>
-                  <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--fg)' }}>{d.kategori}</span>
-                  <SmInp type="number" min="0" placeholder="Total" value={d.total} onChange={e => setDisruptions(p => p.map((x, idx) => idx === i ? { ...x, total: e.target.value } : x))} />
-                  <SmInp placeholder="Tindak Lanjut..." value={d.tindak} style={{ textAlign: 'left' }} onChange={e => setDisruptions(p => p.map((x, idx) => idx === i ? { ...x, tindak: e.target.value } : x))} />
-                  <SmInp placeholder="Keterangan..." value={d.keterangan} style={{ textAlign: 'left' }} onChange={e => setDisruptions(p => p.map((x, idx) => idx === i ? { ...x, keterangan: e.target.value } : x))} />
-                </div>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel badge="C.3" title="Kinerja Ketepatan Waktu Operasional">
+          <Panel badge="C.2" title="Kinerja Ketepatan Waktu Operasional">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
               {[['airline', 'OTP Airline', '#38bdf8'], ['dep', 'DEP Punctuality', '#10b981'], ['arr', 'ARR Punctuality', '#f59e0b']].map(([k, label, color]) => (
                 <div key={k} style={{ background: color + '0d', border: `1px solid ${color}33`, borderRadius: 12, padding: '20px 16px', textAlign: 'center', boxShadow: `0 0 16px ${color}10` }}>
@@ -590,37 +575,52 @@ export default function DailyReport() {
         </>
       )}
 
-      {/* ══ D — KOMUNIKASI ══ */}
+      {/* ══ D — PERALATAN ══ */}
       {activeSection === 'D' && (
-        <Panel badge="D" title="Laporan Komunikasi Penerbangan"
+        <Panel badge="D" title="Laporan Peralatan"
           glow={dProblems > 0 ? '#f59e0b' : '#10b981'}
           action={dProblems > 0
             ? <span style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {dProblems} tidak normal</span>
-            : <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Operational</span>
+            : <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Normal</span>
           }>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {COMM_SYSTEMS.map(s => {
-              const d = secD[s.key];
-              const notOp = d.status !== 'Operational';
-              const dotColor = d.status === 'Operational' ? '#10b981' : d.status === 'Degraded' ? '#f59e0b' : '#ef4444';
+            {commSystems.map(s => {
+              const d = secD[s.key] || { status: 'Normal', notes: '' };
+              const notOp = d.status !== 'Normal';
+              const dotColor = d.status === 'Normal' ? '#10b981' : '#ef4444';
+              const isCustom = s.key.startsWith('custom_');
               return (
                 <div key={s.key} style={{
-                  display: 'grid', gridTemplateColumns: '230px 1fr 200px', gap: 12, alignItems: 'center',
+                  display: 'grid', gridTemplateColumns: '230px 1fr 200px 32px', gap: 12, alignItems: 'center',
                   padding: '12px 14px', borderRadius: 10,
                   border: `1px solid ${notOp ? 'rgba(245,158,11,0.35)' : 'var(--border)'}`,
                   background: notOp ? 'rgba(245,158,11,0.04)' : 'rgba(255,255,255,0.01)', transition: 'all .2s',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, boxShadow: `0 0 6px ${dotColor}`, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{s.label}</span>
+                    {isCustom ? (
+                      <SmInp placeholder="Nama peralatan..." value={s.label} style={{ textAlign: 'left', fontWeight: 600, fontSize: 13 }}
+                        onChange={e => renameCommSystem(s.key, e.target.value)} />
+                    ) : (
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{s.label}</span>
+                    )}
                   </div>
                   <StatusToggle value={d.status} onChange={v => updateSecD(s.key, 'status', v)}
-                    options={[['Operational', 'Operational', '#10b981'], ['Degraded', 'Degraded', '#f59e0b'], ['Unserviceable', 'U/S', '#ef4444']]} />
+                    options={[['Normal', 'Normal', '#10b981'], ['Unserviceable', 'U/S', '#ef4444']]} />
                   <SmInp placeholder="Keterangan..." value={d.notes} style={{ textAlign: 'left' }} onChange={e => updateSecD(s.key, 'notes', e.target.value)} />
+                  <button type="button" onClick={() => removeCommSystem(s.key)} title="Hapus peralatan" style={{
+                    width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)',
+                    background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontSize: 14, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .15s',
+                  }}>×</button>
                 </div>
               );
             })}
           </div>
+          <button type="button" onClick={addCommSystem} style={{
+            marginTop: 12, padding: '9px 16px', borderRadius: 8, border: '1px dashed var(--border)',
+            background: 'transparent', color: '#38bdf8', fontSize: 12, fontWeight: 600, cursor: 'pointer', width: '100%',
+          }}>+ Tambah Peralatan</button>
         </Panel>
       )}
 
@@ -704,10 +704,6 @@ export default function DailyReport() {
           Step {sIdx + 1} / {SECTIONS.length} — {SECTIONS[sIdx].icon} {SECTIONS[sIdx].label}
         </span>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" onClick={() => handleSave('draft')} disabled={saving} style={{
-            padding: '9px 22px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)',
-            color: 'var(--fg)', fontWeight: 700, fontSize: 13, cursor: 'pointer',
-          }}>💾 {saving ? 'Menyimpan...' : 'Simpan Draft'}</button>
           <button type="button" onClick={() => handleSave('submitted')} disabled={saving} style={{
             padding: '9px 26px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
             color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 0 16px rgba(37,99,235,0.4)',
