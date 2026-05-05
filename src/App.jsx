@@ -243,7 +243,10 @@ const CabangLog = () => {
   const [nmSearch,setNmSearch] = useState("")
   const [nmOpen,setNmOpen] = useState(false)
   const nmRef = useRef(null)
-  const filteredPersonnel = myPersonnel.filter(p => p.name.toLowerCase().includes(nmSearch.toLowerCase()))
+  const filteredPersonnel = [
+    ...myPersonnel.filter(p => p.name.toLowerCase().startsWith(nmSearch.toLowerCase())),
+    ...myPersonnel.filter(p => !p.name.toLowerCase().startsWith(nmSearch.toLowerCase()) && p.name.toLowerCase().includes(nmSearch.toLowerCase()))
+  ]
 
   useEffect(() => {
     const handleClick = (e) => { if (nmRef.current && !nmRef.current.contains(e.target)) setNmOpen(false) }
