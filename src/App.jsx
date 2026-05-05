@@ -2281,21 +2281,33 @@ export default function App() {
     setLoading(false)
   }
 
+  const fetchAllPersonnel = async () => {
+    let all = [], from = 0, batchSize = 1000
+    while (true) {
+      const { data } = await supabase.from("personnel").select("id,name,branch_code").eq("is_active",true).order("name").range(from, from + batchSize - 1)
+      if (!data || data.length === 0) break
+      all = all.concat(data)
+      if (data.length < batchSize) break
+      from += batchSize
+    }
+    return all
+  }
+
   const loadData = async () => {
-    const [brRes, secRes, logRes, hoRes, hcRes, pRes] = await Promise.all([
+    const [brRes, secRes, logRes, hoRes, hcRes] = await Promise.all([
       supabase.from("branches").select("*").order("code"),
       supabase.from("sectors").select("*").order("sort_order"),
       supabase.from("position_logs").select("*").order("on_time",{ascending:false}).limit(500),
       supabase.from("handover_notes").select("*").order("created_at",{ascending:false}).limit(200),
       supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
-      supabase.from("personnel").select("id,name,branch_code").eq("is_active",true).order("name").limit(5000),
     ])
+    const allPersonnel = await fetchAllPersonnel()
     if (brRes.data) setBranches(brRes.data)
     if (secRes.data) setSectors(secRes.data)
     if (logRes.data) setLogs(logRes.data)
     if (hoRes.data) setHandovers(hoRes.data)
     if (hcRes.data) setHandoverChecklists(hcRes.data)
-    if (pRes.data) setPersonnel(pRes.data)
+    if (allPersonnel.length) setPersonnel(allPersonnel)
   }
 
   // Load data + auto refresh
