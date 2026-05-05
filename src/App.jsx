@@ -240,6 +240,19 @@ const CabangLog = () => {
   const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
   const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
 
+  const [nmSearch,setNmSearch] = useState("")
+  const [nmOpen,setNmOpen] = useState(false)
+  const nmRef = useRef(null)
+  const filteredPersonnel = myPersonnel.filter(p => p.name.toLowerCase().includes(nmSearch.toLowerCase()))
+
+  useEffect(() => {
+    const handleClick = (e) => { if (nmRef.current && !nmRef.current.contains(e.target)) setNmOpen(false) }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
+  const selectPerson = (name) => { setNm(name); setNmSearch(name); setNmOpen(false) }
+
   const [unit,setUnit] = useState(br.units[0]||"TWR")
   const [nm,setNm] = useState("")
   const [show,setShow] = useState(false)
@@ -271,7 +284,7 @@ const CabangLog = () => {
       logged_by: ctx.user.id
     })
     if (error) alert("Error: " + error.message)
-    else { logAudit("ON_MIC",nm.trim()+" — "+unit+" "+unitSectors[si]?.name+" ("+cwps[ci]+")",ctx.user); await ctx.reload(); setNm(""); setShow(false) }
+    else { logAudit("ON_MIC",nm.trim()+" — "+unit+" "+unitSectors[si]?.name+" ("+cwps[ci]+")",ctx.user); await ctx.reload(); setNm(""); setNmSearch(""); setShow(false) }
     setSaving(false)
   }
 
@@ -345,7 +358,7 @@ const CabangLog = () => {
         <div className="panel-header"><h2 className="panel-title">Form On Mic</h2></div>
         <div className="panel-body">
           <div className="form-grid">
-            <div className="field"><label>Nama ATC</label><select value={nm} onChange={e => setNm(e.target.value)}><option value="">— Pilih personel —</option>{myPersonnel.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
+            <div className="field"><label>Nama ATC</label><div ref={nmRef} style={{position:"relative"}}><input type="text" placeholder="Ketik nama..." value={nmSearch} onChange={e => {setNmSearch(e.target.value);setNm("");setNmOpen(true)}} onFocus={() => setNmOpen(true)} style={{width:"100%"}} autoComplete="off"/>{nmOpen && <div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:220,overflowY:"auto",background:"var(--panel-bg,#1e293b)",border:"1px solid var(--border,#334155)",borderRadius:8,marginTop:4,zIndex:999,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>{filteredPersonnel.length===0?<div style={{padding:"12px 16px",color:"var(--fg-muted,#94a3b8)",fontSize:13}}>Tidak ditemukan</div>:filteredPersonnel.map(p => <div key={p.id} onClick={() => selectPerson(p.name)} style={{padding:"10px 16px",cursor:"pointer",fontSize:13,color:"var(--fg,#e2e8f0)",borderBottom:"1px solid var(--border,#1e293b)",transition:"background .15s"}} onMouseEnter={e => e.target.style.background="rgba(56,189,248,0.1)"} onMouseLeave={e => e.target.style.background="transparent"}>{p.name}</div>)}</div>}</div></div>
             <div className="field"><label>Unit</label><select value={unit} onChange={e => {setUnit(e.target.value);setSi(0);setCi(0)}}>{br.units.map(u => <option key={u}>{u}</option>)}</select></div>
             <div className="field"><label>Sektor</label><select value={si} onChange={e => {setSi(+e.target.value);setCi(0)}}>{unitSectors.map((s,i) => <option key={i} value={i}>{s.name}</option>)}</select></div>
             <div className="field"><label>CWP</label><select value={ci} onChange={e => setCi(+e.target.value)}>{cwps.map((c,i) => <option key={i} value={i}>{c}</option>)}</select></div>
