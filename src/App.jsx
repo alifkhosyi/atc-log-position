@@ -2275,7 +2275,7 @@ export default function App() {
       supabase.from("position_logs").select("*").order("on_time",{ascending:false}).limit(500),
       supabase.from("handover_notes").select("*").order("created_at",{ascending:false}).limit(200),
       supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
-      supabase.from("personnel").select("id,name,branch_code").eq("is_active",true).order("name"),
+      supabase.from("personnel").select("id,name,branch_code").eq("is_active",true).order("name").limit(5000),
     ])
     if (brRes.data) setBranches(brRes.data)
     if (secRes.data) setSectors(secRes.data)
