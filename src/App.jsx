@@ -881,15 +881,24 @@ const CabangRekapPersonnel = () => {
         <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Top Personel (Jam Kerja)</h2></div>
         <div className="panel-body"><div className="simple-chart">{personList.filter(p=>p.count>0).slice(0,10).map(p => {
           const hrs = Math.round(p.totalMin/60*10)/10
-          return <div key={p.name} className="chart-bar-row">
-            <span className="chart-label" style={{minWidth:140,fontSize:11}}>{p.name}</span>
+          const traffic = p.dep+p.arr+p.ovf
+          return <div key={p.name} style={{display:"grid",gridTemplateColumns:"140px 1fr 70px 50px 50px",gap:8,alignItems:"center",marginBottom:6}}>
+            <span style={{fontSize:11,fontWeight:600,color:"var(--fg)",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
             <div className="chart-bar-track">
-              <div className="chart-bar-fill" style={{width:((p.totalMin/topMax)*100)+"%"}}>
-                <span className="chart-bar-value">{hrs}h ({p.count}x)</span>
-              </div>
+              <div className="chart-bar-fill" style={{width:((p.totalMin/topMax)*100)+"%",minWidth:4}}/>
             </div>
+            <span style={{fontSize:12,fontWeight:700,color:"#38bdf8",textAlign:"right"}}>{hrs} jam</span>
+            <span style={{fontSize:11,fontWeight:600,color:"#a78bfa",textAlign:"center"}}>{p.count}x</span>
+            <span style={{fontSize:11,fontWeight:600,color:"#94a3b8",textAlign:"center"}}>{traffic>0?traffic+"t":"—"}</span>
           </div>
-        })}</div></div>
+        })}</div>
+        <div style={{display:"grid",gridTemplateColumns:"140px 1fr 70px 50px 50px",gap:8,borderTop:"1px solid var(--border)",paddingTop:8,marginTop:4}}>
+          <span/><span/>
+          <span style={{fontSize:9,fontWeight:700,color:"var(--fg-muted)",textAlign:"right",textTransform:"uppercase",letterSpacing:".5px"}}>Jam</span>
+          <span style={{fontSize:9,fontWeight:700,color:"var(--fg-muted)",textAlign:"center",textTransform:"uppercase",letterSpacing:".5px"}}>On Mic</span>
+          <span style={{fontSize:9,fontWeight:700,color:"var(--fg-muted)",textAlign:"center",textTransform:"uppercase",letterSpacing:".5px"}}>Traffic</span>
+        </div>
+        </div>
       </div>}
 
       {/* Personnel Table */}
