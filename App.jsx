@@ -166,6 +166,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"rekap_personnel",label:"Rekap Personel",icon:"users"},
     {id:"rekap",label:"Rekap Traffic",icon:"chart"},
     {id:"handover",label:"Handover/Takeover",icon:"checklist"},
+    {id:"ho_to_mo",label:"HO/TO MO",icon:"shield"},
     {id:"reports",label:"Report",icon:"note"},
   ]
   return (
@@ -243,7 +244,10 @@ const CabangLog = () => {
   const [nmSearch,setNmSearch] = useState("")
   const [nmOpen,setNmOpen] = useState(false)
   const nmRef = useRef(null)
-  const filteredPersonnel = myPersonnel.filter(p => p.name.toLowerCase().includes(nmSearch.toLowerCase()))
+  const filteredPersonnel = [
+    ...myPersonnel.filter(p => p.name.toLowerCase().startsWith(nmSearch.toLowerCase())),
+    ...myPersonnel.filter(p => !p.name.toLowerCase().startsWith(nmSearch.toLowerCase()) && p.name.toLowerCase().includes(nmSearch.toLowerCase()))
+  ]
 
   useEffect(() => {
     const handleClick = (e) => { if (nmRef.current && !nmRef.current.contains(e.target)) setNmOpen(false) }
@@ -876,17 +880,27 @@ const CabangRekapPersonnel = () => {
       {/* Top 10 Bar Chart */}
       {personList.filter(p=>p.count>0).length > 0 && <div className="panel">
         <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Top Personel (Jam Kerja)</h2></div>
-        <div className="panel-body"><div className="simple-chart">{personList.filter(p=>p.count>0).slice(0,10).map(p => {
+        <div className="panel-body">
+        <div style={{display:"grid",gridTemplateColumns:"140px 1fr 60px 50px 50px",gap:8,marginBottom:8,paddingBottom:8,borderBottom:"1px solid var(--border)"}}>
+          <span/><span/>
+          <span style={{fontSize:9,fontWeight:700,color:"var(--fg-muted)",textAlign:"right",textTransform:"uppercase",letterSpacing:".5px"}}>Jam</span>
+          <span style={{fontSize:9,fontWeight:700,color:"var(--fg-muted)",textAlign:"center",textTransform:"uppercase",letterSpacing:".5px"}}>On Mic</span>
+          <span style={{fontSize:9,fontWeight:700,color:"var(--fg-muted)",textAlign:"center",textTransform:"uppercase",letterSpacing:".5px"}}>Traffic</span>
+        </div>
+        <div className="simple-chart">{personList.filter(p=>p.count>0).slice(0,10).map(p => {
           const hrs = Math.round(p.totalMin/60*10)/10
-          return <div key={p.name} className="chart-bar-row">
-            <span className="chart-label" style={{minWidth:140,fontSize:11}}>{p.name}</span>
+          const traffic = p.dep+p.arr+p.ovf
+          return <div key={p.name} style={{display:"grid",gridTemplateColumns:"140px 1fr 60px 50px 50px",gap:8,alignItems:"center",marginBottom:6}}>
+            <span style={{fontSize:11,fontWeight:600,color:"var(--fg)",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
             <div className="chart-bar-track">
-              <div className="chart-bar-fill" style={{width:((p.totalMin/topMax)*100)+"%"}}>
-                <span className="chart-bar-value">{hrs}h ({p.count}x)</span>
-              </div>
+              <div className="chart-bar-fill" style={{width:((p.totalMin/topMax)*100)+"%",minWidth:4}}/>
             </div>
+            <span style={{fontSize:12,fontWeight:700,color:"#38bdf8",textAlign:"right"}}>{hrs}</span>
+            <span style={{fontSize:11,fontWeight:600,color:"#a78bfa",textAlign:"center"}}>{p.count}x</span>
+            <span style={{fontSize:11,fontWeight:600,color:"#94a3b8",textAlign:"center"}}>{traffic>0?traffic:"—"}</span>
           </div>
-        })}</div></div>
+        })}</div>
+        </div>
       </div>}
 
       {/* Personnel Table */}
@@ -953,6 +967,254 @@ const CabangRekapPersonnel = () => {
 
       {/* Export */}
       {personList.filter(p=>p.count>0).length>0 && <button className="btn btn-primary" onClick={exportCSV} style={{marginTop:4}}><I n="download" s={16}/> Export CSV</button>}
+    </div>
+  )
+}
+
+// ============================================================
+// CABANG: HO/TO MO (Pre-Shift, Handover, Post-Shift Checklists)
+// ============================================================
+const MO_PRE_SHIFT = [
+  {no:1,item:"Kehadiran personel",std:"Seluruh personel hadir minimal 30 menit sebelum shift. Keterlambatan dicatat."},
+  {no:2,item:"Fit for duty personel",std:"Setiap personel diverifikasi langsung: fisik/mental, bebas alkohol/obat, tidak fatigue. Personel tidak fit dikeluarkan sebelum shift dimulai."},
+  {no:3,item:"Larangan bertugas pasca-kejadian",std:"Personel pasca-BOS, near collision, atau accident tidak dijadwalkan di posisi kerja sesuai SOP."},
+  {no:4,item:"Trafik & flow management",std:"Volume trafik, sequencing, proyeksi shift, dan slot/CTOT bila ada — disampaikan dari sumber primer."},
+  {no:5,item:"Cuaca & prakiraan",std:"QAM/METAR/TAF terkini, visibility, wind, prakiraan signifikan. Trend yang mempengaruhi kapasitas disampaikan."},
+  {no:6,item:"Status fasilitas",std:"COM/NAV/SUR/ATMAS, lighting, power supply, degraded mode. Status 'normal' dikonfirmasi — tidak diasumsikan."},
+  {no:7,item:"NOTAM & pembatasan ruang udara",std:"NOTAM aktif dan pembatasan ruang udara beserta implikasi operasionalnya disampaikan kepada seluruh personel."},
+  {no:8,item:"Koordinasi ongoing",std:"Pending/ongoing coordination dengan adjacent units, ATFM, INMC, militer, dan otoritas bandara."},
+  {no:9,item:"Operasi khusus",std:"VIP, militer, emergency, training, calibration, atau test flight yang terjadwal selama shift."},
+  {no:10,item:"Prosedur khusus berlaku",std:"Contingency plan, reduced separation, prosedur sementara, runway change, atau sector reconfiguration yang aktif."},
+  {no:11,item:"Penugasan posisi & rotasi FRMS",std:"Position log final dibagikan. Rotasi (2 jam Controller / 3 jam Assistant) ditetapkan dan dipahami seluruh personel."},
+  {no:12,item:"Outstanding issue",std:"Pending issue shift sebelumnya, ASOR berproses, dan korespondensi penting disampaikan secara eksplisit."},
+  {no:13,item:"Tanya jawab",std:"Seluruh personel diberi kesempatan bertanya sehingga memahami isi briefing dan siap bertugas."},
+  {no:14,item:"Closing confirmation",std:"Doa bersama atau persiapan mental yang berlaku di unit dilaksanakan."},
+]
+const MO_HANDOVER = [
+  {no:1,item:"Kehadiran Incoming Manager",std:"Hadir minimal 30 menit sebelum jadwal."},
+  {no:2,item:"Observasi situasional mandiri",std:"Minimal 5 menit observasi langsung tanpa intervensi Outgoing Manager (trafik, konfigurasi, cuaca, fasilitas, koordinasi berjalan, potensi konflik)."},
+  {no:3,item:"Kondisi trafik menyeluruh",std:"Outgoing Manager menyampaikan gambaran lengkap seluruh sektor/posisi, sequencing, dan flow management secara eksplisit."},
+  {no:4,item:"Konflik & mitigasi aktif",std:"Potensi konflik, tindakan yang sedang berjalan, dan koordinasi yang perlu dilanjutkan disampaikan secara spesifik."},
+  {no:5,item:"Cuaca & prakiraan",std:"Kondisi cuaca signifikan saat ini dan prakiraan untuk shift mendatang beserta implikasinya."},
+  {no:6,item:"Status fasilitas",std:"Gangguan, malfunction, atau service interruption yang berlangsung — termasuk unit teknis yang sudah dihubungi."},
+  {no:7,item:"Koordinasi belum tuntas",std:"Outstanding coordination dengan adjacent units, ATFM, INMC, militer, atau otoritas bandara — spesifik dan dapat ditindaklanjuti."},
+  {no:8,item:"Isu personel",std:"Kelelahan, performa menurun, kondisi khusus, personel tidak fit, kebutuhan rotasi tambahan — disampaikan faktual."},
+  {no:9,item:"Operasi khusus / VIP / militer",std:"Flight plan khusus yang sedang atau akan berlangsung dan kebutuhan koordinasinya."},
+  {no:10,item:"Pending administrative issue",std:"ASOR berproses, instruksi pimpinan, korespondensi penting yang perlu ditindaklanjuti."},
+  {no:11,item:"Verifikasi dokumentasi",std:"Incoming Manager memverifikasi langsung: ATS Logbook, position log, managerial logbook, dan catatan insiden hingga waktu takeover."},
+]
+const MO_POST_SHIFT = [
+  {no:1,item:"Kehadiran seluruh personel",std:"Seluruh personel shift hadir. Absensi dicatat."},
+  {no:2,item:"Ringkasan operasional",std:"Trafik, momen kritis, dan unusual events disampaikan ringkas dan faktual."},
+  {no:3,item:"Safety & hazard",std:"Safety occurrences, deviasi prosedur, hazard, dan mitigasi yang dilakukan — disampaikan terbuka."},
+  {no:4,item:"Ringkasan cuaca",std:"Cuaca signifikan/perubahan forecast yang mempengaruhi operasional selama shift."},
+  {no:5,item:"Ringkasan fasilitas",std:"Malfunction, maintenance action, atau service interruption beserta tindak lanjut yang sudah dilakukan."},
+  {no:6,item:"Koordinasi",std:"Koordinasi selesai diverifikasi. Outstanding coordination dicatat dalam managerial logbook."},
+  {no:7,item:"Evaluasi performa tim",std:"Performa, beban kerja, dan dinamika teamwork dievaluasi secara konstruktif."},
+  {no:8,item:"Verifikasi dokumentasi",std:"ATS Logbook, position log, handover sheet, ASOR, dan catatan insiden diverifikasi lengkap sebelum review ditutup."},
+  {no:9,item:"Tindak lanjut keselamatan",std:"Jika terdapat isu keselamatan, inisiasi mekanisme SMS/pelaporan sebelum Post Briefing ditutup."},
+  {no:10,item:"Lesson learned",std:"Pembelajaran kunci dari shift dicatat untuk shift berikutnya."},
+  {no:11,item:"Umpan balik personel",std:"Seluruh personel diberi kesempatan menyampaikan feedback."},
+  {no:12,item:"Managerial logbook",std:"Catatan managerial logbook (pending issue, outstanding coordination, rekomendasi) selesai disusun sebelum review ditutup."},
+  {no:13,item:"Penutupan shift",std:"Apresiasi kepada Tim ditutup Doa bersama."},
+]
+const MO_TABS = [
+  {id:"pre_shift",label:"Pre-Shift Briefing",items:MO_PRE_SHIFT,icon:"📋"},
+  {id:"handover",label:"Handover/Takeover",items:MO_HANDOVER,icon:"🔄"},
+  {id:"post_shift",label:"Post-Shift Briefing",items:MO_POST_SHIFT,icon:"📝"},
+]
+
+const CabangHoToMo = () => {
+  const ctx = useApp()
+  const [activeTab,setActiveTab] = useState("pre_shift")
+  const [showForm,setShowForm] = useState(false)
+  const [saving,setSaving] = useState(false)
+  const [history,setHistory] = useState([])
+  const [checkDate,setCheckDate] = useState(new Date().toISOString().slice(0,10))
+  const [shift,setShift] = useState("")
+  const [notes,setNotes] = useState("")
+
+  const currentTab = MO_TABS.find(t => t.id === activeTab)
+  const initChecks = () => currentTab.items.reduce((a,it) => ({...a,[it.no]:null}),{})
+  const [checks,setChecks] = useState(initChecks())
+
+  useEffect(() => { setChecks(initChecks()); setShowForm(false) }, [activeTab])
+
+  const moAccounts = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+
+  // Load history
+  useEffect(() => {
+    const load = async () => {
+      const {data} = await supabase.from("mo_checklists").select("*")
+        .eq("branch_code",ctx.user.branch_code).eq("checklist_type",activeTab)
+        .order("created_at",{ascending:false}).limit(20)
+      if (data) setHistory(data)
+    }
+    load()
+  }, [activeTab,ctx.user.branch_code,saving])
+
+  const toggleCheck = (no) => {
+    setChecks(p => {
+      const cur = p[no]
+      // cycle: null → true(✓) → false(✗) → null
+      const next = cur === null ? true : cur === true ? false : null
+      return {...p,[no]:next}
+    })
+  }
+
+  const handleSubmit = async () => {
+    if (!shift) return alert("Pilih shift terlebih dahulu")
+    const hasUnchecked = Object.values(checks).some(v => v === null)
+    if (hasUnchecked && !confirm("Masih ada item yang belum dicek. Lanjutkan submit?")) return
+
+    setSaving(true)
+    const itemsArr = currentTab.items.map(it => ({no:it.no,item:it.item,checked:checks[it.no]}))
+    const {error} = await supabase.from("mo_checklists").insert({
+      branch_code: ctx.user.branch_code,
+      checklist_date: checkDate,
+      shift,
+      checklist_type: activeTab,
+      items: itemsArr,
+      incoming_mo: ctx.user.display_name,
+      outgoing_mo: "",
+      notes,
+      created_by: ctx.user.id,
+    })
+    if (error) { alert("Gagal menyimpan: "+error.message); setSaving(false); return }
+    logAudit("MO_CHECKLIST","Submit "+activeTab+" checklist — shift "+shift,ctx.user)
+    setChecks(initChecks()); setNotes(""); setShift(""); setShowForm(false); setSaving(false)
+  }
+
+  const checkIcon = (val) => {
+    if (val === true) return <span style={{color:"#10b981",fontSize:18,fontWeight:900}}>✓</span>
+    if (val === false) return <span style={{color:"#ef4444",fontSize:18,fontWeight:900}}>✗</span>
+    return <span style={{color:"var(--fg-muted)",fontSize:14}}>—</span>
+  }
+
+  return (
+    <div className="page-content">
+      <Header title="HO/TO Manager Operasi" sub={"Checklist PRKP — "+ctx.user.branch_code}/>
+
+      {/* Tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:20}}>
+        {MO_TABS.map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+            padding:"10px 18px",borderRadius:8,border:"1px solid "+(activeTab===t.id?"#2563eb":"var(--border)"),
+            background:activeTab===t.id?"rgba(37,99,235,0.12)":"transparent",
+            color:activeTab===t.id?"#60a5fa":"var(--fg-muted)",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .2s",
+            display:"flex",alignItems:"center",gap:6
+          }}>{t.icon} {t.label}</button>
+        ))}
+      </div>
+
+      {/* Action */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <h2 style={{margin:0,fontSize:16,fontWeight:700,color:"var(--fg)",display:"flex",alignItems:"center",gap:8}}>
+          <I n="checklist" s={18}/> {currentTab.label}
+        </h2>
+        {!showForm && <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}><I n="plus" s={14}/> Buat Checklist</button>}
+      </div>
+
+      {/* Form */}
+      {showForm && <div className="panel" style={{animation:"fadeIn .3s ease",marginBottom:24}}>
+        <div className="panel-header"><h2 className="panel-title">{currentTab.icon} {currentTab.label}</h2></div>
+        <div className="panel-body">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:20}}>
+            <div className="field"><label>Tanggal</label><input type="date" value={checkDate} onChange={e => setCheckDate(e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}/></div>
+            <div className="field"><label>Shift</label><select value={shift} onChange={e => setShift(e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13}}>
+              <option value="">Pilih...</option><option value="Pagi">Pagi</option><option value="Siang">Siang</option><option value="Malam">Malam</option>
+            </select></div>
+            <div className="field"><label>Manager Operasi</label><input value={ctx.user.display_name} disabled style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1px solid var(--border)",background:"rgba(56,189,248,0.06)",color:"#38bdf8",fontSize:13,fontWeight:600,cursor:"not-allowed"}}/></div>
+          </div>
+
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead>
+                <tr style={{background:"rgba(37,99,235,0.08)"}}>
+                  <th style={{padding:"10px 8px",fontSize:11,fontWeight:700,color:"var(--fg-muted)",textAlign:"center",width:40,borderBottom:"2px solid var(--border)"}}>NO</th>
+                  <th style={{padding:"10px 12px",fontSize:11,fontWeight:700,color:"var(--fg-muted)",textAlign:"left",width:180,borderBottom:"2px solid var(--border)"}}>ITEM</th>
+                  <th style={{padding:"10px 12px",fontSize:11,fontWeight:700,color:"var(--fg-muted)",textAlign:"left",borderBottom:"2px solid var(--border)"}}>STANDAR MINIMUM</th>
+                  <th style={{padding:"10px 8px",fontSize:11,fontWeight:700,color:"var(--fg-muted)",textAlign:"center",width:60,borderBottom:"2px solid var(--border)"}}>CEK</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentTab.items.map(it => (
+                  <tr key={it.no} style={{borderBottom:"1px solid var(--border)",transition:"background .15s"}} onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.02)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <td style={{padding:"12px 8px",textAlign:"center",fontSize:13,fontWeight:700,color:"var(--fg-muted)"}}>{it.no}</td>
+                    <td style={{padding:"12px",fontSize:13,fontWeight:600,color:"var(--fg)"}}>{it.item}</td>
+                    <td style={{padding:"12px",fontSize:12,color:"var(--fg-muted)",lineHeight:1.5}}>{it.std}</td>
+                    <td style={{padding:"12px 8px",textAlign:"center"}}>
+                      <button type="button" onClick={() => toggleCheck(it.no)} style={{
+                        width:36,height:36,borderRadius:8,border:"1.5px solid "+(checks[it.no]===true?"#10b981":checks[it.no]===false?"#ef4444":"var(--border)"),
+                        background:checks[it.no]===true?"rgba(16,185,129,0.1)":checks[it.no]===false?"rgba(239,68,68,0.1)":"transparent",
+                        cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",
+                      }}>{checkIcon(checks[it.no])}</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{marginTop:16}}>
+            <div className="field"><label>Catatan Tambahan</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Catatan opsional..." rows={3} style={{width:"100%",padding:"10px 12px",borderRadius:8,border:"1px solid var(--border)",background:"var(--card)",color:"var(--fg)",fontSize:13,resize:"vertical"}}/>
+            </div>
+          </div>
+
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:16,paddingTop:16,borderTop:"1px solid var(--border)"}}>
+            <button className="btn btn-ghost" onClick={() => {setShowForm(false);setChecks(initChecks());setNotes("")}}>Batal</button>
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>{saving?"Menyimpan...":"Submit Checklist"}</button>
+          </div>
+        </div>
+      </div>}
+
+      {/* History */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title"><I n="clock" s={16}/> Riwayat {currentTab.label}</h2></div>
+        <div className="panel-body">
+          {history.length === 0 ? <p style={{color:"var(--fg-muted)",fontSize:13,textAlign:"center",padding:20}}>Belum ada riwayat</p>
+          : <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {history.map(h => {
+              const items = h.items || []
+              const checked = items.filter(i => i.checked === true).length
+              const unchecked = items.filter(i => i.checked === false).length
+              const total = items.length
+              return (
+                <div key={h.id} style={{padding:16,borderRadius:10,border:"1px solid var(--border)",background:"rgba(255,255,255,0.01)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:"var(--fg)"}}>{new Date(h.checklist_date).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"})}</span>
+                      <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:"rgba(37,99,235,0.12)",color:"#60a5fa"}}>{h.shift}</span>
+                    </div>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <span style={{fontSize:11,color:"#10b981",fontWeight:700}}>✓ {checked}</span>
+                      {unchecked > 0 && <span style={{fontSize:11,color:"#ef4444",fontWeight:700}}>✗ {unchecked}</span>}
+                      <span style={{fontSize:11,color:"var(--fg-muted)"}}>/ {total}</span>
+                    </div>
+                  </div>
+                  <div style={{fontSize:12,color:"var(--fg-muted)"}}>
+                    <span>MO: <strong style={{color:"var(--fg)"}}>{h.incoming_mo}</strong></span>
+                    <span style={{marginLeft:12,fontSize:11,color:"var(--fg-muted)"}}>{new Date(h.created_at).toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})}</span>
+                  </div>
+                  {h.notes && <div style={{marginTop:8,fontSize:12,color:"var(--fg-muted)",fontStyle:"italic"}}>📝 {h.notes}</div>}
+                  <details style={{marginTop:10}}>
+                    <summary style={{fontSize:11,color:"#38bdf8",cursor:"pointer",fontWeight:600}}>Lihat Detail ({total} item)</summary>
+                    <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
+                      {items.map(it => (
+                        <div key={it.no} style={{display:"flex",gap:8,alignItems:"center",padding:"4px 0",fontSize:12}}>
+                          {it.checked===true?<span style={{color:"#10b981",fontWeight:900}}>✓</span>:it.checked===false?<span style={{color:"#ef4444",fontWeight:900}}>✗</span>:<span style={{color:"var(--fg-muted)"}}>—</span>}
+                          <span style={{color:"var(--fg)"}}>{it.item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+              )
+            })}
+          </div>}
+        </div>
+      </div>
     </div>
   )
 }
@@ -2281,21 +2543,33 @@ export default function App() {
     setLoading(false)
   }
 
+  const fetchAllPersonnel = async () => {
+    let all = [], from = 0, batchSize = 1000
+    while (true) {
+      const { data } = await supabase.from("personnel").select("id,name,branch_code").eq("is_active",true).order("name").range(from, from + batchSize - 1)
+      if (!data || data.length === 0) break
+      all = all.concat(data)
+      if (data.length < batchSize) break
+      from += batchSize
+    }
+    return all
+  }
+
   const loadData = async () => {
-    const [brRes, secRes, logRes, hoRes, hcRes, pRes] = await Promise.all([
+    const [brRes, secRes, logRes, hoRes, hcRes] = await Promise.all([
       supabase.from("branches").select("*").order("code"),
       supabase.from("sectors").select("*").order("sort_order"),
       supabase.from("position_logs").select("*").order("on_time",{ascending:false}).limit(500),
       supabase.from("handover_notes").select("*").order("created_at",{ascending:false}).limit(200),
       supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
-      supabase.from("personnel").select("id,name,branch_code").eq("is_active",true).order("name").limit(5000),
     ])
+    const allPersonnel = await fetchAllPersonnel()
     if (brRes.data) setBranches(brRes.data)
     if (secRes.data) setSectors(secRes.data)
     if (logRes.data) setLogs(logRes.data)
     if (hoRes.data) setHandovers(hoRes.data)
     if (hcRes.data) setHandoverChecklists(hcRes.data)
-    if (pRes.data) setPersonnel(pRes.data)
+    if (allPersonnel.length) setPersonnel(allPersonnel)
   }
 
   // Load data + auto refresh
@@ -2325,7 +2599,7 @@ export default function App() {
 
   const pageMap = user.role === "admin"
     ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_personnel:AdminMonPersonnel,mon_handover:AdminMonHandover,mon_reports:AdminReportMonitoring,export:AdminExport,audit:AdminAudit}
-    : {dashboard:CabangDash,log:CabangLog,rekap_personnel:CabangRekapPersonnel,rekap:CabangRekap,handover:CabangHandover,reports:Reports}
+    : {dashboard:CabangDash,log:CabangLog,rekap_personnel:CabangRekapPersonnel,rekap:CabangRekap,handover:CabangHandover,ho_to_mo:CabangHoToMo,reports:Reports}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
