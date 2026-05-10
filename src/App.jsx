@@ -20,20 +20,15 @@ const durMin = (a,b) => a && b ? Math.round((new Date(b)-new Date(a))/60000) : 0
 const SHIFTS = ["Morning","Afternoon","Night"]
 const getShift = () => { const h = new Date().getHours(); return h>=6&&h<14?"Morning":h>=14&&h<22?"Afternoon":"Night" }
 
-// Audit log helper — fire and forget, never blocks UI
-const logAudit = (action, detail="", user=null) => {
-
 // Get all branch codes this MO can access (recursive, stop at child with own MO)
 const getAccessibleBranches = (myCode, branches, moBranchCodes) => {
   const result = [myCode]
   const children = branches.filter(b => b.parent_code === myCode)
   for (const child of children) {
     if (moBranchCodes.includes(child.code) && child.code !== myCode) {
-      // Child has own MO → STOP, don't include
       continue
     }
     result.push(child.code)
-    // Recurse into grandchildren
     const grandchildren = getAccessibleBranches(child.code, branches, moBranchCodes)
     grandchildren.forEach(gc => { if (!result.includes(gc)) result.push(gc) })
   }
