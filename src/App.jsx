@@ -818,9 +818,9 @@ const CabangRekap = () => {
 // ============================================================
 const CabangRekapPersonnel = () => {
   const ctx = useApp()
-  const myLogs = ctx.logs.filter(l => myBranches.includes(l.branch_code) && l.off_time)
   const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
   const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
+  const myLogs = ctx.logs.filter(l => myBranches.includes(l.branch_code) && l.off_time)
   const [period,setPeriod] = useState("month")
   const [search,setSearch] = useState("")
   const [expandedName,setExpandedName] = useState(null)
