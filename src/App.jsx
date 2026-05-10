@@ -22,6 +22,26 @@ const getShift = () => { const h = new Date().getHours(); return h>=6&&h<14?"Mor
 
 // Audit log helper — fire and forget, never blocks UI
 const logAudit = (action, detail="", user=null) => {
+
+// Get all branch codes this MO can access (recursive, stop at child with own MO)
+const getAccessibleBranches = (myCode, branches, moBranchCodes) => {
+  const result = [myCode]
+  const children = branches.filter(b => b.parent_code === myCode)
+  for (const child of children) {
+    if (moBranchCodes.includes(child.code) && child.code !== myCode) {
+      // Child has own MO → STOP, don't include
+      continue
+    }
+    result.push(child.code)
+    // Recurse into grandchildren
+    const grandchildren = getAccessibleBranches(child.code, branches, moBranchCodes)
+    grandchildren.forEach(gc => { if (!result.includes(gc)) result.push(gc) })
+  }
+  return result
+}
+
+// Audit log helper — fire and forget, never blocks UI
+const logAudit = (action, detail="", user=null) => {
   try {
     supabase.from("audit_logs").insert({
       user_id: user?.id || null,
@@ -240,7 +260,8 @@ const CabangLog = () => {
   const ctx = useApp()
   const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {units:["TWR"]}
   const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
-  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
 
   const [nmSearch,setNmSearch] = useState("")
   const [nmOpen,setNmOpen] = useState(false)
@@ -402,7 +423,8 @@ const STATUS_CLR = {"OK":{bg:"#dcfce7",fg:"#166534",bd:"#86efac"},"Not OK":{bg:"
 
 const CabangHandover = () => {
   const ctx = useApp()
-  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
   const [moAccounts,setMoAccounts] = useState([])
 
   // Fetch MO accounts for this branch
@@ -797,7 +819,8 @@ const CabangRekap = () => {
 const CabangRekapPersonnel = () => {
   const ctx = useApp()
   const myLogs = ctx.logs.filter(l => l.branch_code === ctx.user.branch_code && l.off_time)
-  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
   const [period,setPeriod] = useState("month")
   const [search,setSearch] = useState("")
   const [expandedName,setExpandedName] = useState(null)
@@ -2673,6 +2696,7 @@ export default function App() {
   const [handovers,setHandovers] = useState([])
   const [handoverChecklists,setHandoverChecklists] = useState([])
   const [personnel,setPersonnel] = useState([])
+  const [moBranchCodes,setMoBranchCodes] = useState([])
 
   // Check existing session on load
   useEffect(() => {
@@ -2710,6 +2734,10 @@ export default function App() {
       supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
     ])
     const allPersonnel = await fetchAllPersonnel()
+    // Fetch unique branch_codes that have MO accounts
+    const {data: moData} = await supabase.from("accounts").select("branch_code").like("username","mo_%")
+    const uniqueMoCodes = [...new Set((moData||[]).map(a => a.branch_code))]
+    setMoBranchCodes(uniqueMoCodes)
     if (brRes.data) setBranches(brRes.data)
     if (secRes.data) setSectors(secRes.data)
     if (logRes.data) setLogs(logRes.data)
@@ -2749,7 +2777,7 @@ export default function App() {
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
-    <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,personnel,navBranch,setNavBranch,goPage:setPage,reload:loadData}}>
+    <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,personnel,moBranchCodes,navBranch,setNavBranch,goPage:setPage,reload:loadData}}>
       <div className="app-layout">
         <Sidebar page={page} go={setPage} user={user} logout={handleLogout} col={col} toggle={() => setCol(!col)}/>
         <main className="main-area"><CurrentPage/></main>
