@@ -213,8 +213,9 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
 // ============================================================
 const CabangDash = () => {
   const ctx = useApp()
-  const active = ctx.logs.filter(l => !l.off_time)
-  const today = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const active = ctx.logs.filter(l => !l.off_time && myBranches.includes(l.branch_code))
+  const today = ctx.logs.filter(l => myBranches.includes(l.branch_code) && new Date(l.on_time).toDateString() === new Date().toDateString())
   const todayTC = today.filter(l => l.off_time).reduce((a,l) => a+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0), 0)
   const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {name:"",city:"",units:[]}
 
@@ -259,8 +260,8 @@ const CabangDash = () => {
 const CabangLog = () => {
   const ctx = useApp()
   const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {units:["TWR"]}
-  const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
   const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const mySectors = ctx.sectors.filter(s => myBranches.includes(s.branch_code))
   const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
 
   const [nmSearch,setNmSearch] = useState("")
@@ -293,8 +294,8 @@ const CabangLog = () => {
   const cwps = unitSectors[si] ? unitSectors[si].cwps : ["Controller","Assistant"]
   const [ci,setCi] = useState(0)
 
-  const active = ctx.logs.filter(l => !l.off_time)
-  const today = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+  const active = ctx.logs.filter(l => !l.off_time && myBranches.includes(l.branch_code))
+  const today = ctx.logs.filter(l => myBranches.includes(l.branch_code) && new Date(l.on_time).toDateString() === new Date().toDateString())
 
   const onMic = async () => {
     if (!nm.trim() || saving) return
@@ -427,10 +428,10 @@ const CabangHandover = () => {
   const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
   const [moAccounts,setMoAccounts] = useState([])
 
-  // Fetch MO accounts for this branch
+  // Fetch MO accounts for accessible branches
   useEffect(() => {
     (async () => {
-      const {data} = await supabase.from('accounts').select('id,username,display_name,branch_code').eq('branch_code', ctx.user.branch_code).like('username','mo_%').order('username')
+      const {data} = await supabase.from('accounts').select('id,username,display_name,branch_code').in('branch_code', myBranches).like('username','mo_%').order('username')
       if(data) setMoAccounts(data)
     })()
   },[ctx.user.branch_code])
@@ -469,7 +470,10 @@ const CabangHandover = () => {
     const currentVal = f[listKey][idx]
     return myPersonnel.filter(p => !allSelected.includes(p.name) || p.name === currentVal)
   }
-  const myChecklists = ctx.handoverChecklists.filter(c => c.branch_id === ctx.user.id)
+  const myChecklists = ctx.handoverChecklists.filter(c => {
+    const b = ctx.branches.find(br => br.id === c.branch_id)
+    return b && myBranches.includes(b.code)
+  })
 
   const submitCL = async () => {
     const incList = f.incoming_list.filter(n => n.trim())
@@ -651,10 +655,10 @@ const CabangHandover = () => {
           <button className="btn btn-primary" onClick={addNote} disabled={!txt.trim()||savingN}><I n="note" s={16}/> {savingN?"Menyimpan...":"Simpan"}</button>
         </div>
       </div>
-      <div className="panel"><div className="panel-header"><h2 className="panel-title">Riwayat Notes</h2><span className="panel-counter">{ctx.handovers.length}</span></div>
+      <div className="panel"><div className="panel-header"><h2 className="panel-title">Riwayat Notes</h2><span className="panel-counter">{ctx.handovers.filter(n => myBranches.includes(n.branch_code)).length}</span></div>
         <div className="panel-body">
-          {ctx.handovers.length===0 ? <div className="empty-state"><p>Belum ada catatan</p></div> :
-          ctx.handovers.map(n => (
+          {ctx.handovers.filter(n => myBranches.includes(n.branch_code)).length===0 ? <div className="empty-state"><p>Belum ada catatan</p></div> :
+          ctx.handovers.filter(n => myBranches.includes(n.branch_code)).map(n => (
             <div key={n.id} className={"handover-card handover-"+n.priority}>
               <div className="handover-header"><div><span className={"priority-tag priority-"+n.priority}>{n.priority.toUpperCase()}</span><span className="handover-shift">Shift {n.from_shift} → {n.to_shift}</span></div><span className="handover-time">{fmtDT(n.created_at)}</span></div>
               <div className="handover-body">{n.content}</div>
@@ -672,8 +676,9 @@ const CabangHandover = () => {
 // ============================================================
 const CabangRekap = () => {
   const ctx = useApp()
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
   // Only logs with traffic data (controller off-mic reports)
-  const myLogs = ctx.logs.filter(l => l.branch_code === ctx.user.branch_code && l.off_time && ((l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)) > 0)
+  const myLogs = ctx.logs.filter(l => myBranches.includes(l.branch_code) && l.off_time && ((l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)) > 0)
   const [period,setPeriod] = useState("month")
   const [filterName,setFilterName] = useState("")
   const [filterSector,setFilterSector] = useState("")
@@ -818,7 +823,7 @@ const CabangRekap = () => {
 // ============================================================
 const CabangRekapPersonnel = () => {
   const ctx = useApp()
-  const myLogs = ctx.logs.filter(l => l.branch_code === ctx.user.branch_code && l.off_time)
+  const myLogs = ctx.logs.filter(l => myBranches.includes(l.branch_code) && l.off_time)
   const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
   const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
   const [period,setPeriod] = useState("month")
@@ -1065,12 +1070,13 @@ const CabangHoToMo = () => {
   useEffect(() => { setChecks(initChecks()); setShowForm(false) }, [activeTab])
 
   const moAccounts = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
 
   // Load history
   useEffect(() => {
     const load = async () => {
       const {data} = await supabase.from("mo_checklists").select("*")
-        .eq("branch_code",ctx.user.branch_code).eq("checklist_type",activeTab)
+        .in("branch_code",myBranches).eq("checklist_type",activeTab)
         .order("created_at",{ascending:false}).limit(20)
       if (data) setHistory(data)
     }
