@@ -22,6 +22,27 @@ const getShift = () => { const h = new Date().getHours(); return h>=6&&h<14?"Mor
 
 // Audit log helper — fire and forget, never blocks UI
 const logAudit = (action, detail="", user=null) => {
+
+// Get all branch codes this MO can access (recursive, stop at child with own MO)
+const getAccessibleBranches = (myCode, branches, moBranchCodes) => {
+  const result = [myCode]
+  const children = branches.filter(b => b.parent_code === myCode)
+  console.log('[HIERARCHY]', myCode, '→ children:', children.map(c=>c.code), '| moBranches:', moBranchCodes.length, '| allBranches:', branches.length)
+  for (const child of children) {
+    if (moBranchCodes.includes(child.code) && child.code !== myCode) {
+      console.log('[HIERARCHY] SKIP', child.code, '(has own MO)')
+      continue
+    }
+    result.push(child.code)
+    const grandchildren = getAccessibleBranches(child.code, branches, moBranchCodes)
+    grandchildren.forEach(gc => { if (!result.includes(gc)) result.push(gc) })
+  }
+  console.log('[HIERARCHY] RESULT for', myCode, ':', result)
+  return result
+}
+
+// Audit log helper — fire and forget, never blocks UI
+const logAudit = (action, detail="", user=null) => {
   try {
     supabase.from("audit_logs").insert({
       user_id: user?.id || null,
@@ -157,6 +178,7 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
     {id:"mon_recap",label:"Monitoring Rekap Traffic",icon:"chart"},
     {id:"mon_personnel",label:"Monitoring Rekap Personel",icon:"users"},
     {id:"mon_handover",label:"Monitoring Handover/Takeover",icon:"checklist"},
+    {id:"mon_ho_to_mo",label:"Monitoring HO/TO MO",icon:"shield"},
     {id:"mon_reports",label:"Monitoring Daily Reports",icon:"note"},
     {id:"export",label:"Export Laporan",icon:"download"},
     {id:"audit",label:"Audit Log",icon:"shield"},
@@ -192,8 +214,9 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
 // ============================================================
 const CabangDash = () => {
   const ctx = useApp()
-  const active = ctx.logs.filter(l => !l.off_time)
-  const today = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const active = ctx.logs.filter(l => !l.off_time && myBranches.includes(l.branch_code))
+  const today = ctx.logs.filter(l => myBranches.includes(l.branch_code) && new Date(l.on_time).toDateString() === new Date().toDateString())
   const todayTC = today.filter(l => l.off_time).reduce((a,l) => a+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0), 0)
   const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {name:"",city:"",units:[]}
 
@@ -238,8 +261,9 @@ const CabangDash = () => {
 const CabangLog = () => {
   const ctx = useApp()
   const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || {units:["TWR"]}
-  const mySectors = ctx.sectors.filter(s => s.branch_code === ctx.user.branch_code)
-  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const mySectors = ctx.sectors.filter(s => myBranches.includes(s.branch_code))
+  const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
 
   const [nmSearch,setNmSearch] = useState("")
   const [nmOpen,setNmOpen] = useState(false)
@@ -271,8 +295,8 @@ const CabangLog = () => {
   const cwps = unitSectors[si] ? unitSectors[si].cwps : ["Controller","Assistant"]
   const [ci,setCi] = useState(0)
 
-  const active = ctx.logs.filter(l => !l.off_time)
-  const today = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
+  const active = ctx.logs.filter(l => !l.off_time && myBranches.includes(l.branch_code))
+  const today = ctx.logs.filter(l => myBranches.includes(l.branch_code) && new Date(l.on_time).toDateString() === new Date().toDateString())
 
   const onMic = async () => {
     if (!nm.trim() || saving) return
@@ -401,13 +425,14 @@ const STATUS_CLR = {"OK":{bg:"#dcfce7",fg:"#166534",bd:"#86efac"},"Not OK":{bg:"
 
 const CabangHandover = () => {
   const ctx = useApp()
-  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
   const [moAccounts,setMoAccounts] = useState([])
 
-  // Fetch MO accounts for this branch
+  // Fetch MO accounts for accessible branches
   useEffect(() => {
     (async () => {
-      const {data} = await supabase.from('accounts').select('id,username,display_name,branch_code').eq('branch_code', ctx.user.branch_code).like('username','mo_%').order('username')
+      const {data} = await supabase.from('accounts').select('id,username,display_name,branch_code').in('branch_code', myBranches).like('username','mo_%').order('username')
       if(data) setMoAccounts(data)
     })()
   },[ctx.user.branch_code])
@@ -446,7 +471,10 @@ const CabangHandover = () => {
     const currentVal = f[listKey][idx]
     return myPersonnel.filter(p => !allSelected.includes(p.name) || p.name === currentVal)
   }
-  const myChecklists = ctx.handoverChecklists.filter(c => c.branch_id === ctx.user.id)
+  const myChecklists = ctx.handoverChecklists.filter(c => {
+    const b = ctx.branches.find(br => br.id === c.branch_id)
+    return b && myBranches.includes(b.code)
+  })
 
   const submitCL = async () => {
     const incList = f.incoming_list.filter(n => n.trim())
@@ -628,10 +656,10 @@ const CabangHandover = () => {
           <button className="btn btn-primary" onClick={addNote} disabled={!txt.trim()||savingN}><I n="note" s={16}/> {savingN?"Menyimpan...":"Simpan"}</button>
         </div>
       </div>
-      <div className="panel"><div className="panel-header"><h2 className="panel-title">Riwayat Notes</h2><span className="panel-counter">{ctx.handovers.length}</span></div>
+      <div className="panel"><div className="panel-header"><h2 className="panel-title">Riwayat Notes</h2><span className="panel-counter">{ctx.handovers.filter(n => myBranches.includes(n.branch_code)).length}</span></div>
         <div className="panel-body">
-          {ctx.handovers.length===0 ? <div className="empty-state"><p>Belum ada catatan</p></div> :
-          ctx.handovers.map(n => (
+          {ctx.handovers.filter(n => myBranches.includes(n.branch_code)).length===0 ? <div className="empty-state"><p>Belum ada catatan</p></div> :
+          ctx.handovers.filter(n => myBranches.includes(n.branch_code)).map(n => (
             <div key={n.id} className={"handover-card handover-"+n.priority}>
               <div className="handover-header"><div><span className={"priority-tag priority-"+n.priority}>{n.priority.toUpperCase()}</span><span className="handover-shift">Shift {n.from_shift} → {n.to_shift}</span></div><span className="handover-time">{fmtDT(n.created_at)}</span></div>
               <div className="handover-body">{n.content}</div>
@@ -649,8 +677,9 @@ const CabangHandover = () => {
 // ============================================================
 const CabangRekap = () => {
   const ctx = useApp()
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
   // Only logs with traffic data (controller off-mic reports)
-  const myLogs = ctx.logs.filter(l => l.branch_code === ctx.user.branch_code && l.off_time && ((l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)) > 0)
+  const myLogs = ctx.logs.filter(l => myBranches.includes(l.branch_code) && l.off_time && ((l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)) > 0)
   const [period,setPeriod] = useState("month")
   const [filterName,setFilterName] = useState("")
   const [filterSector,setFilterSector] = useState("")
@@ -795,8 +824,9 @@ const CabangRekap = () => {
 // ============================================================
 const CabangRekapPersonnel = () => {
   const ctx = useApp()
-  const myLogs = ctx.logs.filter(l => l.branch_code === ctx.user.branch_code && l.off_time)
-  const myPersonnel = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const myLogs = ctx.logs.filter(l => myBranches.includes(l.branch_code) && l.off_time)
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
   const [period,setPeriod] = useState("month")
   const [search,setSearch] = useState("")
   const [expandedName,setExpandedName] = useState(null)
@@ -1041,12 +1071,13 @@ const CabangHoToMo = () => {
   useEffect(() => { setChecks(initChecks()); setShowForm(false) }, [activeTab])
 
   const moAccounts = ctx.personnel.filter(p => p.branch_code === ctx.user.branch_code)
+  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
 
   // Load history
   useEffect(() => {
     const load = async () => {
       const {data} = await supabase.from("mo_checklists").select("*")
-        .eq("branch_code",ctx.user.branch_code).eq("checklist_type",activeTab)
+        .in("branch_code",myBranches).eq("checklist_type",activeTab)
         .order("created_at",{ascending:false}).limit(20)
       if (data) setHistory(data)
     }
@@ -2009,6 +2040,151 @@ const AdminMonHandover = () => {
 }
 
 // ============================================================
+// ADMIN: MONITORING HO/TO MO
+// ============================================================
+const AdminMonHoToMo = () => {
+  const ctx = useApp()
+  const [br,setBr] = useState("ALL")
+  const [filterDate,setFilterDate] = useState("")
+  const [activeTab,setActiveTab] = useState("pre_shift")
+  const [data,setData] = useState([])
+  const [loading,setLoading] = useState(true)
+  const [expandedId,setExpandedId] = useState(null)
+
+  const currentTab = MO_TABS.find(t => t.id === activeTab)
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      let q = supabase.from("mo_checklists").select("*").eq("checklist_type",activeTab).order("created_at",{ascending:false}).limit(200)
+      if (br !== "ALL") q = q.eq("branch_code",br)
+      if (filterDate) q = q.eq("checklist_date",filterDate)
+      const {data:d} = await q
+      if (d) setData(d)
+      setLoading(false)
+    }
+    load()
+  }, [activeTab,br,filterDate])
+
+  const branchName = (code) => {
+    const b = ctx.branches.find(x => x.code === code)
+    return b ? code+" — "+b.city : code
+  }
+
+  // Stats
+  const totalChecklists = data.length
+  const totalChecked = data.reduce((a,c) => a + (c.items||[]).filter(i => i.checked===true).length, 0)
+  const totalUnchecked = data.reduce((a,c) => a + (c.items||[]).filter(i => i.checked===false).length, 0)
+  const branchesWithData = [...new Set(data.map(d => d.branch_code))].length
+
+  return (
+    <div className="page-content">
+      <Header title="Monitoring HO/TO MO" sub="Checklist PRKP Manager Operasi dari seluruh cabang"/>
+
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
+          <option value="ALL">Semua Cabang</option>
+          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
+        </select>
+        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="br-select"/>
+        {filterDate && <button className="btn btn-ghost btn-sm" onClick={() => setFilterDate("")}>✕ Reset</button>}
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:20}}>
+        {MO_TABS.map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+            padding:"10px 18px",borderRadius:8,border:"1px solid "+(activeTab===t.id?"#2563eb":"var(--border)"),
+            background:activeTab===t.id?"rgba(37,99,235,0.12)":"transparent",
+            color:activeTab===t.id?"#60a5fa":"var(--fg-muted)",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .2s",
+            display:"flex",alignItems:"center",gap:6
+          }}>{t.icon} {t.label}</button>
+        ))}
+      </div>
+
+      {/* Stats */}
+      <div className="stats-grid">
+        <Stat icon="checklist" label="Total Checklist" value={totalChecklists} color="#8b5cf6"/>
+        <Stat icon="check" label="Item ✓" value={totalChecked} color="#10b981"/>
+        <Stat icon="shield" label="Item ✗" value={totalUnchecked} color="#ef4444" sub="Perlu perhatian"/>
+        <Stat icon="users" label="Cabang Submit" value={branchesWithData} color="#38bdf8"/>
+      </div>
+
+      {/* Data */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">{currentTab.icon} {currentTab.label}</h2><span className="panel-counter">{data.length}</span></div>
+        <div className="panel-body">
+          {loading ? <div style={{textAlign:"center",padding:40,color:"var(--fg-muted)"}}>Memuat...</div>
+          : data.length === 0 ? <div className="empty-state"><I n="checklist" s={44}/><p>Tidak ada data ditemukan</p></div>
+          : <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {data.map(h => {
+              const items = h.items || []
+              const checked = items.filter(i => i.checked===true).length
+              const unchecked = items.filter(i => i.checked===false).length
+              const total = items.length
+              const expanded = expandedId === h.id
+              return (
+                <div key={h.id} style={{padding:16,borderRadius:10,border:"1px solid "+(unchecked>0?"rgba(239,68,68,0.3)":"var(--border)"),background:unchecked>0?"rgba(239,68,68,0.03)":"rgba(255,255,255,0.01)",cursor:"pointer",transition:"all .2s"}} onClick={() => setExpandedId(expanded?null:h.id)}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:expanded?12:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                      <span style={{fontSize:14}}>{expanded?"▾":"▸"}</span>
+                      <span style={{background:"#f5f3ff",color:"#6d28d9",padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:700}}>{branchName(h.branch_code)}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:"var(--fg)"}}>{new Date(h.checklist_date).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"})}</span>
+                      <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:"rgba(37,99,235,0.12)",color:"#60a5fa"}}>{h.shift}</span>
+                      {unchecked > 0 && <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:"rgba(239,68,68,0.12)",color:"#ef4444"}}>✗ {unchecked}</span>}
+                    </div>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <span style={{fontSize:11,color:"#10b981",fontWeight:700}}>✓ {checked}</span>
+                      <span style={{fontSize:11,color:"var(--fg-muted)"}}>/ {total}</span>
+                    </div>
+                  </div>
+
+                  {expanded && (
+                    <div style={{borderTop:"1px solid var(--border)",paddingTop:12}}>
+                      <div style={{display:"flex",gap:16,fontSize:12,color:"var(--fg-muted)",marginBottom:12}}>
+                        <span>MO: <strong style={{color:"var(--fg)"}}>{h.incoming_mo}</strong></span>
+                        <span>Waktu: {new Date(h.created_at).toLocaleTimeString("id-ID",{hour:"2-digit",minute:"2-digit"})}</span>
+                      </div>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                        <thead>
+                          <tr style={{background:"rgba(37,99,235,0.06)"}}>
+                            <th style={{padding:"8px",textAlign:"center",width:36,borderBottom:"1px solid var(--border)",color:"var(--fg-muted)",fontSize:11}}>NO</th>
+                            <th style={{padding:"8px 12px",textAlign:"left",width:160,borderBottom:"1px solid var(--border)",color:"var(--fg-muted)",fontSize:11}}>ITEM</th>
+                            <th style={{padding:"8px 12px",textAlign:"left",borderBottom:"1px solid var(--border)",color:"var(--fg-muted)",fontSize:11}}>STANDAR MINIMUM</th>
+                            <th style={{padding:"8px",textAlign:"center",width:50,borderBottom:"1px solid var(--border)",color:"var(--fg-muted)",fontSize:11}}>CEK</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((it,idx) => {
+                            const refItem = currentTab.items.find(r => r.no === it.no)
+                            return (
+                              <tr key={it.no} style={{borderBottom:"1px solid var(--border)"}}>
+                                <td style={{padding:"8px",textAlign:"center",color:"var(--fg-muted)"}}>{it.no}</td>
+                                <td style={{padding:"8px 12px",fontWeight:600,color:"var(--fg)"}}>{it.item}</td>
+                                <td style={{padding:"8px 12px",color:"var(--fg-muted)",lineHeight:1.4}}>{refItem?.std||"—"}</td>
+                                <td style={{padding:"8px",textAlign:"center"}}>
+                                  {it.checked===true?<span style={{color:"#10b981",fontWeight:900,fontSize:16}}>✓</span>:it.checked===false?<span style={{color:"#ef4444",fontWeight:900,fontSize:16}}>✗</span>:<span style={{color:"var(--fg-muted)"}}>—</span>}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                      {h.notes && <div style={{marginTop:12,padding:10,background:"var(--bg)",borderRadius:8,fontSize:12,color:"var(--fg-muted)",fontStyle:"italic"}}>📝 {h.notes}</div>}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
 // ADMIN: EXPORT & AUDIT (placeholder)
 // ============================================================
 // ============================================================
@@ -2527,6 +2703,7 @@ export default function App() {
   const [handovers,setHandovers] = useState([])
   const [handoverChecklists,setHandoverChecklists] = useState([])
   const [personnel,setPersonnel] = useState([])
+  const [moBranchCodes,setMoBranchCodes] = useState([])
 
   // Check existing session on load
   useEffect(() => {
@@ -2564,6 +2741,10 @@ export default function App() {
       supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
     ])
     const allPersonnel = await fetchAllPersonnel()
+    // Fetch unique branch_codes that have MO accounts
+    const {data: moData} = await supabase.from("accounts").select("branch_code").like("username","mo_%")
+    const uniqueMoCodes = [...new Set((moData||[]).map(a => a.branch_code))]
+    setMoBranchCodes(uniqueMoCodes)
     if (brRes.data) setBranches(brRes.data)
     if (secRes.data) setSectors(secRes.data)
     if (logRes.data) setLogs(logRes.data)
@@ -2598,12 +2779,12 @@ export default function App() {
   if (!user) return <div className="loading-screen"><RadarLogo size={56}/><p>Memuat profil...</p><span className="login-spinner"/></div>
 
   const pageMap = user.role === "admin"
-    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_personnel:AdminMonPersonnel,mon_handover:AdminMonHandover,mon_reports:AdminReportMonitoring,export:AdminExport,audit:AdminAudit}
+    ? {dashboard:AdminDash,mon_log:AdminMonLog,mon_recap:AdminMonRecap,mon_personnel:AdminMonPersonnel,mon_handover:AdminMonHandover,mon_ho_to_mo:AdminMonHoToMo,mon_reports:AdminReportMonitoring,export:AdminExport,audit:AdminAudit}
     : {dashboard:CabangDash,log:CabangLog,rekap_personnel:CabangRekapPersonnel,rekap:CabangRekap,handover:CabangHandover,ho_to_mo:CabangHoToMo,reports:Reports}
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
-    <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,personnel,navBranch,setNavBranch,goPage:setPage,reload:loadData}}>
+    <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,personnel,moBranchCodes,navBranch,setNavBranch,goPage:setPage,reload:loadData}}>
       <div className="app-layout">
         <Sidebar page={page} go={setPage} user={user} logout={handleLogout} col={col} toggle={() => setCol(!col)}/>
         <main className="main-area"><CurrentPage/></main>
