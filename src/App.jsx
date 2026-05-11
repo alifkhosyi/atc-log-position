@@ -2238,6 +2238,7 @@ const AdminExport = () => {
     {id:"handover_notes",label:"Handover Notes",icon:"note",desc:"Catatan serah terima"},
     {id:"daily_summary",label:"Ringkasan Harian",icon:"dashboard",desc:"Rangkuman aktivitas per hari"},
     {id:"personnel_stats",label:"Statistik Personel",icon:"chart",desc:"Jam kerja & frekuensi on mic"},
+    {id:"monthly_national",label:"Laporan Bulanan Nasional",icon:"shield",desc:"Ringkasan + 28 sheet per MO lokasi (West/East)"},
   ]
 
   // ── Data collectors ──
@@ -2365,6 +2366,292 @@ const AdminExport = () => {
         addHeaders(ws, ["Cabang","Tanggal","Shift","Prioritas","Catatan","Penulis"])
         data.forEach(n => ws.addRow([n.branch_code,fmtDT(n.created_at),n.from_shift+" → "+n.to_shift,n.priority,n.content,n.author_name]))
         ws.columns.forEach(c => { c.width = 20 })
+      }
+
+      if (reportType==="monthly_national") {
+        // ── Helper styles ──
+        const navy="FF1E3A5F",white="FFFFFFFF",lightBlue="FFE8F4FD",lightGray="FFF8FAFC"
+        const westColor="FF1D4ED8",eastColor="FFDC2626",westBg="FFEFF6FF",eastBg="FFFEF2F2"
+        const parentColor="FF1E40AF",parentBg="FFDBEAFE",childBg="FFF3F4F6"
+        const summaryColor="FF065F46",summaryBg="FFD1FAE5",greenC="FF10B981",blueAcc="FF2563EB"
+        const hFont={font:{bold:true,color:{argb:white},size:11},fill:{type:"pattern",pattern:"solid",fgColor:{argb:navy}},alignment:{horizontal:"center",vertical:"middle",wrapText:true}}
+        const applyH=(cell)=>{cell.font=hFont.font;cell.fill=hFont.fill;cell.alignment=hFont.alignment;cell.border={bottom:{style:"thin"}}}
+        const applyS=(cell,f,fill,a)=>{if(f)cell.font=f;if(fill)cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:fill}};if(a)cell.alignment=a;cell.border={bottom:{style:"thin",color:{argb:"FFD1D5DB"}},top:{style:"thin",color:{argb:"FFD1D5DB"}},left:{style:"thin",color:{argb:"FFD1D5DB"}},right:{style:"thin",color:{argb:"FFD1D5DB"}}}}
+        const ctr={horizontal:"center",vertical:"middle",wrapText:true},rgt={horizontal:"right",vertical:"middle"},lft={horizontal:"left",vertical:"middle",wrapText:true}
+        const bF={bold:true,size:10,name:"Arial"},nF={size:10,name:"Arial"}
+
+        // ── Build hierarchy ──
+        const moCodeSet = new Set()
+        const {data:moAccs} = await supabase.from("accounts").select("branch_code").like("username","mo_%")
+        if(moAccs) moAccs.forEach(a=>moCodeSet.add(a.branch_code))
+        
+        const allBr = ctx.branches.filter(b=>b.region)
+        const westTop = allBr.filter(b=>b.region==="west"&&!b.parent_code)
+        const eastTop = allBr.filter(b=>b.region==="east"&&!b.parent_code)
+        
+        const getChildren=(code)=>{
+          const kids=allBr.filter(b=>b.parent_code===code)
+          const result=[]
+          for(const k of kids){
+            if(moCodeSet.has(k.code)&&k.code!==code) continue
+            result.push(k)
+            result.push(...getChildren(k.code))
+          }
+          return result
+        }
+        const getAccessible=(code)=>[code,...getChildren(code).map(c=>c.code)]
+        
+        // ── Collect all log data ──
+        const allLogs = ctx.logs.filter(l=>l.off_time&&inRange(new Date(l.on_time).toISOString().slice(0,10)))
+        const logsBy=(codes)=>allLogs.filter(l=>codes.includes(l.branch_code))
+        const trafficBy=(codes)=>{const ls=logsBy(codes);return{dep:ls.reduce((a,l)=>a+(l.departure_count||0),0),arr:ls.reduce((a,l)=>a+(l.arrival_count||0),0),ovf:ls.reduce((a,l)=>a+(l.overfly_count||0),0),onMic:ls.length}}
+        const persBy=(codes)=>ctx.personnel.filter(p=>codes.includes(p.branch_code))
+        
+        // ── Collect per-date traffic ──
+        const dailyBy=(code)=>{
+          const byDate={}
+          allLogs.filter(l=>l.branch_code===code).forEach(l=>{
+            const dt=new Date(l.on_time).toISOString().slice(0,10)
+            if(!byDate[dt])byDate[dt]={dep:0,arr:0,ovf:0,n:0}
+            byDate[dt].dep+=l.departure_count||0;byDate[dt].arr+=l.arrival_count||0;byDate[dt].ovf+=l.overfly_count||0;byDate[dt].n++
+          })
+          return Object.entries(byDate).sort((a,b)=>a[0].localeCompare(b[0]))
+        }
+        
+        // ── Personnel stats ──
+        const persStats=(codes)=>{
+          const byP={}
+          allLogs.filter(l=>codes.includes(l.branch_code)).forEach(l=>{
+            const k=l.atc_name+"||"+l.branch_code
+            if(!byP[k])byP[k]={name:l.atc_name,branch:l.branch_code,count:0,totalMin:0,dep:0,arr:0,ovf:0}
+            byP[k].count++;byP[k].totalMin+=durMin(l.on_time,l.off_time);byP[k].dep+=l.departure_count||0;byP[k].arr+=l.arrival_count||0;byP[k].ovf+=l.overfly_count||0
+          })
+          return Object.values(byP).sort((a,b)=>b.totalMin-a.totalMin)
+        }
+        
+        // ── SHEET 1: Ringkasan Nasional ──
+        const ws1=wb.addWorksheet("Ringkasan Nasional")
+        ws1.properties.tabColor={argb:navy.replace("FF","")}
+        const r1=ws1.addRow(["AIRNAV INDONESIA"]);r1.font={bold:true,size:9,color:{argb:blueAcc},name:"Arial"}
+        const r2=ws1.addRow(["LAPORAN BULANAN OPERASIONAL ATC — NASIONAL"]);r2.font={bold:true,size:16,color:{argb:navy},name:"Arial"}
+        ws1.addRow(["Periode: "+periodLabel+"  |  Seluruh Wilayah FIR Indonesia"]).font={size:10,color:{argb:"FF64748B"},name:"Arial"}
+        ws1.addRow([])
+        
+        const allCodes=allBr.map(b=>b.code)
+        const natT=trafficBy(allCodes),westT=trafficBy(allBr.filter(b=>b.region==="west").map(b=>b.code)),eastT=trafficBy(allBr.filter(b=>b.region==="east").map(b=>b.code))
+        
+        const rH=ws1.addRow(["","Total Traffic","","Total Personel","","West Traffic","","East Traffic",""])
+        rH.eachCell(c=>{applyS(c,{bold:true,size:9,color:{argb:"FF64748B"},name:"Arial"},lightBlue.replace("FF",""),ctr)})
+        const natTotal=natT.dep+natT.arr+natT.ovf
+        const rV=ws1.addRow(["",(natTotal).toLocaleString(),"",ctx.personnel.length.toLocaleString(),"",(westT.dep+westT.arr+westT.ovf).toLocaleString(),"",(eastT.dep+eastT.arr+eastT.ovf).toLocaleString(),""])
+        rV.eachCell(c=>{applyS(c,{bold:true,size:16,color:{argb:navy},name:"Arial"},lightBlue.replace("FF",""),ctr)})
+        ws1.addRow([])
+        
+        // Top 15 branches
+        const topRow=ws1.addRow(["TOP 15 LOKASI — TRAFFIC TERTINGGI"])
+        topRow.font={bold:true,size:12,color:{argb:navy},name:"Arial"}
+        const hdr=ws1.addRow(["No","Code","Nama","Kota","Region","Traffic","Personel","MO","Parent"])
+        hdr.eachCell(c=>applyH(c))
+        
+        const brTraffic=allBr.map(b=>{const t=trafficBy([b.code]);return{...b,traffic:t.dep+t.arr+t.ovf,pers:persBy([b.code]).length}}).sort((a,b)=>b.traffic-a.traffic)
+        brTraffic.slice(0,15).forEach((b,i)=>{
+          const row=ws1.addRow([i+1,b.code,b.name,b.city,b.region,(b.traffic).toLocaleString(),b.pers,moCodeSet.has(b.code)?"✓":"—",b.parent_code||"—"])
+          row.eachCell((c,ci)=>{
+            const isW=b.region==="west"
+            if(ci===5)applyS(c,{bold:true,size:9,color:{argb:isW?westColor:eastColor},name:"Arial"},isW?westBg.replace("FF",""):eastBg.replace("FF",""),ctr)
+            else if(ci===6)applyS(c,{bold:true,size:10,name:"Arial"},i%2===0?lightGray.replace("FF",""):null,rgt)
+            else applyS(c,nF,i%2===0?lightGray.replace("FF",""):null,ci<=1?ctr:ci>=7?ctr:lft)
+          })
+        })
+        ws1.columns=[{width:5},{width:8},{width:24},{width:16},{width:10},{width:14},{width:10},{width:8},{width:10}]
+        
+        // ── SHEET 2 & 3: West/East Region ──
+        const makeRegionSheet=(sheetName,tabColor,regionBranches,regionName,regionColor,regionBg)=>{
+          const ws=wb.addWorksheet(sheetName)
+          ws.properties.tabColor={argb:tabColor.replace("FF","")}
+          ws.addRow(["AIRNAV INDONESIA"]).font={bold:true,size:9,color:{argb:blueAcc},name:"Arial"}
+          ws.addRow([regionName.toUpperCase()+" — DETAIL PER CABANG"]).font={bold:true,size:16,color:{argb:navy},name:"Arial"}
+          ws.addRow(["Periode: "+periodLabel]).font={size:10,color:{argb:"FF64748B"},name:"Arial"}
+          ws.addRow([])
+          const hdr=ws.addRow(["No","Code","Cabang/Unit","Kota","Tipe","Traffic","Personel","MO","% Region"])
+          hdr.eachCell(c=>applyH(c))
+          let no=1
+          const regTotal=regionBranches.reduce((a,b)=>{const acc=getAccessible(b.code);return a+logsBy(acc).reduce((s,l)=>s+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0),0)},0)
+          regionBranches.forEach(parent=>{
+            const bannerRow=ws.addRow(["",parent.code,parent.name+" ("+parent.city+")","","Cabang Induk","","","",""])
+            bannerRow.eachCell(c=>{applyS(c,{bold:true,size:11,color:{argb:white},name:"Arial"},regionColor.replace("FF",""),lft)})
+            const accessible=getAccessible(parent.code)
+            const pT=trafficBy(accessible);const pTotal=pT.dep+pT.arr+pT.ovf
+            const row=ws.addRow([no,parent.code,parent.name,parent.city,"Cabang Induk",(trafficBy([parent.code]).dep+trafficBy([parent.code]).arr+trafficBy([parent.code]).ovf).toLocaleString(),persBy([parent.code]).length,"✓",regTotal>0?(pTotal/regTotal*100).toFixed(1)+"%":"—"])
+            row.eachCell((c,ci)=>{applyS(c,ci<=2?{...bF,color:{argb:regionColor}}:nF,regionBg.replace("FF",""),ci===1?ctr:ci>=5?rgt:lft)})
+            no++
+            const kids=allBr.filter(b=>b.parent_code===parent.code)
+            kids.forEach(kid=>{
+              const kT=trafficBy([kid.code])
+              const fill=no%2===0?lightGray.replace("FF",""):null
+              const row=ws.addRow([no,kid.code,"  └ "+kid.name,kid.city,moCodeSet.has(kid.code)?"CB. Pembantu":"Unit",(kT.dep+kT.arr+kT.ovf).toLocaleString(),persBy([kid.code]).length,moCodeSet.has(kid.code)?"✓":"—",""])
+              row.eachCell((c,ci)=>{applyS(c,ci===2?{...nF,color:{argb:"FF64748B"}}:nF,fill,ci===1?ctr:ci>=5?rgt:lft)})
+              no++
+              // grandchildren
+              allBr.filter(b=>b.parent_code===kid.code).forEach(gk=>{
+                const gT=trafficBy([gk.code])
+                const fill2=no%2===0?lightGray.replace("FF",""):null
+                const row2=ws.addRow([no,gk.code,"      └ "+gk.name,gk.city,"Unit",(gT.dep+gT.arr+gT.ovf).toLocaleString(),persBy([gk.code]).length,"—",""])
+                row2.eachCell((c,ci)=>{applyS(c,nF,fill2,ci===1?ctr:ci>=5?rgt:lft)})
+                no++
+              })
+            })
+          })
+          ws.columns=[{width:5},{width:8},{width:28},{width:16},{width:14},{width:14},{width:10},{width:8},{width:10}]
+        }
+        makeRegionSheet("West Region",westColor,westTop,"West Region",westColor,westBg)
+        makeRegionSheet("East Region",eastColor,eastTop,"East Region",eastColor,eastBg)
+        
+        // ── SHEET 4: Top Personel ──
+        const ws4=wb.addWorksheet("Top Personel")
+        ws4.properties.tabColor={argb:"10B981"}
+        ws4.addRow(["TOP PERSONEL NASIONAL — JAM KERJA"]).font={bold:true,size:16,color:{argb:navy},name:"Arial"}
+        ws4.addRow(["Periode: "+periodLabel]).font={size:10,color:{argb:"FF64748B"},name:"Arial"}
+        ws4.addRow([])
+        const h4=ws4.addRow(["Rank","Nama","Lokasi","Region","On Mic","Total Jam","DEP","ARR","OVF"])
+        h4.eachCell(c=>applyH(c))
+        const allPersStats=persStats(allCodes)
+        allPersStats.slice(0,30).forEach((p,i)=>{
+          const br2=allBr.find(b=>b.code===p.branch)
+          const isW=br2&&br2.region==="west"
+          const row=ws4.addRow(["#"+(i+1),p.name,p.branch,br2?br2.region:"—",p.count+"x",Math.round(p.totalMin/60*10)/10,p.dep,p.arr,p.ovf])
+          row.eachCell((c,ci)=>{
+            const fill=i%2===0?lightGray.replace("FF",""):null
+            if(ci===4)applyS(c,{bold:true,size:9,color:{argb:isW?westColor:eastColor},name:"Arial"},isW?westBg.replace("FF",""):eastBg.replace("FF",""),ctr)
+            else if(ci===6)applyS(c,{...bF,color:{argb:blueAcc}},fill,rgt)
+            else applyS(c,nF,fill,ci<=1?ctr:ci>=5?rgt:lft)
+          })
+        })
+        ws4.columns=[{width:6},{width:28},{width:8},{width:8},{width:10},{width:12},{width:10},{width:10},{width:10}]
+        
+        // ── SHEET 5: Insiden ──
+        const ws5=wb.addWorksheet("Insiden Nasional")
+        ws5.properties.tabColor={argb:"EF4444"}
+        ws5.addRow(["LAPORAN INSIDEN NASIONAL"]).font={bold:true,size:16,color:{argb:navy},name:"Arial"}
+        ws5.addRow(["Periode: "+periodLabel]).font={size:10,color:{argb:"FF64748B"},name:"Arial"}
+        ws5.addRow([])
+        const h5=ws5.addRow(["No","Tanggal","Lokasi","Kota","Region","Jenis","Durasi","Tindak Lanjut"])
+        h5.eachCell(c=>applyH(c))
+        // Note: incidents would come from daily_reports/incident_reports table
+        // For now placeholder
+        ws5.addRow(["","Belum ada data insiden untuk periode ini"])
+        ws5.columns=[{width:5},{width:16},{width:8},{width:14},{width:8},{width:28},{width:10},{width:35}]
+        
+        // ── SHEET 6-33: Per MO Location ──
+        const moLocations=[...westTop,...eastTop]
+        // Also add MO locations that are children (Halim, Batam, Padang, Semarang, etc)
+        const allMoLocs=allBr.filter(b=>moCodeSet.has(b.code)).sort((a,b)=>{
+          if(a.region!==b.region) return a.region==="west"?-1:1
+          return a.code.localeCompare(b.code)
+        })
+        
+        allMoLocs.forEach(moLoc=>{
+          const accessible=getAccessible(moLoc.code)
+          const accessibleBranches=allBr.filter(b=>accessible.includes(b.code))
+          const isWest=moLoc.region==="west"
+          const tabCol=isWest?westColor:eastColor
+          const sheetName=(moLoc.code+" "+moLoc.city).substring(0,31)
+          const ws=wb.addWorksheet(sheetName)
+          ws.properties.tabColor={argb:tabCol.replace("FF","")}
+          
+          // Title
+          ws.addRow(["AIRNAV INDONESIA"]).font={bold:true,size:9,color:{argb:blueAcc},name:"Arial"}
+          ws.addRow(["LAPORAN BULANAN — "+moLoc.name.toUpperCase()+" ("+moLoc.code+")"]).font={bold:true,size:16,color:{argb:navy},name:"Arial"}
+          const childNames=accessibleBranches.filter(b=>b.code!==moLoc.code).map(b=>b.name+" ("+b.code+")")
+          const subLine=(isWest?"West":"East")+" Region  |  Periode: "+periodLabel+(childNames.length?"  |  Membawahi: "+childNames.join(", "):"")
+          ws.addRow([subLine]).font={size:10,color:{argb:"FF64748B"},name:"Arial"}
+          ws.addRow([])
+          
+          // Per location sections
+          accessibleBranches.forEach((loc,li)=>{
+            const isParent=loc.code===moLoc.code
+            const bannerText=isParent?("■  "+loc.code+" — "+loc.name+"  ("+loc.city+")"):("└  "+loc.code+" — "+loc.name+"  ("+loc.city+")  —  dibawahi "+moLoc.name)
+            const bannerColor=isParent?parentColor:(li%2===0?"FF6B7280":"FF6B7280")
+            const bannerRow=ws.addRow([bannerText])
+            ws.mergeCells(bannerRow.number,1,bannerRow.number,10)
+            bannerRow.eachCell(c=>{applyS(c,{bold:true,size:12,color:{argb:white},name:"Arial"},isParent?parentColor.replace("FF",""):"6B7280",lft)})
+            bannerRow.height=26
+            
+            // Traffic summary
+            const locT=trafficBy([loc.code])
+            const locTotal=locT.dep+locT.arr+locT.ovf
+            const daily=dailyBy(loc.code)
+            const avg=daily.length>0?Math.round(locTotal/daily.length):0
+            
+            const mRow=ws.addRow(["","Total DEP","","Total ARR","","Total OVF","","Total Traffic","","Avg/Hari"])
+            mRow.eachCell(c=>{applyS(c,{size:9,color:{argb:"FF64748B"},name:"Arial"},lightBlue.replace("FF",""),ctr)})
+            const vRow=ws.addRow(["",(locT.dep).toLocaleString(),"",(locT.arr).toLocaleString(),"",(locT.ovf).toLocaleString(),"",(locTotal).toLocaleString(),"",avg.toLocaleString()])
+            vRow.eachCell(c=>{applyS(c,{bold:true,size:14,color:{argb:navy},name:"Arial"},lightBlue.replace("FF",""),ctr)})
+            vRow.height=24
+            
+            // Traffic harian
+            const subRow=ws.addRow(["Traffic Harian — "+loc.name])
+            ws.mergeCells(subRow.number,1,subRow.number,10)
+            subRow.eachCell(c=>{applyS(c,{bold:true,size:10,color:{argb:isParent?parentColor:("FF6B7280")},name:"Arial"},isParent?parentBg.replace("FF",""):childBg.replace("FF",""),lft)})
+            
+            const dH=ws.addRow(["Tanggal","","DEP","ARR","OVF","Total","","","",""])
+            dH.eachCell(c=>applyH(c))
+            
+            daily.forEach((d,di)=>{
+              const dt=d[0],v=d[1],tot=v.dep+v.arr+v.ovf
+              const fill=di%2===0?lightGray.replace("FF",""):null
+              const row=ws.addRow([dt,"",v.dep,v.arr,v.ovf,tot,"","","",""])
+              row.eachCell((c,ci)=>{applyS(c,ci===6?bF:nF,fill,ci<=2?ctr:rgt)})
+            })
+            
+            // Personel
+            const locPers=persStats([loc.code])
+            const pSubRow=ws.addRow(["Rekap Personel — "+loc.name+"  ("+persBy([loc.code]).length+" orang)"])
+            ws.mergeCells(pSubRow.number,1,pSubRow.number,10)
+            pSubRow.eachCell(c=>{applyS(c,{bold:true,size:10,color:{argb:isParent?parentColor:("FF6B7280")},name:"Arial"},isParent?parentBg.replace("FF",""):childBg.replace("FF",""),lft)})
+            
+            const pH=ws.addRow(["No","Nama","","On Mic","Total Jam","DEP","ARR","OVF","Total Traffic","Avg mnt/Sesi"])
+            pH.eachCell(c=>applyH(c))
+            
+            locPers.forEach((p,pi)=>{
+              const fill=pi%2===0?lightGray.replace("FF",""):null
+              const jam=Math.round(p.totalMin/60*10)/10
+              const avgM=p.count>0?Math.round(p.totalMin/p.count):0
+              const row=ws.addRow([pi+1,p.name,"",p.count+"x",jam,p.dep,p.arr,p.ovf,p.dep+p.arr+p.ovf,avgM+" mnt"])
+              row.eachCell((c,ci)=>{applyS(c,ci===2?bF:ci===5?{...bF,color:{argb:blueAcc}}:nF,fill,ci<=1?ctr:ci>=4?rgt:lft)})
+            })
+            
+            ws.addRow([]) // gap
+          })
+          
+          // ── Summary gabungan ──
+          if(accessibleBranches.length>1){
+            const sumRow=ws.addRow(["★  TOTAL GABUNGAN — "+moLoc.name+" + Bawahan"])
+            ws.mergeCells(sumRow.number,1,sumRow.number,10)
+            sumRow.eachCell(c=>{applyS(c,{bold:true,size:12,color:{argb:white},name:"Arial"},summaryColor.replace("FF",""),lft)})
+            sumRow.height=26
+            
+            const sH=ws.addRow(["Lokasi","Code","Tipe","Personel","Total DEP","Total ARR","Total OVF","Total Traffic","% Share","On Mic"])
+            sH.eachCell(c=>applyH(c))
+            
+            let grandTotal=0
+            const locSums=accessibleBranches.map(b=>{const t=trafficBy([b.code]);const tot=t.dep+t.arr+t.ovf;grandTotal+=tot;return{...b,dep:t.dep,arr:t.arr,ovf:t.ovf,total:tot,onMic:t.onMic,pers:persBy([b.code]).length}})
+            
+            locSums.forEach((ls,i)=>{
+              const isP=ls.code===moLoc.code
+              const fill=isP?parentBg.replace("FF",""):(i%2===0?lightGray.replace("FF",""):null)
+              const prefix=isP?"■ ":"└ "
+              const row=ws.addRow([prefix+ls.name,ls.code,isP?"Cabang Induk":"Bawahan",ls.pers,ls.dep.toLocaleString(),ls.arr.toLocaleString(),ls.ovf.toLocaleString(),ls.total.toLocaleString(),grandTotal>0?(ls.total/grandTotal*100).toFixed(1)+"%":"—",ls.onMic+"x"])
+              row.eachCell((c,ci)=>{applyS(c,isP&&ci<=3?bF:nF,fill,ci<=1?lft:ci>=4?rgt:ctr)})
+            })
+            
+            // Grand total
+            const gRow=ws.addRow(["TOTAL GABUNGAN","",locSums.length+" lokasi",locSums.reduce((a,l)=>a+l.pers,0),locSums.reduce((a,l)=>a+l.dep,0).toLocaleString(),locSums.reduce((a,l)=>a+l.arr,0).toLocaleString(),locSums.reduce((a,l)=>a+l.ovf,0).toLocaleString(),grandTotal.toLocaleString(),"100%",locSums.reduce((a,l)=>a+l.onMic,0)+"x"])
+            gRow.eachCell(c=>{applyS(c,{bold:true,size:10,color:{argb:white},name:"Arial"},navy.replace("FF",""),ctr)})
+          }
+          
+          ws.columns=[{width:16},{width:26},{width:2},{width:10},{width:12},{width:10},{width:10},{width:10},{width:12},{width:12}]
+        })
       }
 
       const buf = await wb.xlsx.writeBuffer()
