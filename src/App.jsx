@@ -2403,6 +2403,90 @@ const AdminExport = () => {
         
         // ── Collect all log data ──
         const allLogs = ctx.logs.filter(l=>l.off_time&&inRange(new Date(l.on_time).toISOString().slice(0,10)))
+        
+        // ── Fetch equipment data from communication_systems ──
+        const {data:dailyReps} = await supabase.from("daily_reports").select("id,branch_code,report_date").gte("report_date",dateFrom).lte("report_date",dateTo)
+        const repIds = (dailyReps||[]).map(r=>r.id)
+        let equipData = []
+        if(repIds.length>0){
+          // Fetch in batches of 100
+          for(let i=0;i<repIds.length;i+=100){
+            const batch=repIds.slice(i,i+100)
+            const {data:eq} = await supabase.from("communication_systems").select("*").in("daily_report_id",batch)
+            if(eq) equipData=equipData.concat(eq)
+          }
+        }
+        // Map daily_report_id → branch_code
+        const repMap={}; (dailyReps||[]).forEach(r=>{repMap[r.id]=r.branch_code})
+        
+        // Aggregate equipment per branch: {branch_code: {system_name: {normal:N, us:N, total_days:N}}}
+        const equipByBranch={}
+        equipData.forEach(e=>{
+          const bc=repMap[e.daily_report_id]
+          if(!bc) return
+          if(!equipByBranch[bc]) equipByBranch[bc]={}
+          const key=e.system_name||e.system_key||"Unknown"
+          if(!equipByBranch[bc][key]) equipByBranch[bc][key]={normal:0,us:0,total:0}
+          equipByBranch[bc][key].total++
+          if(e.status==="Normal"||e.status==="Operational") equipByBranch[bc][key].normal++
+          else equipByBranch[bc][key].us++
+        })
+        
+        // Helper to render equipment section
+        const renderEquipSection=(ws,branchCode,locName,isParent)=>{
+          const bc2=isParent?parentColor:("FF6B7280")
+          const bb2=isParent?parentBg.replace("FF",""):childBg.replace("FF","")
+          const prefix=isParent?"■":"└"
+          
+          const eqRow=ws.addRow([`  ${prefix} Status Peralatan — ${locName}`])
+          ws.mergeCells(eqRow.number,1,eqRow.number,10)
+          eqRow.eachCell(c=>{applyS(c,{bold:true,size:10,color:{argb:bc2},name:"Arial"},bb2,lft)})
+          eqRow.height=22
+          
+          const eH=ws.addRow(["No","Nama Peralatan","","Status","Hari Normal","Hari U/S","% Availability","Gangguan","Keterangan",""])
+          eH.eachCell(c=>applyH(c))
+          
+          const branchEquip=equipByBranch[branchCode]||{}
+          const equipList=Object.entries(branchEquip)
+          
+          if(equipList.length===0){
+            const noRow=ws.addRow(["","Belum ada data peralatan untuk periode ini","","","","","","","",""])
+            noRow.eachCell(c=>{applyS(c,{size:10,color:{argb:"FF94A3B8"},name:"Arial",italic:true},null,lft)})
+            ws.addRow([])
+            return {total:0,normal:0,us:0,perhatian:0,avgAvail:0}
+          }
+          
+          let totalEq=0,normalEq=0,usEq=0
+          equipList.forEach(([eName,eStats],ei)=>{
+            const fill=ei%2===0?lightGray.replace("FF",""):null
+            const avail=eStats.total>0?(eStats.normal/eStats.total*100):100
+            const status=eStats.us===0?"Normal":(eStats.us>eStats.total*0.2?"U/S":"Perlu Perhatian")
+            const statusColor=status==="Normal"?"FF10B981":(status==="U/S"?"FFEF4444":"FFF59E0B")
+            const statusBg=status==="Normal"?"ECFDF5":(status==="U/S"?"FEF2F2":"FFFBEB")
+            const availColor=avail>=95?"FF10B981":(avail>=80?"FFF59E0B":"FFEF4444")
+            
+            totalEq++;if(status==="Normal")normalEq++;else if(status==="U/S")usEq++
+            
+            const row=ws.addRow([ei+1,eName,"",status,eStats.normal,eStats.us,avail.toFixed(1)+"%",eStats.us>0?1:0,eStats.us>0?"Gangguan tercatat":"Operasional penuh",""])
+            row.eachCell((c,ci)=>{
+              if(ci===4) applyS(c,{bold:true,size:10,color:{argb:statusColor},name:"Arial"},statusBg,ctr)
+              else if(ci===7) applyS(c,{bold:true,color:{argb:availColor},size:10,name:"Arial"},fill,ctr)
+              else if(ci===6) applyS(c,{bold:true,color:{argb:"FFEF4444"},size:10,name:"Arial"},fill,ctr)
+              else if(ci===2) applyS(c,bF,fill,lft)
+              else applyS(c,nF,fill,ci<=1?ctr:ci>=8?lft:ctr)
+            })
+          })
+          
+          const perhatianEq=totalEq-normalEq-usEq
+          const avgAvail=equipList.length>0?equipList.reduce((a,[_,e])=>a+(e.total>0?e.normal/e.total*100:100),0)/equipList.length:100
+          
+          // Summary row
+          const sRow=ws.addRow(["","RINGKASAN","",`${normalEq} Normal, ${perhatianEq} Perhatian, ${usEq} U/S`,"","",avgAvail.toFixed(1)+"%","","",""])
+          sRow.eachCell(c=>{applyS(c,{bold:true,size:10,color:{argb:navy},name:"Arial"},lightBlue.replace("FF",""),ctr)})
+          ws.addRow([])
+          
+          return {total:totalEq,normal:normalEq,us:usEq,perhatian:perhatianEq,avgAvail}
+        }
         const logsBy=(codes)=>allLogs.filter(l=>codes.includes(l.branch_code))
         const trafficBy=(codes)=>{const ls=logsBy(codes);return{dep:ls.reduce((a,l)=>a+(l.departure_count||0),0),arr:ls.reduce((a,l)=>a+(l.arrival_count||0),0),ovf:ls.reduce((a,l)=>a+(l.overfly_count||0),0),onMic:ls.length}}
         const persBy=(codes)=>ctx.personnel.filter(p=>codes.includes(p.branch_code))
@@ -2464,6 +2548,48 @@ const AdminExport = () => {
           })
         })
         ws1.columns=[{width:5},{width:8},{width:24},{width:16},{width:10},{width:14},{width:10},{width:8},{width:10}]
+        
+        // ── Equipment Summary Nasional ──
+        ws1.addRow([])
+        const eqBannerRow=ws1.addRow(["STATUS PERALATAN — RINGKASAN NASIONAL"])
+        eqBannerRow.eachCell(c=>{applyS(c,{bold:true,size:12,color:{argb:white},name:"Arial"},"D97706",lft)})
+        ws1.mergeCells(eqBannerRow.number,1,eqBannerRow.number,9)
+        eqBannerRow.height=28
+        
+        const eqH=ws1.addRow(["No","Lokasi","Code","Region","Total","Normal","Perhatian","U/S","% Availability"])
+        eqH.eachCell(c=>applyH(c))
+        
+        const natEquipSummary=[]
+        const allMoCodesArr=[...moCodeSet]
+        allMoCodesArr.sort()
+        allMoCodesArr.forEach(mc=>{
+          const br3=allBr.find(b=>b.code===mc)
+          if(!br3) return
+          const brEq=equipByBranch[mc]||{}
+          const eqList=Object.entries(brEq)
+          const total=eqList.length
+          const normal=eqList.filter(([_,e])=>e.us===0).length
+          const us=eqList.filter(([_,e])=>e.us>e.total*0.2).length
+          const perhatian=total-normal-us
+          const avgA=total>0?eqList.reduce((a,[_,e])=>a+(e.total>0?e.normal/e.total*100:100),0)/total:100
+          natEquipSummary.push({code:mc,name:br3.name,city:br3.city,region:br3.region,total,normal,us,perhatian,avgA})
+        })
+        natEquipSummary.sort((a,b)=>a.avgA-b.avgA)
+        
+        natEquipSummary.forEach((eq,i)=>{
+          const fill=i%2===0?lightGray.replace("FF",""):null
+          const isW=eq.region==="west"
+          const statusLabel=eq.avgA>=95?"Baik":(eq.avgA>=85?"Cukup":"Kritis")
+          const statusColor=statusLabel==="Baik"?"FF10B981":(statusLabel==="Cukup"?"FFF59E0B":"FFEF4444")
+          
+          const row=ws1.addRow([i+1,eq.name,eq.code,eq.region?eq.region.charAt(0).toUpperCase()+eq.region.slice(1):"—",eq.total||"—",eq.normal||"—",eq.perhatian||0,eq.us||0,eq.total>0?eq.avgA.toFixed(1)+"%":"—"])
+          row.eachCell((c,ci)=>{
+            if(ci===4) applyS(c,{bold:true,size:9,color:{argb:isW?westColor:eastColor},name:"Arial"},isW?westBg.replace("FF",""):eastBg.replace("FF",""),ctr)
+            else if(ci===9) applyS(c,{bold:true,color:{argb:statusColor},size:10,name:"Arial"},fill,ctr)
+            else if(ci===8) applyS(c,{bold:true,color:{argb:"FFEF4444"},size:10,name:"Arial"},fill,ctr)
+            else applyS(c,ci<=1?nF:ci===2?bF:nF,fill,ci<=1?ctr:ci>=5?ctr:lft)
+          })
+        })
         
         // ── SHEET 2 & 3: West/East Region ──
         const makeRegionSheet=(sheetName,tabColor,regionBranches,regionName,regionColor,regionBg)=>{
@@ -2620,6 +2746,9 @@ const AdminExport = () => {
               const row=ws.addRow([pi+1,p.name,"",p.count+"x",jam,p.dep,p.arr,p.ovf,p.dep+p.arr+p.ovf,avgM+" mnt"])
               row.eachCell((c,ci)=>{applyS(c,ci===2?bF:ci===5?{...bF,color:{argb:blueAcc}}:nF,fill,ci<=1?ctr:ci>=4?rgt:lft)})
             })
+            
+            // Equipment section
+            renderEquipSection(ws,loc.code,loc.name,isParent)
             
             ws.addRow([]) // gap
           })
