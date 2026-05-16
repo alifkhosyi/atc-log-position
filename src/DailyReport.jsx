@@ -329,6 +329,18 @@ export default function DailyReport() {
 
       setExistingStatus(status);
       setSaveMsg({ ok: true, text: status === 'submitted' ? '✅ Laporan berhasil dikirim ke INMC!' : '💾 Draft tersimpan.' });
+      // Audit log
+      if (status === 'submitted') {
+        try {
+          supabase.from("audit_logs").insert({
+            user_id: userInfo?.id || null,
+            user_name: userInfo?.display_name || userInfo?.username || "-",
+            branch_code: userInfo?.branch_code || "-",
+            action: "DAILY_REPORT_SUBMIT",
+            detail: "Submit Daily Report — " + reportDate + " — " + (secA.unitName || userInfo?.branch_code),
+          }).then(({error}) => { if(error) console.warn("[AUDIT]",error.message) })
+        } catch(e) {}
+      }
     } catch (e) { setSaveMsg({ ok: false, text: '❌ Gagal: ' + e.message }); }
     setSaving(false);
     setTimeout(() => setSaveMsg(null), 5000);

@@ -40,12 +40,12 @@ const logAudit = (action, detail="", user=null) => {
   try {
     supabase.from("audit_logs").insert({
       user_id: user?.id || null,
-      username: user?.display_name || user?.username || "-",
+      user_name: user?.display_name || user?.username || "-",
       branch_code: user?.branch_code || (user?.role==="admin"?"ADMIN":"-"),
       action,
       detail: typeof detail === "object" ? JSON.stringify(detail) : String(detail),
-    }).then()
-  } catch(e) { /* silent */ }
+    }).then(({error}) => { if(error) console.warn("[AUDIT]",error.message) })
+  } catch(e) { console.warn("[AUDIT catch]",e) }
 }
 
 const Pulse = ({on=true,s=8}) => (
@@ -3007,7 +3007,7 @@ const AdminAudit = () => {
   const filtered = auditLogs.filter(l => {
     if(!search) return true
     const s = search.toLowerCase()
-    return (l.username||"").toLowerCase().includes(s) || (l.detail||"").toLowerCase().includes(s) || (l.action||"").toLowerCase().includes(s)
+    return (l.user_name||"").toLowerCase().includes(s) || (l.detail||"").toLowerCase().includes(s) || (l.action||"").toLowerCase().includes(s)
   })
 
   const ACTION_COLORS = {
@@ -3018,11 +3018,13 @@ const AdminAudit = () => {
     CHECKLIST_CREATE:{bg:"#f0fdf4",fg:"#166534",icon:"📋"},
     CHECKLIST_DELETE:{bg:"#fef2f2",fg:"#991b1b",icon:"🗑️"},
     NOTE_CREATE:{bg:"#eff6ff",fg:"#1d4ed8",icon:"📝"},
+    MO_CHECKLIST:{bg:"#f5f3ff",fg:"#5b21b6",icon:"🛡️"},
+    DAILY_REPORT_SUBMIT:{bg:"#ecfdf5",fg:"#065f46",icon:"📑"},
     EXPORT_EXCEL:{bg:"#f0fdf4",fg:"#166534",icon:"📊"},
     EXPORT_PDF:{bg:"#fef2f2",fg:"#991b1b",icon:"📄"},
   }
 
-  const uniqueActions = [...new Set(auditLogs.map(l => l.action))]
+  const ALL_ACTIONS = ["LOGIN","LOGOUT","ON_MIC","OFF_MIC","CHECKLIST_CREATE","CHECKLIST_DELETE","NOTE_CREATE","MO_CHECKLIST","DAILY_REPORT_SUBMIT","EXPORT_EXCEL","EXPORT_PDF"]
 
   return (
     <div className="page-content">
@@ -3038,7 +3040,7 @@ const AdminAudit = () => {
         </select>
         <select className="br-select" value={actionFilter} onChange={e => setActionFilter(e.target.value)}>
           <option value="ALL">Semua Aktivitas</option>
-          {["LOGIN","LOGOUT","ON_MIC","OFF_MIC","CHECKLIST_CREATE","CHECKLIST_DELETE","NOTE_CREATE","EXPORT_EXCEL","EXPORT_PDF"].map(a => <option key={a} value={a}>{a}</option>)}
+          {ALL_ACTIONS.map(a => <option key={a} value={a}>{(ACTION_COLORS[a]?.icon||"📌")+" "+a}</option>)}
         </select>
         <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="br-select"/>
         {dateFilter && <button className="btn btn-ghost btn-sm" onClick={() => setDateFilter("")}>✕</button>}
@@ -3050,7 +3052,9 @@ const AdminAudit = () => {
         <Stat icon="shield" label="Total Log" value={filtered.length} color="#8b5cf6"/>
         <Stat icon="log" label="Login" value={filtered.filter(l=>l.action==="LOGIN").length} color="#10b981"/>
         <Stat icon="mic" label="On Mic" value={filtered.filter(l=>l.action==="ON_MIC").length} color="#2563eb"/>
-        <Stat icon="micOff" label="Off Mic" value={filtered.filter(l=>l.action==="OFF_MIC").length} color="#f59e0b"/>
+        <Stat icon="checklist" label="Checklist" value={filtered.filter(l=>l.action==="CHECKLIST_CREATE"||l.action==="MO_CHECKLIST").length} color="#f59e0b"/>
+        <Stat icon="note" label="Daily Report" value={filtered.filter(l=>l.action==="DAILY_REPORT_SUBMIT").length} color="#059669"/>
+        <Stat icon="download" label="Export" value={filtered.filter(l=>l.action==="EXPORT_EXCEL"||l.action==="EXPORT_PDF").length} color="#dc2626"/>
       </div>
 
       {/* Log list */}
@@ -3077,7 +3081,7 @@ const AdminAudit = () => {
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
                       <span style={{display:"inline-block",padding:"1px 8px",borderRadius:8,fontSize:10,fontWeight:700,background:ac.bg,color:ac.fg}}>{l.action}</span>
-                      <span style={{fontSize:12,fontWeight:600,color:"var(--fg)"}}>{l.username}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:"var(--fg)"}}>{l.user_name}</span>
                       {l.branch_code && l.branch_code!=="-" && <span style={{fontSize:10,color:"var(--fg-muted)",background:"var(--bg)",padding:"1px 6px",borderRadius:6}}>{l.branch_code}</span>}
                     </div>
                     {l.detail && <div style={{fontSize:11,color:"var(--fg-muted)",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{l.detail}</div>}
