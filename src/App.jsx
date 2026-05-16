@@ -1321,23 +1321,28 @@ const AdminDash = () => {
           {b.city} · {persCount} personel{traffic > 0 ? ` · ${traffic.toLocaleString()} traffic` : ""}
         </div>
         {children.length > 0 && (
-          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {children.map(ch => {
               const chActive = (brAct[ch.code] || 0) > 0
-              const regionColor = b.region === "west" ? "#185FA5" : "#991B1B"
-              const regionBg = b.region === "west" ? "rgba(37,99,235,0.08)" : "rgba(220,38,38,0.08)"
+              const chOnMic = brAct[ch.code] || 0
+              const chPers = ctx.personnel.filter(p => p.branch_code === ch.code).length
+              const chTraffic = brTraffic[ch.code] || 0
+              const regionBorder = b.region === "west" ? "rgba(37,99,235,0.15)" : "rgba(220,38,38,0.15)"
               return (
-                <span key={ch.code} onClick={e => {e.stopPropagation(); handleBranchClick(ch.code)}} style={{
-                  fontSize:10,padding:"3px 8px",borderRadius:10,fontWeight:600,cursor:"pointer",
-                  transition:"all .15s",display:"flex",alignItems:"center",gap:4,
-                  background: chActive ? "rgba(16,185,129,0.12)" : regionBg,
-                  color: chActive ? "#059669" : regionColor,
-                  border: chActive ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent",
+                <div key={ch.code} onClick={e => {e.stopPropagation(); handleBranchClick(ch.code)}} style={{
+                  padding:"8px 10px",borderRadius:8,cursor:"pointer",transition:"all .15s",minWidth:90,
+                  background: chActive ? "rgba(16,185,129,0.05)" : "var(--bg)",
+                  border: chActive ? "1px solid rgba(16,185,129,0.3)" : "1px solid "+regionBorder,
                 }}>
-                  <span style={{width:5,height:5,borderRadius:"50%",background:chActive?"#10b981":"#cbd5e1"}}/>
-                  {ch.city || ch.name}
-                  {chActive && <span style={{fontSize:9}}>({brAct[ch.code]})</span>}
-                </span>
+                  <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
+                    <Pulse on={chActive} s={5}/>
+                    <span style={{fontSize:11,fontWeight:700,color:"var(--fg)"}}>{ch.city || ch.name}</span>
+                  </div>
+                  <div style={{fontSize:10,color:"var(--fg-muted)"}}>{chPers} personel</div>
+                  <div style={{fontSize:10,fontWeight:600,color:chActive?"#059669":"var(--fg-muted)",marginTop:2}}>
+                    {chActive ? chOnMic+" on mic" : "Idle"}{chTraffic > 0 ? " · "+chTraffic+"t" : ""}
+                  </div>
+                </div>
               )
             })}
           </div>
