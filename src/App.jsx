@@ -1253,92 +1253,157 @@ const AdminDash = () => {
   const todayLogs = ctx.logs.filter(l => new Date(l.on_time).toDateString() === new Date().toDateString())
   const todayTC = ctx.logs.filter(l => l.off_time && new Date(l.on_time).toDateString() === new Date().toDateString()).reduce((a,l) => a+(l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0), 0)
 
-  // Per-branch and per-unit active counts
   const brAct = {}
-  const brUnitAct = {} // { "WADD": { "TWR": 2, "APP": 1 } }
-  allActive.forEach(l => {
-    brAct[l.branch_code] = (brAct[l.branch_code]||0)+1
-    if(!brUnitAct[l.branch_code]) brUnitAct[l.branch_code] = {}
-    brUnitAct[l.branch_code][l.unit] = (brUnitAct[l.branch_code][l.unit]||0)+1
+  const brTraffic = {}
+  allActive.forEach(l => { brAct[l.branch_code] = (brAct[l.branch_code]||0)+1 })
+  todayLogs.filter(l=>l.off_time).forEach(l => {
+    const t = (l.departure_count||0)+(l.arrival_count||0)+(l.overfly_count||0)
+    brTraffic[l.branch_code] = (brTraffic[l.branch_code]||0)+t
   })
 
-  const handleBranchClick = (code) => {
-    ctx.setNavBranch(code)
-    ctx.goPage("mon_log")
+  const handleBranchClick = (code) => { ctx.setNavBranch(code); ctx.goPage("mon_log") }
+
+  // Build hierarchy
+  const moCodeSet = new Set(ctx.moBranchCodes)
+  const allBr = ctx.branches.filter(b => b.region)
+  const westTop = allBr.filter(b => b.region === "west" && !b.parent_code).sort((a,b) => (brAct[b.code]||0) - (brAct[a.code]||0))
+  const eastTop = allBr.filter(b => b.region === "east" && !b.parent_code).sort((a,b) => (brAct[b.code]||0) - (brAct[a.code]||0))
+
+  const getDirectChildren = (code) => allBr.filter(b => b.parent_code === code)
+  const getAccessibleChildren = (code) => {
+    const kids = getDirectChildren(code)
+    const result = []
+    for (const k of kids) {
+      if (moCodeSet.has(k.code) && k.code !== code) continue
+      result.push(k)
+      result.push(...getAccessibleChildren(k.code))
+    }
+    return result
   }
+
+  // West/East stats
+  const westCodes = allBr.filter(b => b.region === "west").map(b => b.code)
+  const eastCodes = allBr.filter(b => b.region === "east").map(b => b.code)
+  const westOnMic = allActive.filter(l => westCodes.includes(l.branch_code)).length
+  const eastOnMic = allActive.filter(l => eastCodes.includes(l.branch_code)).length
+  const westTraffic = Object.entries(brTraffic).filter(([k]) => westCodes.includes(k)).reduce((a,[,v]) => a+v, 0)
+  const eastTraffic = Object.entries(brTraffic).filter(([k]) => eastCodes.includes(k)).reduce((a,[,v]) => a+v, 0)
+
+  const BranchCard = ({b, isTopLevel}) => {
+    const c = brAct[b.code] || 0
+    const traffic = brTraffic[b.code] || 0
+    const isActive = c > 0
+    const children = isTopLevel ? getAccessibleChildren(b.code) : []
+    const childOnMic = children.reduce((a, ch) => a + (brAct[ch.code] || 0), 0)
+    const totalOnMic = c + childOnMic
+    const persCount = ctx.personnel.filter(p => p.branch_code === b.code).length
+
+    return (
+      <div onClick={() => handleBranchClick(b.code)} style={{
+        cursor: "pointer", padding: "14px 16px", borderRadius: 12, transition: "all .2s",
+        border: totalOnMic > 0 ? "1.5px solid #10b981" : "1px solid var(--border)",
+        background: totalOnMic > 0 ? "rgba(16,185,129,0.03)" : "var(--card)",
+        boxShadow: totalOnMic > 0 ? "0 0 16px rgba(16,185,129,0.1)" : "none",
+        opacity: totalOnMic > 0 ? 1 : 0.6,
+      }}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <Pulse on={totalOnMic > 0} s={totalOnMic > 0 ? 9 : 6}/>
+            <span style={{fontSize:14,fontWeight:700,color:"var(--fg)"}}>{b.code}</span>
+            <span style={{fontSize:12,color:"var(--fg-muted)"}}>— {b.name}</span>
+          </div>
+          {totalOnMic > 0 && <span style={{
+            fontSize:11,fontWeight:700,color:"#059669",background:"rgba(16,185,129,0.12)",
+            padding:"3px 10px",borderRadius:20,display:"flex",alignItems:"center",gap:4
+          }}><I n="mic" s={11}/> {totalOnMic}</span>}
+        </div>
+        <div style={{fontSize:11,color:"var(--fg-muted)",marginBottom:children.length > 0 ? 8 : 0}}>
+          {b.city} · {persCount} personel{traffic > 0 ? ` · ${traffic.toLocaleString()} traffic` : ""}
+        </div>
+        {children.length > 0 && (
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {children.map(ch => {
+              const chActive = (brAct[ch.code] || 0) > 0
+              const regionColor = b.region === "west" ? "#185FA5" : "#991B1B"
+              const regionBg = b.region === "west" ? "rgba(37,99,235,0.08)" : "rgba(220,38,38,0.08)"
+              return (
+                <span key={ch.code} onClick={e => {e.stopPropagation(); handleBranchClick(ch.code)}} style={{
+                  fontSize:10,padding:"3px 8px",borderRadius:10,fontWeight:600,cursor:"pointer",
+                  transition:"all .15s",display:"flex",alignItems:"center",gap:4,
+                  background: chActive ? "rgba(16,185,129,0.12)" : regionBg,
+                  color: chActive ? "#059669" : regionColor,
+                  border: chActive ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent",
+                }}>
+                  <span style={{width:5,height:5,borderRadius:"50%",background:chActive?"#10b981":"#cbd5e1"}}/>
+                  {ch.city || ch.name}
+                  {chActive && <span style={{fontSize:9}}>({brAct[ch.code]})</span>}
+                </span>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const RegionSection = ({title, branches, color, bgColor, onMic, traffic, icon}) => (
+    <div>
+      <div style={{
+        display:"flex",alignItems:"center",justifyContent:"space-between",
+        padding:"10px 14px",borderRadius:10,marginBottom:10,
+        background:bgColor,
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <I n={icon} s={16} style={{color}}/>
+          <span style={{fontSize:14,fontWeight:700,color}}>{title}</span>
+        </div>
+        <div style={{display:"flex",gap:12,fontSize:11,fontWeight:600}}>
+          <span style={{color}}><I n="mic" s={11}/> {onMic} on mic</span>
+          <span style={{color}}><I n="plane" s={11}/> {traffic.toLocaleString()}</span>
+          <span style={{color:"var(--fg-muted)"}}>{branches.length} cabang</span>
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {branches.map(b => <BranchCard key={b.code} b={b} isTopLevel={true}/>)}
+      </div>
+    </div>
+  )
+
+  // MO branches that are children but have own MO (shown separately under their region)
+  const westMoChildren = allBr.filter(b => b.region === "west" && b.parent_code && moCodeSet.has(b.code))
+    .sort((a,b) => (brAct[b.code]||0) - (brAct[a.code]||0))
+  const eastMoChildren = allBr.filter(b => b.region === "east" && b.parent_code && moCodeSet.has(b.code))
+    .sort((a,b) => (brAct[b.code]||0) - (brAct[a.code]||0))
 
   return (
     <div className="page-content">
-      <Header title="Dashboard Admin Pusat" sub="Monitoring seluruh cabang"/>
+      <Header title="Dashboard INMC" sub="Monitoring seluruh cabang — West & East Region"/>
       <div className="stats-grid">
-        <Stat icon="radar" label="Total Cabang" value={ctx.branches.length} sub="Seluruh Indonesia" color="#38bdf8"/>
-        <Stat icon="mic" label="On Mic" value={allActive.length} sub="Seluruh cabang" color="#10b981"/>
+        <Stat icon="radar" label="Total Lokasi" value={allBr.length} sub="West + East" color="#38bdf8"/>
+        <Stat icon="mic" label="On Mic" value={allActive.length} sub={`W:${westOnMic} | E:${eastOnMic}`} color="#10b981"/>
         <Stat icon="log" label="Log Hari Ini" value={todayLogs.length} sub={"Shift "+getShift()} color="#8b5cf6"/>
-        <Stat icon="plane" label="Traffic" value={todayTC} sub="Hari ini" color="#f59e0b"/>
+        <Stat icon="plane" label="Traffic" value={todayTC} sub={`W:${westTraffic} | E:${eastTraffic}`} color="#f59e0b"/>
       </div>
-      <div className="panel">
-        <div className="panel-header"><h2 className="panel-title"><Pulse s={10}/> Semua Cabang</h2><span className="panel-badge">LIVE</span></div>
-        <div className="panel-body"><div className="branch-grid">{ctx.branches.map(b => {
-          const c = brAct[b.code]||0
-          const unitAct = brUnitAct[b.code] || {}
-          const isActive = c > 0
-          return (
-            <div
-              key={b.code}
-              className={"branch-card"+(isActive?" branch-card-active":"")}
-              onClick={() => handleBranchClick(b.code)}
-              style={{
-                cursor:"pointer",
-                transition:"all .2s ease",
-                opacity: isActive ? 1 : 0.55,
-                border: isActive ? "1.5px solid #10b981" : "1px solid var(--border)",
-                boxShadow: isActive ? "0 0 16px rgba(16,185,129,0.15), 0 0 4px rgba(16,185,129,0.1)" : "none",
-              }}
-              onMouseDown={e => { e.currentTarget.style.transform = "scale(0.96)"; e.currentTarget.style.boxShadow = isActive ? "0 0 8px rgba(16,185,129,0.3)" : "0 0 8px rgba(100,116,139,0.15)" }}
-              onMouseUp={e => { e.currentTarget.style.transform = "scale(1)" }}
-              onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)" }}
-            >
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div className="branch-code">{b.code}</div>
-                <Pulse on={isActive} s={isActive ? 9 : 6}/>
-              </div>
-              <div className="branch-name">{b.name}</div>
-              <div className="branch-city">{b.city}</div>
-              <div className="branch-units" style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
-                {b.units.map(u => {
-                  const unitOn = (unitAct[u]||0) > 0
-                  return (
-                    <span key={u} style={{
-                      display:"inline-flex",alignItems:"center",gap:4,
-                      padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
-                      letterSpacing:".3px",
-                      background: unitOn ? "rgba(16,185,129,0.15)" : "rgba(100,116,139,0.08)",
-                      color: unitOn ? "#059669" : "#94a3b8",
-                      border: unitOn ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent",
-                      boxShadow: unitOn ? "0 0 6px rgba(16,185,129,0.2)" : "none",
-                      transition:"all .3s ease",
-                    }}>
-                      <span style={{
-                        width:5,height:5,borderRadius:"50%",
-                        background: unitOn ? "#10b981" : "#cbd5e1",
-                        boxShadow: unitOn ? "0 0 4px #10b981" : "none",
-                      }}/>
-                      {u}
-                      {unitOn && <span style={{fontSize:9,fontWeight:400}}>({unitAct[u]})</span>}
-                    </span>
-                  )
-                })}
-              </div>
-              <div className="branch-status" style={{
-                marginTop:6,fontSize:11,
-                color: isActive ? "#059669" : "#94a3b8",
-                fontWeight: isActive ? 700 : 400,
-              }}>
-                <I n="mic" s={11}/> {c > 0 ? c+" on mic" : "Idle"}
-              </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+        <div>
+          <RegionSection title="West Region" branches={westTop} color="#1d4ed8" bgColor="rgba(37,99,235,0.06)" onMic={westOnMic} traffic={westTraffic} icon="map-pin"/>
+          {westMoChildren.length > 0 && <>
+            <div style={{fontSize:11,fontWeight:700,color:"#64748B",marginTop:14,marginBottom:8,paddingLeft:4,textTransform:"uppercase",letterSpacing:".5px"}}>Cabang MO Bawahan — West</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {westMoChildren.map(b => <BranchCard key={b.code} b={b} isTopLevel={true}/>)}
             </div>
-          )
-        })}</div></div>
+          </>}
+        </div>
+        <div>
+          <RegionSection title="East Region" branches={eastTop} color="#dc2626" bgColor="rgba(220,38,38,0.06)" onMic={eastOnMic} traffic={eastTraffic} icon="map-pin"/>
+          {eastMoChildren.length > 0 && <>
+            <div style={{fontSize:11,fontWeight:700,color:"#64748B",marginTop:14,marginBottom:8,paddingLeft:4,textTransform:"uppercase",letterSpacing:".5px"}}>Cabang MO Bawahan — East</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {eastMoChildren.map(b => <BranchCard key={b.code} b={b} isTopLevel={true}/>)}
+            </div>
+          </>}
+        </div>
       </div>
     </div>
   )
