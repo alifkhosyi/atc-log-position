@@ -1280,6 +1280,16 @@ const AdminDash = () => {
     }
     return result
   }
+  // For dashboard: get ALL children recursively (including MO children)
+  const getAllChildren = (code) => {
+    const kids = getDirectChildren(code)
+    const result = []
+    for (const k of kids) {
+      result.push(k)
+      if (!moCodeSet.has(k.code)) result.push(...getAllChildren(k.code))
+    }
+    return result
+  }
 
   // West/East stats
   const westCodes = allBr.filter(b => b.region === "west").map(b => b.code)
@@ -1293,7 +1303,7 @@ const AdminDash = () => {
     const c = brAct[b.code] || 0
     const traffic = brTraffic[b.code] || 0
     const isActive = c > 0
-    const children = isTopLevel ? getAccessibleChildren(b.code) : []
+    const children = isTopLevel ? getAllChildren(b.code) : []
     const childOnMic = children.reduce((a, ch) => a + (brAct[ch.code] || 0), 0)
     const totalOnMic = c + childOnMic
     const persCount = ctx.personnel.filter(p => p.branch_code === b.code).length
