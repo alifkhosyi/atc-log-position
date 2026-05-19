@@ -1298,6 +1298,11 @@ const AdminDash = () => {
     const totalOnMic = c + childOnMic
     const persCount = ctx.personnel.filter(p => p.branch_code === b.code).length
 
+    // Split children: MO children (have own MO account) vs unit children (no MO)
+    const moChildren = children.filter(ch => moCodeSet.has(ch.code))
+    const unitChildren = children.filter(ch => !moCodeSet.has(ch.code))
+    const totalChildren = children.length
+
     return (
       <div onClick={() => handleBranchClick(b.code)} style={{
         cursor: "pointer", padding: "14px 16px", borderRadius: 12, transition: "all .2s",
@@ -1317,12 +1322,12 @@ const AdminDash = () => {
             padding:"3px 10px",borderRadius:20,display:"flex",alignItems:"center",gap:4
           }}><I n="mic" s={11}/> {totalOnMic}</span>}
         </div>
-        <div style={{fontSize:11,color:"var(--fg-muted)",marginBottom:children.length > 0 ? 8 : 0}}>
+        <div style={{fontSize:11,color:"var(--fg-muted)",marginBottom:totalChildren > 0 ? 8 : 0}}>
           {b.city} · {persCount} personel{traffic > 0 ? ` · ${traffic.toLocaleString()} traffic` : ""}
         </div>
-        {children.length > 0 && (
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {children.map(ch => {
+        {moChildren.length > 0 && (
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:unitChildren.length > 0 ? 6 : 0}}>
+            {moChildren.map(ch => {
               const chActive = (brAct[ch.code] || 0) > 0
               const chOnMic = brAct[ch.code] || 0
               const chPers = ctx.personnel.filter(p => p.branch_code === ch.code).length
@@ -1337,14 +1342,19 @@ const AdminDash = () => {
                   <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
                     <Pulse on={chActive} s={5}/>
                     <span style={{fontSize:11,fontWeight:700,color:"var(--fg)"}}>{ch.city || ch.name}</span>
+                    <span style={{fontSize:8,color:"#2563eb",background:"rgba(37,99,235,0.1)",padding:"1px 5px",borderRadius:8,fontWeight:700}}>MO</span>
                   </div>
-                  <div style={{fontSize:10,color:"var(--fg-muted)"}}>{chPers} personel</div>
-                  <div style={{fontSize:10,fontWeight:600,color:chActive?"#059669":"var(--fg-muted)",marginTop:2}}>
-                    {chActive ? chOnMic+" on mic" : "Idle"}{chTraffic > 0 ? " · "+chTraffic+"t" : ""}
+                  <div style={{fontSize:10,color:"var(--fg-muted)"}}>
+                    {chPers} pers{chActive ? ` · ${chOnMic} on mic` : " · Idle"}{chTraffic > 0 ? ` · ${chTraffic}t` : ""}
                   </div>
                 </div>
               )
             })}
+          </div>
+        )}
+        {unitChildren.length > 0 && (
+          <div style={{fontSize:10,color:"var(--fg-muted)",paddingTop:6,borderTop:"0.5px solid var(--border)"}}>
+            <I n="building" s={11}/> +{unitChildren.length} unit: {unitChildren.slice(0,6).map(u => u.city || u.name).join(", ")}{unitChildren.length > 6 ? ", ..." : ""}
           </div>
         )}
       </div>
