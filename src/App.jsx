@@ -3236,33 +3236,66 @@ export default function App() {
     return all
   }
 
-  const loadData = async () => {
-    const [brRes, secRes, logRes, hoRes, hcRes] = await Promise.all([
+  // ── Static data: fetch once on login ──
+  const loadStaticData = async () => {
+    const [brRes, secRes] = await Promise.all([
       supabase.from("branches").select("*").order("code"),
       supabase.from("sectors").select("*").order("sort_order"),
-      supabase.from("position_logs").select("*").order("on_time",{ascending:false}).limit(500),
-      supabase.from("handover_notes").select("*").order("created_at",{ascending:false}).limit(200),
-      supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
     ])
     const allPersonnel = await fetchAllPersonnel()
-    // Fetch unique branch_codes that have MO accounts
     const {data: moData} = await supabase.from("accounts").select("branch_code").like("username","mo_%")
     const uniqueMoCodes = [...new Set((moData||[]).map(a => a.branch_code))]
     setMoBranchCodes(uniqueMoCodes)
     if (brRes.data) setBranches(brRes.data)
     if (secRes.data) setSectors(secRes.data)
-    if (logRes.data) setLogs(logRes.data)
-    if (hoRes.data) setHandovers(hoRes.data)
-    if (hcRes.data) setHandoverChecklists(hcRes.data)
     if (allPersonnel.length) setPersonnel(allPersonnel)
   }
 
-  // Load data + auto refresh
+  // ── Dynamic data: fetch on change ──
+  const loadDynamicData = async () => {
+    const [logRes, hoRes, hcRes] = await Promise.all([
+      supabase.from("position_logs").select("*").order("on_time",{ascending:false}).limit(500),
+      supabase.from("handover_notes").select("*").order("created_at",{ascending:false}).limit(200),
+      supabase.from("handover_checklists").select("*").order("created_at",{ascending:false}).limit(200),
+    ])
+    if (logRes.data) setLogs(logRes.data)
+    if (hoRes.data) setHandovers(hoRes.data)
+    if (hcRes.data) setHandoverChecklists(hcRes.data)
+  }
+
+  // ── Full reload (for manual refresh) ──
+  const loadData = async () => {
+    await loadStaticData()
+    await loadDynamicData()
+  }
+
+  // Load data + realtime subscriptions
   useEffect(() => {
     if (!user) return
-    loadData()
-    const i = setInterval(loadData, 30000)
-    return () => clearInterval(i)
+
+    // Initial load
+    loadStaticData().then(() => loadDynamicData())
+
+    // Realtime: subscribe to changes on dynamic tables
+    const channel = supabase.channel('db-changes')
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'position_logs'}, () => {
+        loadDynamicData()
+      })
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'handover_notes'}, () => {
+        loadDynamicData()
+      })
+      .on('postgres_changes', {event: '*', schema: 'public', table: 'handover_checklists'}, () => {
+        loadDynamicData()
+      })
+      .subscribe()
+
+    // Fallback polling every 2 minutes (in case realtime misses something)
+    const i = setInterval(loadDynamicData, 120000)
+
+    return () => {
+      clearInterval(i)
+      supabase.removeChannel(channel)
+    }
   }, [user])
 
   const handleLogin = async (s) => {
