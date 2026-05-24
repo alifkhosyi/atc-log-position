@@ -1,9 +1,7 @@
 // ============================================================
-// src/pages/cabang/HoToMo.jsx — Manager Operasi PRKP (REDESIGN)
+// src/pages/cabang/HoToMo.jsx — Manager Operasi PRKP (REDESIGN — Mockup-driven)
 // ──────────────────────────────────────────────────────────
-// No dedicated mockup file — use Handover-redesign visual pattern
-// for consistency (tabs styled with .mo-tab, structured items table,
-// expandable history cards).
+// Visual: HoToMo_Redesign.html mockup
 //
 // Logic preserved exactly from original:
 //   - activeTab state (pre_shift / handover / post_shift) tied to MO_TABS
@@ -13,21 +11,42 @@
 //     shift, checklist_type, items, incoming_mo, outgoing_mo, notes, created_by)
 //   - logAudit('MO_CHECKLIST', ...) preserved
 //   - Confirm dialog for incomplete submission preserved
-// New affordances:
-//   - Tabs styled as .mo-tab (rounded button row, accent active)
-//   - Items table uses .mo-items-table with grouped header
-//   - 3-state check button as .mo-check-btn (color-coded)
-//   - History card with .mo-history-card structure
-//   - Expand/collapse via tombol (state), bukan <details> native
+// New affordances from mockup:
+//   - .mo-tabs + .mo-tab + .mo-tab-emoji with counter badge
+//   - .form-card for form panel with .form-card-head + .form-card-title
+//   - .items-table with item-no/item-label/item-toggle-cell
+//   - .h-list with .h-card (shift-Morning/Afternoon/Night variants)
+//   - .h-card-head with .h-caret expand chevron
+//   - .h-summary with .h-pill (ok/notok/na) status badges
+//   - .h-card-body with .h-item-list + .h-notes + .h-footer
+//   - .save-bar dengan summary count + actions
 // ============================================================
 import React, { useState, useEffect } from "react"
 import { supabase } from "../../supabase.js"
 import { useApp } from "../../lib/context.jsx"
-import { getAccessibleBranches, logAudit } from "../../lib/utils.js"
+import { getAccessibleBranches, logAudit, fmtD } from "../../lib/utils.js"
 import { MO_TABS } from "../../lib/constants.js"
 import { I } from "../../components/Icons.jsx"
 import { useToast } from "../../components/Toast.jsx"
 import { useConfirm } from "../../components/ConfirmDialog.jsx"
+
+// ── 3-state toggle button ──
+const StateToggle = ({ value, onChange }) => (
+  <div className="check-seg">
+    <button type="button"
+            className={"check-seg-btn check-ok" + (value === true ? " active" : "")}
+            onClick={() => onChange(value === true ? null : true)}
+            aria-label="Mark OK">✓</button>
+    <button type="button"
+            className={"check-seg-btn check-notok" + (value === false ? " active" : "")}
+            onClick={() => onChange(value === false ? null : false)}
+            aria-label="Mark Not OK">✗</button>
+    <button type="button"
+            className={"check-seg-btn check-na" + (value === null ? " active" : "")}
+            onClick={() => onChange(null)}
+            aria-label="Mark N/A">—</button>
+  </div>
+)
 
 export const CabangHoToMo = () => {
   const ctx = useApp()
@@ -42,10 +61,13 @@ export const CabangHoToMo = () => {
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState([])
   const [expandedId, setExpandedId] = useState(null)
+  const [historyByTab, setHistoryByTab] = useState({}) // { pre_shift: [], handover: [], post_shift: [] }
 
   const [checkDate, setCheckDate] = useState(new Date().toISOString().slice(0, 10))
-  const [shift, setShift] = useState("")
+  const [shift, setShift] = useState("Morning")
   const [notes, setNotes] = useState("")
+  const [incomingMo, setIncomingMo] = useState("")
+  const [outgoingMo, setOutgoingMo] = useState("")
 
   const currentTab = MO_TABS.find(t => t.id === activeTab)
   const initChecks = () => currentTab.items.reduce((a, it) => ({ ...a, [it.no]: null }), {})
@@ -70,20 +92,17 @@ export const CabangHoToMo = () => {
         toast.error("Gagal memuat riwayat", error.message)
         return
       }
-      if (data) setHistory(data)
+      if (data) {
+        setHistory(data)
+        setHistoryByTab(prev => ({ ...prev, [activeTab]: data }))
+      }
     }
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, ctx.user.branch_code, saving])
 
-  // ── 3-state toggle (preserved cycle: null → true → false → null) ──
-  const toggleCheck = (no) => {
-    setChecks(p => {
-      const cur = p[no]
-      const next = cur === null ? true : cur === true ? false : null
-      return { ...p, [no]: next }
-    })
-  }
+  // ── 3-state toggle (preserved cycle) ──
+  const setCheckValue = (no, v) => setChecks(p => ({ ...p, [no]: v }))
 
   // ── Submit (preserved shape) ──
   const handleSubmit = async () => {
@@ -111,8 +130,8 @@ export const CabangHoToMo = () => {
       shift,
       checklist_type: activeTab,
       items: itemsArr,
-      incoming_mo: ctx.user.display_name,
-      outgoing_mo: "",
+      incoming_mo: incomingMo || ctx.user.display_name,
+      outgoing_mo: outgoingMo || "",
       notes,
       created_by: ctx.user.id,
     })
@@ -127,31 +146,34 @@ export const CabangHoToMo = () => {
       `${currentTab.label} · shift ${shift}`)
     setChecks(initChecks())
     setNotes("")
-    setShift("")
+    setIncomingMo("")
+    setOutgoingMo("")
+    setShift("Morning")
     setShowForm(false)
     setSaving(false)
   }
 
-  // ── Render check icon for a value (preserved logic) ──
-  const renderCheckIcon = (val) => {
-    if (val === true)  return "✓"
-    if (val === false) return "✗"
-    return "—"
-  }
-  const checkClass = (val) => {
-    if (val === true)  return "checked-true"
-    if (val === false) return "checked-false"
-    return "checked-null"
-  }
+  // ── Tab counts for badges ──
+  const tabCount = (tabId) => (historyByTab[tabId] || (tabId === activeTab ? history : [])).length
+
+  // ── Summary count from checks ──
+  const okCount = Object.values(checks).filter(v => v === true).length
+  const notOkCount = Object.values(checks).filter(v => v === false).length
+  const naCount = Object.values(checks).filter(v => v === null).length
 
   return (
     <div className="page-content">
       {/* TOPBAR */}
       <div className="topbar">
         <div>
-          <h1 className="topbar-title">HO/TO Manager Operasi</h1>
-          <p className="topbar-sub">Checklist PRKP — Cabang {ctx.user.branch_code}</p>
+          <div className="topbar-title">HO/TO Manager Operasi</div>
+          <div className="topbar-sub">Checklist PRKP — Cabang {ctx.user.branch_code} · {currentTab.label}</div>
         </div>
+        {!showForm && (
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+            <I n="plus" s={16}/> Checklist Baru
+          </button>
+        )}
       </div>
 
       {/* MO TABS */}
@@ -162,198 +184,180 @@ export const CabangHoToMo = () => {
             className={"mo-tab" + (activeTab === t.id ? " active" : "")}
             onClick={() => setActiveTab(t.id)}
           >
-            <span className="mo-tab-icon">{t.icon}</span> {t.label}
+            <span className="mo-tab-emoji">{t.icon}</span>
+            <span>{t.label}</span>
+            <span className="panel-counter" style={{ marginLeft: 4 }}>{tabCount(t.id)}</span>
           </button>
         ))}
       </div>
 
-      {/* SECTION HEADER */}
-      <div className="row-between" style={{ marginBottom: 16 }}>
-        <h2 style={{
-          margin: 0, fontSize: 15, fontWeight: 600,
-          display: "flex", alignItems: "center", gap: 8,
-        }}>
-          <I n="checklist" s={18}/> {currentTab.label}
-        </h2>
-        {!showForm && (
-          <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}>
-            <I n="plus" s={14}/> Buat Checklist
-          </button>
-        )}
-      </div>
-
       {/* FORM */}
       {showForm && (
-        <div className="panel" style={{ marginBottom: 24 }}>
-          <div className="panel-header">
-            <h2 className="panel-title">
-              <span className="mo-tab-icon">{currentTab.icon}</span> {currentTab.label}
+        <div className="form-card">
+          <div className="form-card-head">
+            <h2 className="form-card-title">
+              <span style={{ fontSize: 18 }}>{currentTab.icon}</span> Form {currentTab.label}
             </h2>
-            <button
-              className="btn btn-sm btn-ghost"
-              onClick={() => { setShowForm(false); setChecks(initChecks()); setNotes(""); setShift("") }}
-            >Tutup</button>
+            <button className="btn btn-sm btn-ghost"
+                    onClick={() => { setShowForm(false); setChecks(initChecks()); setNotes(""); setIncomingMo(""); setOutgoingMo("") }}>
+              <I n="x" s={14}/> Tutup
+            </button>
           </div>
-          <div className="panel-body">
-            {/* Meta row */}
-            <div className="form-grid" style={{ marginBottom: 20 }}>
-              <div className="field">
-                <label>Tanggal</label>
-                <input type="date" value={checkDate}
-                       onChange={e => setCheckDate(e.target.value)}/>
-              </div>
-              <div className="field">
-                <label>Shift</label>
-                <select value={shift} onChange={e => setShift(e.target.value)}>
-                  <option value="">— Pilih —</option>
-                  <option value="Pagi">Pagi</option>
-                  <option value="Siang">Siang</option>
-                  <option value="Malam">Malam</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Manager Operasi</label>
-                <input
-                  value={ctx.user.display_name} disabled
-                  style={{
-                    background: "var(--accent-soft)",
-                    color: "var(--accent)",
-                    fontWeight: 600, cursor: "not-allowed",
-                  }}
-                />
-              </div>
-            </div>
 
-            {/* Items table */}
-            <div className="section-subtitle">Items Pemeriksaan</div>
-            <div className="table-wrap">
-              <table className="mo-items-table">
-                <thead>
-                  <tr>
-                    <th className="mo-no">NO</th>
-                    <th className="mo-item-label">ITEM</th>
-                    <th>STANDAR MINIMUM</th>
-                    <th className="mo-check-cell">CEK</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentTab.items.map(it => (
-                    <tr key={it.no}>
-                      <td className="mo-no">{it.no}</td>
-                      <td className="mo-item-label">{it.item}</td>
-                      <td className="mo-item-std">{it.std}</td>
-                      <td className="mo-check-cell">
-                        <button
-                          type="button"
-                          className={"mo-check-btn " + checkClass(checks[it.no])}
-                          onClick={() => toggleCheck(it.no)}
-                          title="Klik untuk ubah status (✓ → ✗ → —)"
-                          aria-label={`Item ${it.no}: ${renderCheckIcon(checks[it.no])}`}
-                        >
-                          {renderCheckIcon(checks[it.no])}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="form-row">
+            <div className="field">
+              <label>Tanggal</label>
+              <input type="date" value={checkDate} onChange={e => setCheckDate(e.target.value)}/>
             </div>
-
-            <div className="field" style={{ marginTop: 16, marginBottom: 0 }}>
-              <label>Catatan Tambahan</label>
-              <textarea
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                placeholder="Catatan opsional..."
-                rows={3}
-              />
+            <div className="field">
+              <label>Shift</label>
+              <select value={shift} onChange={e => setShift(e.target.value)}>
+                <option value="Morning">Morning</option>
+                <option value="Afternoon">Afternoon</option>
+                <option value="Night">Night</option>
+              </select>
             </div>
+          </div>
 
-            <div className="form-actions">
-              <button
-                className="btn btn-ghost"
-                onClick={() => { setShowForm(false); setChecks(initChecks()); setNotes(""); setShift("") }}
-                disabled={saving}
-              >Batal</button>
+          <div className="form-row">
+            <div className="field">
+              <label>Incoming MO</label>
+              <input value={incomingMo} onChange={e => setIncomingMo(e.target.value)}
+                     placeholder={ctx.user.display_name || "Nama MO masuk..."}/>
+            </div>
+            <div className="field">
+              <label>Outgoing MO</label>
+              <input value={outgoingMo} onChange={e => setOutgoingMo(e.target.value)}
+                     placeholder="Nama MO keluar..."/>
+            </div>
+          </div>
+
+          <table className="items-table">
+            <thead>
+              <tr>
+                <th className="center">No</th>
+                <th>Item Checklist</th>
+                <th className="center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentTab.items.map(it => (
+                <tr key={it.no}>
+                  <td className="item-no">{it.no.toString().padStart(2, "0")}</td>
+                  <td className="item-label">
+                    {it.item}
+                    {it.std && <div className="faint" style={{ fontSize: 11, marginTop: 2 }}>{it.std}</div>}
+                  </td>
+                  <td className="item-toggle-cell">
+                    <StateToggle value={checks[it.no]} onChange={v => setCheckValue(it.no, v)}/>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="field" style={{ marginTop: 16 }}>
+            <label>Notes (opsional)</label>
+            <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)}
+                      placeholder="Catatan tambahan, NOTAM aktif, kondisi khusus..."/>
+          </div>
+
+          <div className="save-bar">
+            <div style={{ fontSize: "var(--fs-sm)", color: "var(--text-muted)" }}>
+              {okCount} OK · {notOkCount} Not OK · {naCount} N/A
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-ghost"
+                      onClick={() => { setShowForm(false); setChecks(initChecks()); setNotes("") }}>
+                Batal
+              </button>
               <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-                <I n="save" s={14}/> {saving ? "Menyimpan…" : "Submit Checklist"}
+                <I n="save" s={14}/> {saving ? "Menyimpan..." : "Submit Checklist"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* HISTORY */}
-      <div className="section-subtitle">
-        Riwayat {currentTab.label} {history.length > 0 ? `(${history.length})` : ""}
-      </div>
-      {history.length === 0 ? (
-        <div className="panel">
-          <div className="panel-body">
-            <div className="empty-state">
-              <I n="clock" s={44}/>
-              <p>Belum ada riwayat</p>
-            </div>
-          </div>
+      {/* HISTORY PANEL */}
+      <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title"><I n="checklist" s={16}/> Riwayat {currentTab.label}</h2>
+          <span className="panel-counter">{history.length} checklist</span>
         </div>
-      ) : history.map(h => {
-        const items = h.items || []
-        const checked   = items.filter(i => i.checked === true).length
-        const unchecked = items.filter(i => i.checked === false).length
-        const total = items.length
-        const isOpen = expandedId === h.id
-        return (
-          <div key={h.id} className="mo-history-card">
-            <div className="mo-history-head">
-              <div className="mo-history-l">
-                <span className="mo-history-date">
-                  {new Date(h.checklist_date).toLocaleDateString("id-ID", {
-                    day: "numeric", month: "short", year: "numeric",
-                  })}
-                </span>
-                <span className="mo-history-shift">{h.shift}</span>
-                <div className="mo-history-summary">
-                  <span className="mo-summary-ok">✓ {checked}</span>
-                  {unchecked > 0 && (
-                    <span className="mo-summary-bad">✗ {unchecked}</span>
-                  )}
-                  <span className="mo-summary-total">/ {total}</span>
-                </div>
-              </div>
-              <span className="cl-time">
-                {new Date(h.created_at).toLocaleTimeString("id-ID", {
-                  hour: "2-digit", minute: "2-digit",
-                })}
-              </span>
+        <div className="panel-body">
+          {history.length === 0 ? (
+            <div className="empty-state">
+              <I n="checklist" s={44}/>
+              <p>Belum ada checklist untuk fase ini</p>
+              {!showForm && (
+                <button className="btn btn-sm btn-primary" style={{ marginTop: 8 }} onClick={() => setShowForm(true)}>
+                  <I n="plus" s={14}/> Buat checklist pertama
+                </button>
+              )}
             </div>
-            <div className="mo-history-meta">
-              <span>MO: <strong style={{ color: "var(--text)" }}>{h.incoming_mo}</strong></span>
-            </div>
-            {h.notes && (
-              <div className="mo-history-note">📝 {h.notes}</div>
-            )}
-            <button
-              className="mo-history-toggle"
-              onClick={() => setExpandedId(isOpen ? null : h.id)}
-            >
-              <I n={isOpen ? "chevron-up" : "chevron-down"} s={12}/>
-              {isOpen ? "Tutup detail" : `Lihat Detail (${total} item)`}
-            </button>
-            {isOpen && (
-              <div className="mo-history-detail">
-                {items.map(it => (
-                  <div key={it.no} className="mo-detail-item">
-                    <span className={
-                      "mo-mark " + (it.checked === true ? "ok" : it.checked === false ? "bad" : "na")
-                    }>{renderCheckIcon(it.checked)}</span>
-                    <span>{it.item}</span>
+          ) : (
+            <div className="h-list">
+              {history.map(h => {
+                // Build checks map from items array
+                const itemsMap = {}
+                ;(h.items || []).forEach(it => { itemsMap[it.no] = it.checked })
+
+                const ok = (h.items || []).filter(it => it.checked === true).length
+                const notOk = (h.items || []).filter(it => it.checked === false).length
+                const na = (h.items || []).filter(it => it.checked === null).length
+                const isOpen = expandedId === h.id
+
+                return (
+                  <div key={h.id} className={"h-card shift-" + (h.shift || "")}>
+                    <div className="h-card-head" onClick={() => setExpandedId(isOpen ? null : h.id)}>
+                      <div className="h-card-l">
+                        <span className={"h-caret" + (isOpen ? " open" : "")}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                        </span>
+                        <span className="h-card-date">{fmtD(h.checklist_date)}</span>
+                        <span className="h-shift-tag">{h.shift}</span>
+                        {(h.outgoing_mo || h.incoming_mo) && (
+                          <span className="h-mo">
+                            {h.outgoing_mo || "—"} → <strong style={{ color: "var(--text)" }}>{h.incoming_mo || "—"}</strong>
+                          </span>
+                        )}
+                      </div>
+                      <div className="h-summary">
+                        {ok > 0 && <span className="h-pill h-pill-ok">{ok} ✓</span>}
+                        {notOk > 0 && <span className="h-pill h-pill-notok">{notOk} ✗</span>}
+                        {na > 0 && <span className="h-pill h-pill-na">{na} —</span>}
+                      </div>
+                    </div>
+                    {isOpen && (
+                      <div className="h-card-body">
+                        <div className="h-item-list">
+                          {(h.items || []).map(it => (
+                            <div key={it.no} className="h-item-row">
+                              <div className="h-item-num">{(it.no || 0).toString().padStart(2, "0")}</div>
+                              <div>{it.item}</div>
+                              <div className={"h-item-status " + (it.checked === true ? "ok" : it.checked === false ? "notok" : "na")}>
+                                {it.checked === true ? "✓ OK" : it.checked === false ? "✗ Not OK" : "— N/A"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {h.notes && <div className="h-notes">📝 {h.notes}</div>}
+                        <div className="h-footer">
+                          <span>Submitted {new Date(h.created_at).toLocaleString("id-ID")}</span>
+                          {h.id && <span className="mono">ID: {String(h.id).slice(0, 16)}</span>}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-      })}
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

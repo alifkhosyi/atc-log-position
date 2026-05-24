@@ -1,28 +1,56 @@
 // ============================================================
-// src/components/Sidebar.jsx — Side navigation (different items per role)
+// src/components/Sidebar.jsx — Side navigation (grouped per mockup)
+// Structure follows mockups in Dashboard_Redesign.html (cabang) and
+// INMC_Dashboard_Redesign.html (admin).
+// Menu items unique to the real app are placed in the most-similar group.
 // ============================================================
 import React from "react"
 import { I, RadarLogo } from "./Icons.jsx"
 
 export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
-  const items = user.role === "admin" ? [
-    { id:"dashboard",     label:"Dashboard",                   icon:"dashboard" },
-    { id:"mon_log",       label:"Monitoring Log Position",     icon:"monitor" },
-    { id:"mon_recap",     label:"Monitoring Rekap Traffic",    icon:"chart" },
-    { id:"mon_personnel", label:"Monitoring Rekap Personel",   icon:"users" },
-    { id:"mon_handover",  label:"Monitoring Handover/Takeover",icon:"checklist" },
-    { id:"mon_ho_to_mo",  label:"Monitoring HO/TO MO",         icon:"shield" },
-    { id:"mon_reports",   label:"Monitoring Daily Reports",    icon:"note" },
-    { id:"export",        label:"Export Laporan",              icon:"download" },
-    { id:"audit",         label:"Audit Log",                   icon:"shield" },
+  const groups = user.role === "admin" ? [
+    {
+      section: "Monitoring",
+      items: [
+        { id:"dashboard",     label:"Dashboard INMC",   icon:"dashboard" },
+        { id:"mon_log",       label:"Log Position",     icon:"mic" },
+        { id:"mon_recap",     label:"Rekap Traffic",    icon:"chart" },
+        { id:"mon_personnel", label:"Personnel",        icon:"users" },
+        { id:"mon_handover",  label:"Handover",         icon:"checklist" },
+        { id:"mon_ho_to_mo",  label:"HO/TO MO",         icon:"shield" },
+      ],
+    },
+    {
+      section: "Reports",
+      items: [
+        { id:"mon_reports", label:"Daily Reports", icon:"note" },
+      ],
+    },
+    {
+      section: "Tools",
+      items: [
+        { id:"export", label:"Export",     icon:"download" },
+        { id:"audit",  label:"Audit Log",  icon:"shield" },
+      ],
+    },
   ] : [
-    { id:"dashboard",         label:"Dashboard",         icon:"dashboard" },
-    { id:"log",               label:"Log Position",      icon:"mic" },
-    { id:"rekap_personnel",   label:"Rekap Personel",    icon:"users" },
-    { id:"rekap",             label:"Rekap Traffic",     icon:"chart" },
-    { id:"handover",          label:"Handover/Takeover", icon:"checklist" },
-    { id:"ho_to_mo",          label:"HO/TO MO",          icon:"shield" },
-    { id:"reports",           label:"Report",            icon:"note" },
+    {
+      section: "Operasional",
+      items: [
+        { id:"dashboard",       label:"Dashboard",         icon:"dashboard" },
+        { id:"log",             label:"Log Position",      icon:"mic" },
+        { id:"handover",        label:"Handover/Takeover", icon:"checklist" },
+        { id:"ho_to_mo",        label:"HO/TO MO",          icon:"shield" },
+        { id:"rekap_personnel", label:"Rekap Personnel",   icon:"users" },
+        { id:"rekap",           label:"Rekap Traffic",     icon:"chart" },
+      ],
+    },
+    {
+      section: "Laporan",
+      items: [
+        { id:"reports", label:"Report", icon:"note" },
+      ],
+    },
   ]
 
   return (
@@ -40,21 +68,21 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
         <button className="sidebar-toggle" onClick={toggle}><I n="menu" s={18}/></button>
       </div>
       <nav className="sidebar-nav">
-        {!col && (
-          <div className="sidebar-section">
-            {user.role === "admin" ? "Admin Pusat" : "Cabang " + user.branch_code}
+        {groups.map((g, gi) => (
+          <div key={gi} className="sidebar-group">
+            {!col && <div className="sidebar-section">{g.section}</div>}
+            {g.items.map(it => (
+              <button
+                key={it.id}
+                className={"sidebar-item" + (page === it.id ? " sidebar-item-active" : "")}
+                onClick={() => go(it.id)}
+                title={col ? it.label : undefined}
+              >
+                <I n={it.icon} s={17}/>
+                {!col && <span>{it.label}</span>}
+              </button>
+            ))}
           </div>
-        )}
-        {items.map(it => (
-          <button
-            key={it.id}
-            className={"sidebar-item" + (page === it.id ? " sidebar-item-active" : "")}
-            onClick={() => go(it.id)}
-            title={col ? it.label : undefined}
-          >
-            <I n={it.icon} s={17}/>
-            {!col && <span>{it.label}</span>}
-          </button>
         ))}
       </nav>
       <div className="sidebar-footer">

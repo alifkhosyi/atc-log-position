@@ -4,15 +4,15 @@
 import React, { useState, useEffect } from "react"
 import { supabase } from "../../supabase.js"
 import { useApp } from "../../lib/context.jsx"
-import { fmtT, fmtD, fmtDT, durMin, getShift } from "../../lib/utils.js"
+import { fmtT, fmtD, fmtDT, durMin, getShift, SHIFTS, logAudit } from "../../lib/utils.js"
 import { CHECKLIST_ITEMS, MO_TABS, MO_PRE_SHIFT, MO_HANDOVER, MO_POST_SHIFT } from "../../lib/constants.js"
 import { I } from "../../components/Icons.jsx"
 import { Pulse } from "../../components/Pulse.jsx"
-import { Header } from "../../components/Header.jsx"
-import { Stat } from "../../components/Stat.jsx"
+import { useToast } from "../../components/Toast.jsx"
 
 export const AdminExport = () => {
   const ctx = useApp()
+  const toast = useToast()
   const [br,setBr] = useState("ALL")
   const [dateFrom,setDateFrom] = useState(new Date().toISOString().slice(0,10))
   const [dateTo,setDateTo] = useState(new Date().toISOString().slice(0,10))
@@ -22,6 +22,7 @@ export const AdminExport = () => {
   const [reportType,setReportType] = useState("log_position")
   const [exporting,setExporting] = useState(false)
   const [libsLoaded,setLibsLoaded] = useState(false)
+  const [recent,setRecent] = useState([])
 
   // Load libraries on mount
   useEffect(() => {
@@ -58,14 +59,15 @@ export const AdminExport = () => {
   const periodLabel = filterMode==="period" ? (period==="today"?"Hari Ini":period==="week"?"7 Hari Terakhir":"30 Hari Terakhir") : dateFrom+" s/d "+dateTo
 
   // ── Report types ──
+  // Note: 'icon' is Lucide-style icon name for sidebar; 'emoji' is mockup card icon; 'formats' lists supported export formats.
   const REPORTS = [
-    {id:"log_position",label:"Log Position",icon:"mic",desc:"Siapa on/off mic, kapan, durasi"},
-    {id:"rekap_traffic",label:"Rekap Traffic",icon:"plane",desc:"DEP/ARR/OVF per cabang & sektor"},
-    {id:"handover_checklist",label:"Handover Checklists",icon:"checklist",desc:"Status checklist serah terima"},
-    {id:"handover_notes",label:"Handover Notes",icon:"note",desc:"Catatan serah terima"},
-    {id:"daily_summary",label:"Ringkasan Harian",icon:"dashboard",desc:"Rangkuman aktivitas per hari"},
-    {id:"personnel_stats",label:"Statistik Personel",icon:"chart",desc:"Jam kerja & frekuensi on mic"},
-    {id:"monthly_national",label:"Laporan Bulanan Nasional",icon:"shield",desc:"Ringkasan + 28 sheet per MO lokasi (West/East)"},
+    {id:"log_position",        label:"Log Position",        icon:"mic",       emoji:"🎙️", desc:"Detail sesi on-mic ATC per cabang, durasi, traffic counts", formats:["xlsx","pdf"]},
+    {id:"rekap_traffic",       label:"Rekap Traffic",       icon:"plane",     emoji:"📊", desc:"DEP/ARR/OVF per cabang & sektor", formats:["xlsx","pdf"]},
+    {id:"handover_checklist",  label:"Handover Checklists", icon:"checklist", emoji:"✓",  desc:"Status checklist serah terima per item per cabang", formats:["xlsx","pdf"]},
+    {id:"handover_notes",      label:"Handover Notes",      icon:"note",      emoji:"📝", desc:"Catatan serah terima antar shift", formats:["xlsx","pdf"]},
+    {id:"daily_summary",       label:"Ringkasan Harian",    icon:"dashboard", emoji:"📑", desc:"Rangkuman aktivitas per hari per cabang", formats:["xlsx","pdf"]},
+    {id:"personnel_stats",     label:"Statistik Personel",  icon:"chart",     emoji:"👥", desc:"Jam kerja, frekuensi on-mic, distribusi shift per personnel", formats:["xlsx","pdf"]},
+    {id:"monthly_national",    label:"Laporan Bulanan Nasional", icon:"shield", emoji:"🏆", desc:"Ringkasan + 28 sheet per MO lokasi (West/East)", formats:["xlsx"]},
   ]
 
   // ── Data collectors ──
@@ -616,7 +618,9 @@ export const AdminExport = () => {
       a.download = `${reportType}_${br}_${new Date().toISOString().slice(0,10)}.xlsx`
       a.click(); URL.revokeObjectURL(a.href)
       logAudit("EXPORT_EXCEL",reportType+" — "+brLabel+" — "+periodLabel,ctx.user)
-    } catch(e) { alert("Error export Excel: "+e.message) }
+      recordRecent("xlsx")
+      toast.success("Export XLSX berhasil", `File ${reportType} berhasil dibuat & download dimulai`)
+    } catch(e) { toast.error("Gagal export Excel", e.message) }
     setExporting(false)
   }
 
@@ -707,8 +711,24 @@ export const AdminExport = () => {
 
       doc.save(`${reportType}_${br}_${new Date().toISOString().slice(0,10)}.pdf`)
       logAudit("EXPORT_PDF",reportType+" — "+brLabel+" — "+periodLabel,ctx.user)
-    } catch(e) { alert("Error export PDF: "+e.message) }
+      recordRecent("pdf")
+      toast.success("Export PDF berhasil", `File ${reportType} berhasil dibuat & download dimulai`)
+    } catch(e) { toast.error("Gagal export PDF", e.message) }
     setExporting(false)
+  }
+
+  // Track recent exports (in-memory only — session)
+  const recordRecent = (format) => {
+    const fromStr = filterMode === "period"
+      ? (period === "today" ? new Date().toISOString().slice(0,10)
+          : period === "week" ? new Date(Date.now() - 6*864e5).toISOString().slice(0,10)
+          : new Date(Date.now() - 29*864e5).toISOString().slice(0,10))
+      : dateFrom
+    const toStr = filterMode === "period" ? new Date().toISOString().slice(0,10) : dateTo
+    setRecent(r => [{
+      type: reportType, branch: br, from: fromStr, to: toStr, format,
+      time: new Date().toLocaleTimeString("id-ID", {hour:"2-digit",minute:"2-digit"}),
+    }, ...r].slice(0, 5))
   }
 
   // ── Count preview ──
@@ -720,96 +740,186 @@ export const AdminExport = () => {
     return ""
   }
 
+  const selectedType = REPORTS.find(r => r.id === reportType) || REPORTS[0]
+  const showShift = !["audit_log"].includes(reportType)
+
+  // Computed range string (for display)
+  const computedRange = (() => {
+    if (filterMode === "range") return { from: dateFrom, to: dateTo }
+    const t = new Date()
+    const from = new Date(t)
+    if (period === "week") from.setDate(t.getDate() - 6)
+    else if (period === "month") from.setDate(t.getDate() - 29)
+    return { from: from.toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) }
+  })()
+
+  // Determine current step (1=type, 2=filter, 3=export)
+  const step = exporting ? 3 : reportType ? 2 : 1
+
+  const triggerExport = (format) => {
+    if (format === "xlsx") exportExcel()
+    else if (format === "pdf") exportPDF()
+  }
+
   return (
     <div className="page-content">
+      {/* TOPBAR */}
       <div className="topbar">
         <div>
-          <h1 className="topbar-title">Export Laporan</h1>
-          <p className="topbar-sub">Download Excel atau PDF</p>
+          <div className="topbar-title">Export Laporan</div>
+          <div className="topbar-sub">Generate file Excel / PDF dari data sistem</div>
         </div>
       </div>
 
-      {/* Report Type Selection */}
+      {/* STEP INDICATOR */}
+      <div className="steps-row">
+        <div className={"step" + (step >= 1 ? " done" : "")}><div className="step-num">1</div>Pilih Tipe</div>
+        <div className="step-sep"/>
+        <div className={"step" + (step >= 2 ? (step === 2 ? " active" : " done") : "")}><div className="step-num">2</div>Pilih Filter</div>
+        <div className="step-sep"/>
+        <div className={"step" + (step === 3 ? " active" : "")}><div className="step-num">3</div>Export</div>
+      </div>
+
+      {/* STEP 1 — TIPE LAPORAN */}
       <div className="panel">
-        <div className="panel-header"><h2 className="panel-title"><I n="log" s={16}/> Pilih Jenis Laporan</h2></div>
+        <div className="panel-header"><h2 className="panel-title">1. Tipe Laporan</h2></div>
         <div className="panel-body">
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10}}>
-            {REPORTS.map(r => (
-              <div key={r.id} onClick={() => setReportType(r.id)} style={{
-                padding:"14px 16px",borderRadius:10,cursor:"pointer",transition:"all .2s",
-                border:reportType===r.id?"2px solid #2563eb":"1.5px solid var(--border)",
-                background:reportType===r.id?"rgba(37,99,235,0.06)":"var(--card)",
-              }}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                  <I n={r.icon} s={16}/>
-                  <span style={{fontWeight:700,fontSize:13,color:reportType===r.id?"#2563eb":"var(--fg)"}}>{r.label}</span>
+          <div className="type-grid">
+            {REPORTS.map(t => (
+              <div key={t.id}
+                   className={"type-card" + (reportType === t.id ? " selected" : "")}
+                   onClick={() => setReportType(t.id)}>
+                <div className="type-icon">{t.emoji}</div>
+                <div className="type-label">{t.label}</div>
+                <div className="type-desc">{t.desc}</div>
+                <div className="type-formats">
+                  {t.formats.map(f => (
+                    <span key={f} className={"format-badge " + f}>{f.toUpperCase()}</span>
+                  ))}
                 </div>
-                <div style={{fontSize:11,color:"var(--fg-muted)"}}>{r.desc}</div>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* STEP 2 — FILTER & PERIODE */}
       <div className="panel">
-        <div className="panel-header"><h2 className="panel-title"><I n="eye" s={16}/> Filter</h2></div>
+        <div className="panel-header"><h2 className="panel-title">2. Filter & Periode</h2></div>
         <div className="panel-body">
-          <div className="form-grid">
+          <div className="filter-mode-toggle">
+            <button className={"filter-mode-btn" + (filterMode === "period" ? " active" : "")}
+                    onClick={() => setFilterMode("period")}>Periode Preset</button>
+            <button className={"filter-mode-btn" + (filterMode === "range" ? " active" : "")}
+                    onClick={() => setFilterMode("range")}>Custom Range</button>
+          </div>
+
+          {filterMode === "period" ? (
+            <div>
+              <div className="period-chips">
+                <button className={"period-chip" + (period === "today" ? " active" : "")} onClick={() => setPeriod("today")}>Hari Ini</button>
+                <button className={"period-chip" + (period === "week" ? " active" : "")} onClick={() => setPeriod("week")}>Minggu Ini</button>
+                <button className={"period-chip" + (period === "month" ? " active" : "")} onClick={() => setPeriod("month")}>Bulan Ini</button>
+              </div>
+              <div className="range-display">
+                Periode: <strong>{fmtD(computedRange.from)}</strong> — <strong>{fmtD(computedRange.to)}</strong>
+              </div>
+            </div>
+          ) : (
+            <div className="filter-grid">
+              <div className="field"><label>Dari</label><input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}/></div>
+              <div className="field"><label>Sampai</label><input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}/></div>
+            </div>
+          )}
+
+          <div className="filter-grid">
             <div className="field">
               <label>Cabang</label>
               <select value={br} onChange={e => setBr(e.target.value)}>
                 <option value="ALL">Semua Cabang</option>
-                {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
+                {ctx.branches.filter(b => b.region).map(b => (
+                  <option key={b.code} value={b.code}>{b.code} — {b.name || b.city}</option>
+                ))}
               </select>
             </div>
-            <div className="field">
-              <label>Mode Filter</label>
-              <select value={filterMode} onChange={e => setFilterMode(e.target.value)}>
-                <option value="period">Periode</option>
-                <option value="range">Rentang Tanggal</option>
-              </select>
-            </div>
-            {filterMode==="period" ? (
+            {showShift && (
               <div className="field">
-                <label>Periode</label>
-                <select value={period} onChange={e => setPeriod(e.target.value)}>
-                  <option value="today">Hari Ini</option>
-                  <option value="week">7 Hari Terakhir</option>
-                  <option value="month">30 Hari Terakhir</option>
+                <label>Shift</label>
+                <select value={shift} onChange={e => setShift(e.target.value)}>
+                  <option value="ALL">Semua Shift</option>
+                  {SHIFTS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-            ) : (<>
-              <div className="field"><label>Dari Tanggal</label><input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}/></div>
-              <div className="field"><label>Sampai Tanggal</label><input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}/></div>
-            </>)}
-            <div className="field">
-              <label>Shift</label>
-              <select value={shift} onChange={e => setShift(e.target.value)}>
-                <option value="ALL">Semua Shift</option>
-                {SHIFTS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
+            )}
           </div>
-
-          {/* Preview count */}
-          <div style={{marginTop:16,padding:"12px 16px",background:"var(--bg)",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-            <div>
-              <span style={{fontSize:12,color:"var(--fg-muted)"}}>Data ditemukan: </span>
-              <strong style={{color:"var(--fg)"}}>{previewCount()}</strong>
-            </div>
-            <div style={{display:"flex",gap:8}}>
-              <button className="btn btn-primary" onClick={exportExcel} disabled={exporting||!libsLoaded} style={{display:"flex",alignItems:"center",gap:6}}>
-                <I n="download" s={14}/> {exporting?"Mengexport...":"Export Excel"}
-              </button>
-              <button className="btn btn-primary" onClick={exportPDF} disabled={exporting||!libsLoaded} style={{display:"flex",alignItems:"center",gap:6,background:"linear-gradient(135deg,#dc2626,#b91c1c)"}}>
-                <I n="download" s={14}/> {exporting?"Mengexport...":"Export PDF"}
-              </button>
-            </div>
-          </div>
-          {!libsLoaded && <div style={{fontSize:11,color:"var(--fg-muted)",marginTop:8}}>Memuat library export...</div>}
         </div>
       </div>
+
+      {/* STEP 3 — EXPORT */}
+      <div className="panel">
+        <div className="panel-header"><h2 className="panel-title">3. Export</h2></div>
+        <div className="panel-body">
+          <div className="preview-card">
+            <div className="preview-row"><span>Tipe</span><span>{selectedType.label} {selectedType.emoji}</span></div>
+            <div className="preview-row"><span>Periode</span><span>{fmtD(computedRange.from)} — {fmtD(computedRange.to)}</span></div>
+            <div className="preview-row"><span>Cabang</span><span>{br === "ALL" ? "Semua Cabang" : brLabel}</span></div>
+            {showShift && <div className="preview-row"><span>Shift</span><span>{shift === "ALL" ? "Semua Shift" : shift}</span></div>}
+            <div className="preview-row"><span>Data Preview</span><span>{previewCount() || "—"}</span></div>
+          </div>
+
+          <div className="format-buttons">
+            {selectedType.formats.map(f => (
+              <button key={f}
+                      className={"format-btn " + f}
+                      onClick={() => triggerExport(f)}
+                      disabled={exporting || !libsLoaded}>
+                {exporting && f === "xlsx" ? <><span className="login-spinner"/> Generating XLSX...</> :
+                 exporting && f === "pdf" ? <><span className="login-spinner"/> Generating PDF...</> :
+                 <><I n="download" s={18}/> Export .{f}</>}
+              </button>
+            ))}
+          </div>
+
+          {exporting && (
+            <div className="progress-wrap"><div className="progress-fill" style={{ width: "70%" }}/></div>
+          )}
+          {!libsLoaded && (
+            <div style={{ fontSize: "var(--fs-sm)", color: "var(--text-muted)", marginTop: 8 }}>
+              Memuat library export (ExcelJS + jsPDF)...
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* RECENT EXPORTS */}
+      {recent.length > 0 && (
+        <div className="panel">
+          <div className="panel-header">
+            <h2 className="panel-title">Recent Exports</h2>
+            <span className="panel-counter">{recent.length}</span>
+          </div>
+          <div className="panel-body">
+            <div className="recent-list">
+              {recent.map((r, i) => {
+                const t = REPORTS.find(x => x.id === r.type)
+                return (
+                  <div key={i} className="recent-row">
+                    <div className="recent-icon">{t?.emoji}</div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "var(--text)" }}>{t?.label}</div>
+                      <div className="recent-meta">
+                        {r.branch === "ALL" ? "Semua Cabang" : r.branch} · {fmtD(r.from)} → {fmtD(r.to)}
+                      </div>
+                    </div>
+                    <span className={"recent-format format-badge " + r.format}>{r.format.toUpperCase()}</span>
+                    <span className="recent-meta" style={{ textAlign: "right" }}>⏱ {r.time}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

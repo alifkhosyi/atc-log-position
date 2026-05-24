@@ -908,18 +908,29 @@ export default function AdminReportMonitoring() {
   const [tab, setTab] = useState('daily');
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
-        <button onClick={() => setTab('daily')} style={{
-          padding: '8px 16px', background: tab === 'daily' ? '#2563eb' : 'transparent',
-          color: tab === 'daily' ? 'white' : 'var(--fg)', border: 'none', borderRadius: 6,
-          cursor: 'pointer', fontWeight: 600
-        }}>Daily Report</button>
-        <button onClick={() => setTab('monthly')} style={{
-          padding: '8px 16px', background: tab === 'monthly' ? '#2563eb' : 'transparent',
-          color: tab === 'monthly' ? 'white' : 'var(--fg)', border: 'none', borderRadius: 6,
-          cursor: 'pointer', fontWeight: 600
-        }}>Monthly Report</button>
+    <div className="page-content">
+      <div className="topbar">
+        <div>
+          <div className="topbar-title">Monitoring Daily Reports</div>
+          <div className="topbar-sub">Status submission daily report seluruh cabang</div>
+        </div>
+      </div>
+
+      <div className="mo-tabs">
+        <button
+          className={"mo-tab" + (tab === "daily" ? " active" : "")}
+          onClick={() => setTab("daily")}
+        >
+          <span className="mo-tab-emoji">📅</span>
+          <span>A. Tampilan Harian</span>
+        </button>
+        <button
+          className={"mo-tab" + (tab === "monthly" ? " active" : "")}
+          onClick={() => setTab("monthly")}
+        >
+          <span className="mo-tab-emoji">📊</span>
+          <span>B. Rekap Bulanan</span>
+        </button>
       </div>
 
       {tab === 'daily' && <DailyMonitoring />}
