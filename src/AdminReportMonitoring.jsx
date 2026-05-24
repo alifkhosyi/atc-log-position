@@ -27,9 +27,9 @@ const TRAFFIC_TYPES = [
   { key: 'training', label: 'Training' },
 ];
 const TRAFFIC_GROUPS = [
-  { label: 'DEPARTURE', color: '#10b981', cols: [{ key: 'depDom', label: 'DOM' }, { key: 'depInt', label: 'INT' }] },
-  { label: 'ARRIVAL',   color: '#38bdf8', cols: [{ key: 'arrDom', label: 'DOM' }, { key: 'arrInt', label: 'INT' }] },
-  { label: 'OTHERS',    color: '#94a3b8', cols: [
+  { label: 'DEPARTURE', color: 'var(--status-on)', cols: [{ key: 'depDom', label: 'DOM' }, { key: 'depInt', label: 'INT' }] },
+  { label: 'ARRIVAL',   color: 'var(--accent)', cols: [{ key: 'arrDom', label: 'DOM' }, { key: 'arrInt', label: 'INT' }] },
+  { label: 'OTHERS',    color: 'var(--text-muted)', cols: [
     { key: 'ovf', label: 'OVF' }, { key: 'adv', label: 'ADV' }, { key: 'ext', label: 'EXT' },
     { key: 'dla', label: 'DLA' }, { key: 'cnl', label: 'CNL' }, { key: 'ef', label: 'EF' },
     { key: 'cf', label: 'CF' }, { key: 'rtb', label: 'RTB' }, { key: 'rta', label: 'RTA' },
@@ -58,9 +58,9 @@ const Dot = ({ color, glow }) => (
 
 const StatusBadge = ({ status }) => {
   const map = {
-    submitted:  { bg: 'rgba(16,185,129,0.15)',  color: '#10b981', label: 'Submitted' },
-    draft:      { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b', label: 'Draft' },
-    belum:      { bg: 'rgba(100,116,139,0.15)', color: '#64748b', label: 'Belum Lapor' },
+    submitted:  { bg: 'var(--status-on-soft)',  color: 'var(--status-on)', label: 'Submitted' },
+    draft:      { bg: 'var(--status-warn-soft)',  color: 'var(--status-warn)', label: 'Draft' },
+    belum:      { bg: 'var(--status-off-soft)', color: 'var(--text-muted)', label: 'Belum Lapor' },
   };
   const s = map[status] || map.belum;
   return (
@@ -88,7 +88,7 @@ const Panel = ({ title, badge, glow, children, action, noPad }) => (
       padding: '11px 16px', borderBottom: '1px solid var(--border)',
       background: glow ? glow + '08' : 'rgba(255,255,255,0.02)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {badge && <span style={{ background: 'rgba(56,189,248,0.15)', color: '#38bdf8',
+        {badge && <span style={{ background: 'rgba(56,189,248,0.15)', color: 'var(--accent)',
           padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 800 }}>{badge}</span>}
         <h3 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--fg)',
           textTransform: 'uppercase', letterSpacing: '.5px' }}>{title}</h3>
@@ -158,11 +158,11 @@ function ReportDetail({ report, onBack }) {
       {/* Quick Summary Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Total Traffic', val: grandTotal(), color: '#38bdf8' },
-          { label: 'OTP Airline',   val: report.otp_airline_percentage != null ? report.otp_airline_percentage + '%' : '—', color: '#38bdf8' },
-          { label: 'DEP Punct.',    val: report.dep_punctuality_percentage != null ? report.dep_punctuality_percentage + '%' : '—', color: '#10b981' },
-          { label: 'ARR Punct.',    val: report.arr_punctuality_percentage != null ? report.arr_punctuality_percentage + '%' : '—', color: '#f59e0b' },
-          { label: 'Insiden',       val: incidents.filter(i => i.incident_type).length, color: incidents.filter(i => i.incident_type).length > 0 ? '#ef4444' : '#64748b' },
+          { label: 'Total Traffic', val: grandTotal(), color: 'var(--accent)' },
+          { label: 'OTP Airline',   val: report.otp_airline_percentage != null ? report.otp_airline_percentage + '%' : '—', color: 'var(--accent)' },
+          { label: 'DEP Punct.',    val: report.dep_punctuality_percentage != null ? report.dep_punctuality_percentage + '%' : '—', color: 'var(--status-on)' },
+          { label: 'ARR Punct.',    val: report.arr_punctuality_percentage != null ? report.arr_punctuality_percentage + '%' : '—', color: 'var(--status-warn)' },
+          { label: 'Insiden',       val: incidents.filter(i => i.incident_type).length, color: incidents.filter(i => i.incident_type).length > 0 ? 'var(--status-alert)' : 'var(--text-muted)' },
         ].map(({ label, val, color }) => (
           <div key={label} style={{ background: 'var(--card)', border: `1px solid ${color}33`,
             borderRadius: 10, padding: '12px', textAlign: 'center', boxShadow: `0 0 12px ${color}10` }}>
@@ -188,12 +188,12 @@ function ReportDetail({ report, onBack }) {
                 <div style={{
                   width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 12, fontWeight: 800,
-                  background: active ? '#38bdf8' : done ? 'rgba(16,185,129,0.2)' : 'var(--bg)',
-                  color: active ? '#0f172a' : done ? '#10b981' : 'var(--fg-muted)',
-                  border: `2px solid ${active ? '#38bdf8' : done ? '#10b981' : 'var(--border)'}`,
+                  background: active ? 'var(--accent)' : done ? 'rgba(16,185,129,0.2)' : 'var(--bg)',
+                  color: active ? '#0f172a' : done ? 'var(--status-on)' : 'var(--fg-muted)',
+                  border: `2px solid ${active ? 'var(--accent)' : done ? 'var(--status-on)' : 'var(--border)'}`,
                   boxShadow: active ? '0 0 10px #38bdf866' : 'none',
                 }}>{done ? '✓' : sec.id}</div>
-                <span style={{ fontSize: 9, fontWeight: 600, color: active ? '#38bdf8' : done ? '#10b981' : 'var(--fg-muted)', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 9, fontWeight: 600, color: active ? 'var(--accent)' : done ? 'var(--status-on)' : 'var(--fg-muted)', whiteSpace: 'nowrap' }}>
                   {sec.icon} {sec.label}
                 </span>
               </button>
@@ -207,7 +207,7 @@ function ReportDetail({ report, onBack }) {
 
       {/* ── A: Identifikasi ── */}
       {activeTab === 'A' && (
-        <Panel badge="A" title="Identifikasi Laporan" glow="#38bdf8">
+        <Panel badge="A" title="Identifikasi Laporan" glow='var(--accent)'>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
             {[
               ['Tanggal Laporan', fmtD(report.report_date)],
@@ -229,17 +229,17 @@ function ReportDetail({ report, onBack }) {
       {/* ── B: Kondisi Operasional ── */}
       {activeTab === 'B' && (
         <Panel badge="B" title="Kondisi Operasional Umum"
-          glow={bProblems.length > 0 ? '#f59e0b' : '#10b981'}
+          glow={bProblems.length > 0 ? 'var(--status-warn)' : 'var(--status-on)'}
           action={bProblems.length > 0
-            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {bProblems.length} perlu perhatian</span>
-            : <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Normal</span>
+            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--status-alert)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {bProblems.length} perlu perhatian</span>
+            : <span style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--status-on)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Normal</span>
           }>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {OPERATIONAL_ASPECTS.map(a => {
               const status = report[`condition_${a.key}_status`] || 'Normal';
               const notes  = report[`condition_${a.key}_notes`]  || '';
               const waktu  = report[`condition_${a.key}_waktu`]  || '';
-              const color  = status === 'Normal' ? '#10b981' : status === 'Perhatian' ? '#f59e0b' : '#ef4444';
+              const color  = status === 'Normal' ? 'var(--status-on)' : status === 'Perhatian' ? 'var(--status-warn)' : 'var(--status-alert)';
               const problem = status !== 'Normal';
               return (
                 <div key={a.key} style={{
@@ -270,10 +270,10 @@ function ReportDetail({ report, onBack }) {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
             {[
-              { label: 'Total Traffic', val: grandTotal(), color: '#38bdf8' },
-              { label: 'Departure', val: ['depDom','depInt'].reduce((s,k) => s + colTotal(k), 0), color: '#10b981' },
-              { label: 'Arrival',   val: ['arrDom','arrInt'].reduce((s,k) => s + colTotal(k), 0), color: '#38bdf8' },
-              { label: 'Overfly',   val: colTotal('ovf'), color: '#f59e0b' },
+              { label: 'Total Traffic', val: grandTotal(), color: 'var(--accent)' },
+              { label: 'Departure', val: ['depDom','depInt'].reduce((s,k) => s + colTotal(k), 0), color: 'var(--status-on)' },
+              { label: 'Arrival',   val: ['arrDom','arrInt'].reduce((s,k) => s + colTotal(k), 0), color: 'var(--accent)' },
+              { label: 'Overfly',   val: colTotal('ovf'), color: 'var(--status-warn)' },
             ].map(({ label, val, color }) => (
               <div key={label} style={{ background: 'var(--card)', border: `1px solid ${color}33`, borderRadius: 10, padding: '14px', textAlign: 'center', boxShadow: `0 0 12px ${color}10` }}>
                 <div style={{ fontSize: 10, fontWeight: 600, color, textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 4 }}>{label}</div>
@@ -282,7 +282,7 @@ function ReportDetail({ report, onBack }) {
             ))}
           </div>
 
-          <Panel badge="C" title="Movement Traffic Harian" glow="#10b981">
+          <Panel badge="C" title="Movement Traffic Harian" glow='var(--status-on)'>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ borderCollapse: 'collapse', fontSize: 11, minWidth: 750 }}>
                 <thead>
@@ -291,7 +291,7 @@ function ReportDetail({ report, onBack }) {
                     {TRAFFIC_GROUPS.map(g => (
                       <th key={g.label} colSpan={g.cols.length} style={th({ background: g.color + '22', color: g.color })}>{g.label}</th>
                     ))}
-                    <th style={th({ background: 'rgba(56,189,248,0.12)', color: '#38bdf8', minWidth: 48 })}>TOTAL</th>
+                    <th style={th({ background: 'rgba(56,189,248,0.12)', color: 'var(--accent)', minWidth: 48 })}>TOTAL</th>
                   </tr>
                   <tr>
                     {TRAFFIC_GROUPS.map(g => g.cols.map(c => (
@@ -310,14 +310,14 @@ function ReportDetail({ report, onBack }) {
                             {row[c.key] || '—'}
                           </td>
                         ))}
-                        <td style={td({ fontWeight: 800, color: '#38bdf8', background: 'rgba(56,189,248,0.06)' })}>{rowTotal(t.key) || '—'}</td>
+                        <td style={td({ fontWeight: 800, color: 'var(--accent)', background: 'rgba(56,189,248,0.06)' })}>{rowTotal(t.key) || '—'}</td>
                       </tr>
                     );
                   })}
                   <tr style={{ background: 'rgba(56,189,248,0.05)' }}>
-                    <td style={{ ...td({ textAlign: 'left', padding: '7px 10px' }), fontWeight: 800, color: '#38bdf8' }}>TOTAL</td>
-                    {ALL_COLS.map(c => (<td key={c.key} style={td({ fontWeight: 700, color: '#38bdf8' })}>{colTotal(c.key) || '—'}</td>))}
-                    <td style={td({ fontWeight: 900, fontSize: 13, color: '#f59e0b', background: 'rgba(245,158,11,0.1)' })}>{grandTotal() || '—'}</td>
+                    <td style={{ ...td({ textAlign: 'left', padding: '7px 10px' }), fontWeight: 800, color: 'var(--accent)' }}>TOTAL</td>
+                    {ALL_COLS.map(c => (<td key={c.key} style={td({ fontWeight: 700, color: 'var(--accent)' })}>{colTotal(c.key) || '—'}</td>))}
+                    <td style={td({ fontWeight: 900, fontSize: 13, color: 'var(--status-warn)', background: 'rgba(245,158,11,0.1)' })}>{grandTotal() || '—'}</td>
                   </tr>
                 </tbody>
               </table>
@@ -327,7 +327,7 @@ function ReportDetail({ report, onBack }) {
           {/* C.3 OTP */}
           <Panel badge="C.3" title="Kinerja Ketepatan Waktu">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-              {[['OTP Airline', report.otp_airline_percentage, '#38bdf8'], ['DEP Punctuality', report.dep_punctuality_percentage, '#10b981'], ['ARR Punctuality', report.arr_punctuality_percentage, '#f59e0b']].map(([label, val, color]) => (
+              {[['OTP Airline', report.otp_airline_percentage, 'var(--accent)'], ['DEP Punctuality', report.dep_punctuality_percentage, 'var(--status-on)'], ['ARR Punctuality', report.arr_punctuality_percentage, 'var(--status-warn)']].map(([label, val, color]) => (
                 <div key={label} style={{ background: color + '0d', border: `1px solid ${color}33`, borderRadius: 12, padding: '18px', textAlign: 'center' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>{label}</div>
                   <div style={{ fontSize: 28, fontWeight: 900, color }}>{val != null ? val + '%' : '—'}</div>
@@ -343,7 +343,7 @@ function ReportDetail({ report, onBack }) {
                 {(report.operational_disruptions || []).map((d, i) => (
                   <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 70px 1fr 1fr', gap: 10, alignItems: 'center', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.01)' }}>
                     <span style={{ fontWeight: 700, fontSize: 12 }}>{d.kategori}</span>
-                    <span style={{ fontWeight: 800, fontSize: 16, color: d.total > 0 ? '#ef4444' : 'var(--fg-muted)', textAlign: 'center' }}>{d.total ?? '—'}</span>
+                    <span style={{ fontWeight: 800, fontSize: 16, color: d.total > 0 ? 'var(--status-alert)' : 'var(--fg-muted)', textAlign: 'center' }}>{d.total ?? '—'}</span>
                     <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{d.tindak_lanjut || '—'}</span>
                     <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{d.keterangan || '—'}</span>
                   </div>
@@ -357,16 +357,16 @@ function ReportDetail({ report, onBack }) {
       {/* ── D: Komunikasi ── */}
       {activeTab === 'D' && (
         <Panel badge="D" title="Laporan Komunikasi Penerbangan"
-          glow={commIssues.length > 0 ? '#f59e0b' : '#10b981'}
+          glow={commIssues.length > 0 ? 'var(--status-warn)' : 'var(--status-on)'}
           action={commIssues.length > 0
-            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {commIssues.length} tidak normal</span>
-            : <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Operational</span>
+            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--status-alert)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {commIssues.length} tidak normal</span>
+            : <span style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--status-on)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Operational</span>
           }>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {COMM_SYSTEMS.map(s => {
               const sys = commSystems.find(x => x.system_key === s.key || x.system_name?.includes(s.label.split(' ')[0]));
               const status = sys?.status || 'Operational';
-              const color  = status === 'Operational' ? '#10b981' : status === 'Degraded' ? '#f59e0b' : '#ef4444';
+              const color  = status === 'Operational' ? 'var(--status-on)' : status === 'Degraded' ? 'var(--status-warn)' : 'var(--status-alert)';
               const notOp  = status !== 'Operational';
               return (
                 <div key={s.key} style={{
@@ -392,7 +392,7 @@ function ReportDetail({ report, onBack }) {
       {/* ── E: Insiden ── */}
       {activeTab === 'E' && (
         <Panel badge="E" title="Gangguan, Insiden & Tindak Lanjut"
-          glow={incidents.filter(i => i.incident_type).length > 0 ? '#ef4444' : undefined}>
+          glow={incidents.filter(i => i.incident_type).length > 0 ? 'var(--status-alert)' : undefined}>
           {incidents.filter(i => i.incident_type || i.incident_time).length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg-muted)' }}>
               <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
@@ -403,8 +403,8 @@ function ReportDetail({ report, onBack }) {
               {incidents.filter(i => i.incident_type || i.incident_time).map((inc, i) => (
                 <div key={i} style={{ padding: '14px', borderRadius: 10, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.03)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <span style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', fontWeight: 800, fontSize: 11, padding: '2px 8px', borderRadius: 20 }}>⚠ Insiden {i + 1}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}>{inc.incident_type}</span>
+                    <span style={{ background: 'var(--status-alert-soft)', color: 'var(--status-alert)', fontWeight: 800, fontSize: 11, padding: '2px 8px', borderRadius: 20 }}>⚠ Insiden {i + 1}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--status-alert)' }}>{inc.incident_type}</span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
                     {[['Waktu UTC', inc.incident_time || '—'], ['Sistem Terdampak', inc.affected_system || '—'], ['Durasi', inc.duration_minutes ? inc.duration_minutes + ' menit' : '—']].map(([k, v]) => (
@@ -430,7 +430,7 @@ function ReportDetail({ report, onBack }) {
       {/* ── F: Catatan ── */}
       {activeTab === 'F' && (
         <>
-          <Panel badge="F" title="Catatan Operasional" glow="#8b5cf6">
+          <Panel badge="F" title="Catatan Operasional" glow='var(--purple)'>
             {report.operational_notes ? (
               <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: 'var(--fg)', padding: '4px 0' }}>{report.operational_notes}</p>
             ) : (
@@ -438,7 +438,7 @@ function ReportDetail({ report, onBack }) {
             )}
           </Panel>
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 12 }}>✍️ Dibuat Oleh</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 12 }}>✍️ Dibuat Oleh</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
               {[['Nama', report.manager_name || '—'], ['Jabatan', 'Manager Operasi'], ['Tanggal', fmtD(report.report_date)], ['Unit', report.unit_name || '—']].map(([k, v]) => (
                 <div key={k} style={{ textAlign: 'center', padding: '10px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
@@ -554,10 +554,10 @@ function DailyMonitoring() {
       {/* ── Summary Stats ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
         {[
-          { label: 'Total Cabang',   val: totalExpected, color: '#38bdf8', icon: '🏢' },
-          { label: 'Submitted',      val: submitted,      color: '#10b981', icon: '✅' },
-          { label: 'Draft',          val: draft,          color: '#f59e0b', icon: '📝' },
-          { label: 'Belum Lapor',    val: Math.max(0, belumLapor), color: '#ef4444', icon: '⏳' },
+          { label: 'Total Cabang',   val: totalExpected, color: 'var(--accent)', icon: '🏢' },
+          { label: 'Submitted',      val: submitted,      color: 'var(--status-on)', icon: '✅' },
+          { label: 'Draft',          val: draft,          color: 'var(--status-warn)', icon: '📝' },
+          { label: 'Belum Lapor',    val: Math.max(0, belumLapor), color: 'var(--status-alert)', icon: '⏳' },
         ].map(({ label, val, color, icon }) => (
           <div key={label} style={{ background: 'var(--card)', border: `1px solid ${color}33`,
             borderRadius: 12, padding: '16px', display: 'flex', alignItems: 'center', gap: 14,
@@ -583,8 +583,8 @@ function DailyMonitoring() {
           {filteredBranches.map(branch => {
             const report = reportMap[branch.code];
             const status = report?.status || 'belum';
-            const borderColor = status === 'submitted' ? '#10b981' : status === 'draft' ? '#f59e0b' : '#334155';
-            const glowColor   = status === 'submitted' ? '#10b981' : status === 'draft' ? '#f59e0b' : null;
+            const borderColor = status === 'submitted' ? 'var(--status-on)' : status === 'draft' ? 'var(--status-warn)' : '#334155';
+            const glowColor   = status === 'submitted' ? 'var(--status-on)' : status === 'draft' ? 'var(--status-warn)' : null;
 
             // Compute quick stats from report
             const tm = report?.traffic_movements || [];
@@ -627,9 +627,9 @@ function DailyMonitoring() {
                     {/* OTP Row */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
                       {[
-                        ['OTP', report.otp_airline_percentage, '#38bdf8'],
-                        ['DEP', report.dep_punctuality_percentage, '#10b981'],
-                        ['ARR', report.arr_punctuality_percentage, '#f59e0b'],
+                        ['OTP', report.otp_airline_percentage, 'var(--accent)'],
+                        ['DEP', report.dep_punctuality_percentage, 'var(--status-on)'],
+                        ['ARR', report.arr_punctuality_percentage, 'var(--status-warn)'],
                       ].map(([k, v, color]) => (
                         <div key={k} style={{ background: color + '0d', border: `1px solid ${color}22`,
                           borderRadius: 8, padding: '8px', textAlign: 'center' }}>
@@ -641,18 +641,18 @@ function DailyMonitoring() {
 
                     {/* Stats row */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 12, padding: '10px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                      <MiniStat label="Traffic" value={totalTraffic} color="#38bdf8" />
-                      <MiniStat label="Ops Issue" value={bIss} color={bIss > 0 ? '#f59e0b' : '#64748b'} />
-                      <MiniStat label="Comm Issue" value={commIss} color={commIss > 0 ? '#f59e0b' : '#64748b'} />
-                      <MiniStat label="Insiden" value={incCount} color={incCount > 0 ? '#ef4444' : '#64748b'} />
+                      <MiniStat label="Traffic" value={totalTraffic} color='var(--accent)' />
+                      <MiniStat label="Ops Issue" value={bIss} color={bIss > 0 ? 'var(--status-warn)' : 'var(--text-muted)'} />
+                      <MiniStat label="Comm Issue" value={commIss} color={commIss > 0 ? 'var(--status-warn)' : 'var(--text-muted)'} />
+                      <MiniStat label="Insiden" value={incCount} color={incCount > 0 ? 'var(--status-alert)' : 'var(--text-muted)'} />
                     </div>
 
                     {/* Alert strip */}
                     {(bIss > 0 || commIss > 0 || incCount > 0) && (
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                        {bIss > 0 && <span style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>⚠ {bIss} ops</span>}
-                        {commIss > 0 && <span style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>📡 {commIss} comm</span>}
-                        {incCount > 0 && <span style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>🚨 {incCount} insiden</span>}
+                        {bIss > 0 && <span style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--status-warn)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>⚠ {bIss} ops</span>}
+                        {commIss > 0 && <span style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--status-warn)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>📡 {commIss} comm</span>}
+                        {incCount > 0 && <span style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--status-alert)', fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>🚨 {incCount} insiden</span>}
                       </div>
                     )}
 
@@ -661,7 +661,7 @@ function DailyMonitoring() {
                       <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>
                         No. {report.report_number || '—'} · {report.manager_name || '—'}
                       </span>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: '#38bdf8' }}>Lihat Detail →</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>Lihat Detail →</span>
                     </div>
                   </>
                 ) : (
@@ -812,10 +812,10 @@ function MonthlyMonitoring() {
       {/* Summary Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
         {[
-          { label: 'Total Traffic', val: totalTraffic, color: '#38bdf8', icon: '✈️' },
-          { label: 'On Mic', val: totalOnMic, color: '#10b981', icon: '🎙️', sub: totalHours + ' jam' },
-          { label: 'Daily Reports', val: totalSubmitted + '/' + (filteredBranches.length * daysInMonth), color: '#8b5cf6', icon: '📋' },
-          { label: 'Handover CL', val: checklists.length, color: '#f59e0b', icon: '📝' },
+          { label: 'Total Traffic', val: totalTraffic, color: 'var(--accent)', icon: '✈️' },
+          { label: 'On Mic', val: totalOnMic, color: 'var(--status-on)', icon: '🎙️', sub: totalHours + ' jam' },
+          { label: 'Daily Reports', val: totalSubmitted + '/' + (filteredBranches.length * daysInMonth), color: 'var(--purple)', icon: '📋' },
+          { label: 'Handover CL', val: checklists.length, color: 'var(--status-warn)', icon: '📝' },
         ].map(({ label, val, color, icon, sub }) => (
           <div key={label} style={{ background: 'var(--card)', border: `1px solid ${color}33`, borderRadius: 12, padding: '16px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: `0 0 16px ${color}12` }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{icon}</div>
@@ -830,7 +830,7 @@ function MonthlyMonitoring() {
 
       {/* DEP / ARR / OVF breakdown */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
-        {[['Departure', totalDep, '#0EA5E9'], ['Arrival', totalArr, '#F59E0B'], ['Overfly', totalOvf, '#64748B']].map(([l, v, c]) => (
+        {[['Departure', totalDep, 'var(--accent)'], ['Arrival', totalArr, 'var(--status-warn)'], ['Overfly', totalOvf, 'var(--text-muted)']].map(([l, v, c]) => (
           <div key={l} style={{ background: 'var(--card)', borderRadius: 10, padding: '14px', textAlign: 'center', borderTop: `3px solid ${c}` }}>
             <div style={{ fontSize: 26, fontWeight: 800, color: c }}>{v}</div>
             <div style={{ fontSize: 11, color: 'var(--fg-muted)', fontWeight: 600 }}>{l}</div>
@@ -863,29 +863,29 @@ function MonthlyMonitoring() {
                       {d.reports > 0 && <StatusBadge status={pct === 100 ? 'submitted' : pct > 0 ? 'draft' : 'belum'} />}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, fontWeight: 600 }}>
-                      <span style={{ color: '#0EA5E9' }}>{d.dep || 0} <span style={{ fontWeight: 400, fontSize: 9 }}>DEP</span></span>
-                      <span style={{ color: '#F59E0B' }}>{d.arr || 0} <span style={{ fontWeight: 400, fontSize: 9 }}>ARR</span></span>
-                      <span style={{ color: '#64748B' }}>{d.ovf || 0} <span style={{ fontWeight: 400, fontSize: 9 }}>OVF</span></span>
+                      <span style={{ color: 'var(--accent)' }}>{d.dep || 0} <span style={{ fontWeight: 400, fontSize: 9 }}>DEP</span></span>
+                      <span style={{ color: 'var(--status-warn)' }}>{d.arr || 0} <span style={{ fontWeight: 400, fontSize: 9 }}>ARR</span></span>
+                      <span style={{ color: 'var(--text-muted)' }}>{d.ovf || 0} <span style={{ fontWeight: 400, fontSize: 9 }}>OVF</span></span>
                       <span style={{ color: 'var(--fg)', fontSize: 14, fontWeight: 800 }}>{traffic}</span>
                     </div>
                   </div>
 
                   {/* Traffic bar */}
                   {traffic > 0 && <div style={{ height: 4, display: 'flex', gap: 1, marginLeft: 16, marginRight: 16, marginBottom: isExp ? 0 : 8 }}>
-                    <div style={{ width: (d.dep / traffic * 100) + '%', background: '#0EA5E9', borderRadius: 2 }} />
-                    <div style={{ width: (d.arr / traffic * 100) + '%', background: '#F59E0B', borderRadius: 2 }} />
-                    <div style={{ width: (d.ovf / traffic * 100) + '%', background: '#64748B', borderRadius: 2 }} />
+                    <div style={{ width: (d.dep / traffic * 100) + '%', background: 'var(--accent)', borderRadius: 2 }} />
+                    <div style={{ width: (d.arr / traffic * 100) + '%', background: 'var(--status-warn)', borderRadius: 2 }} />
+                    <div style={{ width: (d.ovf / traffic * 100) + '%', background: 'var(--text-muted)', borderRadius: 2 }} />
                   </div>}
 
                   {isExp && (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8, marginBottom: 12 }}>
-                        <MiniStat label="Daily Reports" value={d.reports + '/' + daysInMonth} color="#8b5cf6" />
-                        <MiniStat label="Submitted" value={d.submitted} color="#10b981" />
-                        <MiniStat label="Draft" value={d.draft} color="#f59e0b" />
-                        <MiniStat label="On Mic" value={d.onMic} color="#38bdf8" />
-                        <MiniStat label="Jam Kerja" value={hrs + 'h'} color="#0EA5E9" />
-                        <MiniStat label="Personel" value={d.personnel?.size || 0} color="#EC4899" />
+                        <MiniStat label="Daily Reports" value={d.reports + '/' + daysInMonth} color='var(--purple)' />
+                        <MiniStat label="Submitted" value={d.submitted} color='var(--status-on)' />
+                        <MiniStat label="Draft" value={d.draft} color='var(--status-warn)' />
+                        <MiniStat label="On Mic" value={d.onMic} color='var(--accent)' />
+                        <MiniStat label="Jam Kerja" value={hrs + 'h'} color='var(--accent)' />
+                        <MiniStat label="Personel" value={d.personnel?.size || 0} color='var(--status-alert)' />
                       </div>
 
                       {/* Personnel list for this branch */}

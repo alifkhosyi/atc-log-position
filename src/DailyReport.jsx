@@ -13,15 +13,15 @@ const TRAFFIC_TYPES = [
 ];
 
 const TRAFFIC_GROUPS = [
-  { label: 'DEPARTURE', color: '#10b981', cols: [
+  { label: 'DEPARTURE', color: 'var(--status-on)', cols: [
     { key: 'depDom', label: 'DOM' },
     { key: 'depInt', label: 'INT' },
   ]},
-  { label: 'ARRIVAL', color: '#38bdf8', cols: [
+  { label: 'ARRIVAL', color: 'var(--accent)', cols: [
     { key: 'arrDom', label: 'DOM' },
     { key: 'arrInt', label: 'INT' },
   ]},
-  { label: 'OTHERS', color: '#94a3b8', cols: [
+  { label: 'OTHERS', color: 'var(--text-muted)', cols: [
     { key: 'ovf', label: 'OVF' },
     { key: 'adv', label: 'ADV' },
     { key: 'ext', label: 'EXT' },
@@ -78,15 +78,15 @@ const initSecD        = () => COMM_SYSTEMS.reduce((a, s) => ({ ...a, [s.key]: { 
 // ─── Sub-components ───────────────────────────────────────────
 const StatusBadge = ({ status }) => {
   const map = {
-    Normal: { bg: 'rgba(16,185,129,0.15)', color: '#10b981' },
-    Perhatian: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
-    Gangguan: { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
-    Operational: { bg: 'rgba(16,185,129,0.15)', color: '#10b981' },
-    Unserviceable: { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' },
-    draft: { bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
-    submitted: { bg: 'rgba(16,185,129,0.15)', color: '#10b981' },
+    Normal: { bg: 'var(--status-on-soft)', color: 'var(--status-on)' },
+    Perhatian: { bg: 'var(--status-warn-soft)', color: 'var(--status-warn)' },
+    Gangguan: { bg: 'var(--status-alert-soft)', color: 'var(--status-alert)' },
+    Operational: { bg: 'var(--status-on-soft)', color: 'var(--status-on)' },
+    Unserviceable: { bg: 'var(--status-alert-soft)', color: 'var(--status-alert)' },
+    draft: { bg: 'var(--status-warn-soft)', color: 'var(--status-warn)' },
+    submitted: { bg: 'var(--status-on-soft)', color: 'var(--status-on)' },
   };
-  const s = map[status] || { bg: 'rgba(100,116,139,0.15)', color: '#64748b' };
+  const s = map[status] || { bg: 'var(--status-off-soft)', color: 'var(--text-muted)' };
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px',
       borderRadius: 20, background: s.bg, color: s.color, fontSize: 11, fontWeight: 700 }}>
@@ -124,7 +124,7 @@ const Panel = ({ title, badge, glow, children, action }) => (
       background: glow ? glow + '08' : 'rgba(255,255,255,0.02)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {badge && <span style={{ background: 'rgba(56,189,248,0.15)', color: '#38bdf8',
+        {badge && <span style={{ background: 'rgba(56,189,248,0.15)', color: 'var(--accent)',
           padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800 }}>{badge}</span>}
         <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--fg)',
           textTransform: 'uppercase', letterSpacing: '.5px' }}>{title}</h3>
@@ -150,7 +150,7 @@ const Inp = ({ style, ...props }) => (
     color: 'var(--fg)', fontSize: 13, boxSizing: 'border-box',
     outline: 'none', transition: 'border-color .15s', ...style,
   }}
-    onFocus={e => e.target.style.borderColor = '#38bdf8'}
+    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
     onBlur={e => e.target.style.borderColor = 'var(--border)'}
   />
 );
@@ -162,7 +162,7 @@ const SmInp = ({ style, ...props }) => (
     color: 'var(--fg)', fontSize: 11, textAlign: 'center',
     boxSizing: 'border-box', outline: 'none', ...style,
   }}
-    onFocus={e => e.target.style.borderColor = '#38bdf8'}
+    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
     onBlur={e => e.target.style.borderColor = 'var(--border)'}
   />
 );
@@ -404,7 +404,7 @@ export default function DailyReport() {
         <div style={{
           padding: '12px 18px', borderRadius: 10, marginBottom: 16, fontSize: 13, fontWeight: 600,
           background: saveMsg.ok ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-          color: saveMsg.ok ? '#10b981' : '#ef4444',
+          color: saveMsg.ok ? 'var(--status-on)' : 'var(--status-alert)',
           border: `1px solid ${saveMsg.ok ? '#10b98133' : '#ef444433'}`,
         }}>{saveMsg.text}</div>
       )}
@@ -424,12 +424,12 @@ export default function DailyReport() {
                 <div style={{
                   width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 14, fontWeight: 800,
-                  background: active ? '#38bdf8' : done ? 'rgba(16,185,129,0.2)' : 'var(--bg)',
-                  color: active ? '#0f172a' : done ? '#10b981' : 'var(--fg-muted)',
-                  border: `2px solid ${active ? '#38bdf8' : done ? '#10b981' : 'var(--border)'}`,
+                  background: active ? 'var(--accent)' : done ? 'rgba(16,185,129,0.2)' : 'var(--bg)',
+                  color: active ? '#0f172a' : done ? 'var(--status-on)' : 'var(--fg-muted)',
+                  border: `2px solid ${active ? 'var(--accent)' : done ? 'var(--status-on)' : 'var(--border)'}`,
                   boxShadow: active ? '0 0 12px #38bdf866' : 'none', transition: 'all .2s',
                 }}>{done ? '✓' : sec.id}</div>
-                <span style={{ fontSize: 10, fontWeight: 600, color: active ? '#38bdf8' : done ? '#10b981' : 'var(--fg-muted)', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: active ? 'var(--accent)' : done ? 'var(--status-on)' : 'var(--fg-muted)', whiteSpace: 'nowrap' }}>
                   {sec.icon} {sec.label}
                 </span>
               </button>
@@ -443,14 +443,14 @@ export default function DailyReport() {
 
       {/* ══ A — IDENTIFIKASI ══ */}
       {activeSection === 'A' && (
-        <Panel badge="A" title="Identifikasi Laporan" glow="#38bdf8">
+        <Panel badge="A" title="Identifikasi Laporan" glow='var(--accent)'>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
             <Field label="Tanggal Laporan">
               <Inp type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} />
             </Field>
             <Field label="Nomor Laporan (Auto)">
               <Inp value={secA.reportNumber || `RPT/${userInfo?.branch_code || '____'}/${reportDate.replace(/-/g, '')}`} disabled
-                style={{ background: 'rgba(56,189,248,0.06)', color: '#38bdf8', fontWeight: 700, cursor: 'not-allowed' }} />
+                style={{ background: 'rgba(56,189,248,0.06)', color: 'var(--accent)', fontWeight: 700, cursor: 'not-allowed' }} />
             </Field>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -466,10 +466,10 @@ export default function DailyReport() {
       {/* ══ B — KONDISI OPERASIONAL ══ */}
       {activeSection === 'B' && (
         <Panel badge="B" title="Kondisi Operasional Umum"
-          glow={bProblems > 0 ? '#f59e0b' : '#10b981'}
+          glow={bProblems > 0 ? 'var(--status-warn)' : 'var(--status-on)'}
           action={bProblems > 0
-            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {bProblems} perlu perhatian</span>
-            : <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Normal</span>
+            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--status-alert)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {bProblems} perlu perhatian</span>
+            : <span style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--status-on)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Normal</span>
           }>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {OPERATIONAL_ASPECTS.map(a => {
@@ -487,7 +487,7 @@ export default function DailyReport() {
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{a.label}</span>
                   </div>
                   <StatusToggle value={b.status} onChange={v => updateSecB(a.key, 'status', v)}
-                    options={[['Normal', 'Normal', '#10b981'], ['Perhatian', 'Perhatian', '#f59e0b'], ['Gangguan', 'Gangguan', '#ef4444']]} />
+                    options={[['Normal', 'Normal', 'var(--status-on)'], ['Perhatian', 'Perhatian', 'var(--status-warn)'], ['Gangguan', 'Gangguan', 'var(--status-alert)']]} />
                   <SmInp placeholder="Waktu UTC" value={b.waktu} onChange={e => updateSecB(a.key, 'waktu', e.target.value)} />
                   <SmInp placeholder="Keterangan..." value={b.notes} style={{ textAlign: 'left' }} onChange={e => updateSecB(a.key, 'notes', e.target.value)} />
                 </div>
@@ -502,10 +502,10 @@ export default function DailyReport() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
             {[
-              { label: 'Total Traffic', val: grandTotal(), color: '#38bdf8' },
-              { label: 'Departure', val: TRAFFIC_TYPES.reduce((s,t) => s+(parseInt(movements[t.key].depDom)||0)+(parseInt(movements[t.key].depInt)||0), 0), color: '#10b981' },
-              { label: 'Arrival',   val: TRAFFIC_TYPES.reduce((s,t) => s+(parseInt(movements[t.key].arrDom)||0)+(parseInt(movements[t.key].arrInt)||0), 0), color: '#38bdf8' },
-              { label: 'Overfly',   val: colTotal('ovf'), color: '#f59e0b' },
+              { label: 'Total Traffic', val: grandTotal(), color: 'var(--accent)' },
+              { label: 'Departure', val: TRAFFIC_TYPES.reduce((s,t) => s+(parseInt(movements[t.key].depDom)||0)+(parseInt(movements[t.key].depInt)||0), 0), color: 'var(--status-on)' },
+              { label: 'Arrival',   val: TRAFFIC_TYPES.reduce((s,t) => s+(parseInt(movements[t.key].arrDom)||0)+(parseInt(movements[t.key].arrInt)||0), 0), color: 'var(--accent)' },
+              { label: 'Overfly',   val: colTotal('ovf'), color: 'var(--status-warn)' },
             ].map(({ label, val, color }) => (
               <div key={label} style={{ background: 'var(--card)', border: `1px solid ${color}33`, borderRadius: 10, padding: '14px 16px', textAlign: 'center', boxShadow: `0 0 14px ${color}12` }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 4 }}>{label}</div>
@@ -514,7 +514,7 @@ export default function DailyReport() {
             ))}
           </div>
 
-          <Panel badge="C" title="Movement Traffic Harian" glow="#10b981">
+          <Panel badge="C" title="Movement Traffic Harian" glow='var(--status-on)'>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ borderCollapse: 'collapse', fontSize: 11, minWidth: 800 }}>
                 <thead>
@@ -523,7 +523,7 @@ export default function DailyReport() {
                     {TRAFFIC_GROUPS.map(g => (
                       <th key={g.label} colSpan={g.cols.length} style={th({ background: g.color + '22', color: g.color })}>{g.label}</th>
                     ))}
-                    <th style={th({ background: 'rgba(56,189,248,0.12)', color: '#38bdf8', minWidth: 52 })}>TOTAL</th>
+                    <th style={th({ background: 'rgba(56,189,248,0.12)', color: 'var(--accent)', minWidth: 52 })}>TOTAL</th>
                   </tr>
                   <tr>
                     {TRAFFIC_GROUPS.map(g => g.cols.map(c => (
@@ -541,13 +541,13 @@ export default function DailyReport() {
                             onChange={e => updateMovement(t.key, c.key, e.target.value)} />
                         </td>
                       ))}
-                      <td style={td({ fontWeight: 800, fontSize: 12, color: '#38bdf8', background: 'rgba(56,189,248,0.06)' })}>{rowTotal(t.key) || '—'}</td>
+                      <td style={td({ fontWeight: 800, fontSize: 12, color: 'var(--accent)', background: 'rgba(56,189,248,0.06)' })}>{rowTotal(t.key) || '—'}</td>
                     </tr>
                   ))}
                   <tr style={{ background: 'rgba(56,189,248,0.05)' }}>
-                    <td style={{ ...td({ textAlign: 'left', padding: '8px 10px' }), fontWeight: 800, color: '#38bdf8', fontSize: 12 }}>TOTAL</td>
-                    {ALL_COLS.map(c => (<td key={c.key} style={td({ fontWeight: 700, color: '#38bdf8' })}>{colTotal(c.key) || '—'}</td>))}
-                    <td style={td({ fontWeight: 900, fontSize: 14, color: '#f59e0b', background: 'rgba(245,158,11,0.1)' })}>{grandTotal() || '—'}</td>
+                    <td style={{ ...td({ textAlign: 'left', padding: '8px 10px' }), fontWeight: 800, color: 'var(--accent)', fontSize: 12 }}>TOTAL</td>
+                    {ALL_COLS.map(c => (<td key={c.key} style={td({ fontWeight: 700, color: 'var(--accent)' })}>{colTotal(c.key) || '—'}</td>))}
+                    <td style={td({ fontWeight: 900, fontSize: 14, color: 'var(--status-warn)', background: 'rgba(245,158,11,0.1)' })}>{grandTotal() || '—'}</td>
                   </tr>
                 </tbody>
               </table>
@@ -558,7 +558,7 @@ export default function DailyReport() {
             <div style={{ overflowX: 'auto' }}>
               {[0, 1].map(hi => (
                 <table key={hi} style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%', marginBottom: hi === 0 ? 6 : 0 }}>
-                  <thead><tr>{HOURS.slice(hi * 12, hi * 12 + 12).map(h => <th key={h} style={th({ background: 'rgba(56,189,248,0.08)', color: '#38bdf8', minWidth: 52 })}>{h}</th>)}</tr></thead>
+                  <thead><tr>{HOURS.slice(hi * 12, hi * 12 + 12).map(h => <th key={h} style={th({ background: 'rgba(56,189,248,0.08)', color: 'var(--accent)', minWidth: 52 })}>{h}</th>)}</tr></thead>
                   <tbody><tr>{hourly.slice(hi * 12, hi * 12 + 12).map((v, i) => (
                     <td key={i} style={td({})}>
                       <SmInp type="number" min="0" value={v} style={{ width: 44 }}
@@ -572,7 +572,7 @@ export default function DailyReport() {
 
           <Panel badge="C.2" title="Kinerja Ketepatan Waktu Operasional">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-              {[['airline', 'OTP Airline', '#38bdf8'], ['dep', 'DEP Punctuality', '#10b981'], ['arr', 'ARR Punctuality', '#f59e0b']].map(([k, label, color]) => (
+              {[['airline', 'OTP Airline', 'var(--accent)'], ['dep', 'DEP Punctuality', 'var(--status-on)'], ['arr', 'ARR Punctuality', 'var(--status-warn)']].map(([k, label, color]) => (
                 <div key={k} style={{ background: color + '0d', border: `1px solid ${color}33`, borderRadius: 12, padding: '20px 16px', textAlign: 'center', boxShadow: `0 0 16px ${color}10` }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 12 }}>{label}</div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
@@ -590,16 +590,16 @@ export default function DailyReport() {
       {/* ══ D — PERALATAN ══ */}
       {activeSection === 'D' && (
         <Panel badge="D" title="Laporan Peralatan"
-          glow={dProblems > 0 ? '#f59e0b' : '#10b981'}
+          glow={dProblems > 0 ? 'var(--status-warn)' : 'var(--status-on)'}
           action={dProblems > 0
-            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {dProblems} tidak normal</span>
-            : <span style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Normal</span>
+            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--status-alert)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {dProblems} tidak normal</span>
+            : <span style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--status-on)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Normal</span>
           }>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {commSystems.map(s => {
               const d = secD[s.key] || { status: 'Normal', notes: '' };
               const notOp = d.status !== 'Normal';
-              const dotColor = d.status === 'Normal' ? '#10b981' : '#ef4444';
+              const dotColor = d.status === 'Normal' ? 'var(--status-on)' : 'var(--status-alert)';
               const isCustom = s.key.startsWith('custom_');
               return (
                 <div key={s.key} style={{
@@ -618,11 +618,11 @@ export default function DailyReport() {
                     )}
                   </div>
                   <StatusToggle value={d.status} onChange={v => updateSecD(s.key, 'status', v)}
-                    options={[['Normal', 'Normal', '#10b981'], ['Unserviceable', 'U/S', '#ef4444']]} />
+                    options={[['Normal', 'Normal', 'var(--status-on)'], ['Unserviceable', 'U/S', 'var(--status-alert)']]} />
                   <SmInp placeholder="Keterangan..." value={d.notes} style={{ textAlign: 'left' }} onChange={e => updateSecD(s.key, 'notes', e.target.value)} />
                   <button type="button" onClick={() => removeCommSystem(s.key)} title="Hapus peralatan" style={{
                     width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)',
-                    background: 'rgba(239,68,68,0.08)', color: '#ef4444', fontSize: 14, cursor: 'pointer',
+                    background: 'rgba(239,68,68,0.08)', color: 'var(--status-alert)', fontSize: 14, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .15s',
                   }}>×</button>
                 </div>
@@ -631,7 +631,7 @@ export default function DailyReport() {
           </div>
           <button type="button" onClick={addCommSystem} style={{
             marginTop: 12, padding: '9px 16px', borderRadius: 8, border: '1px dashed var(--border)',
-            background: 'transparent', color: '#38bdf8', fontSize: 12, fontWeight: 600, cursor: 'pointer', width: '100%',
+            background: 'transparent', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', width: '100%',
           }}>+ Tambah Peralatan</button>
         </Panel>
       )}
@@ -639,7 +639,7 @@ export default function DailyReport() {
       {/* ══ E — INSIDEN ══ */}
       {activeSection === 'E' && (
         <Panel badge="E" title="Gangguan, Insiden & Tindak Lanjut"
-          glow={incidents.some(i => i.jenis) ? '#ef4444' : undefined}>
+          glow={incidents.some(i => i.jenis) ? 'var(--status-alert)' : undefined}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {incidents.map((inc, i) => (
               <div key={i} style={{
@@ -648,8 +648,8 @@ export default function DailyReport() {
                 background: inc.jenis ? 'rgba(239,68,68,0.03)' : 'rgba(255,255,255,0.01)', transition: 'all .2s',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <span style={{ background: 'rgba(56,189,248,0.15)', color: '#38bdf8', fontWeight: 800, fontSize: 11, padding: '2px 8px', borderRadius: 20 }}>{i + 1}</span>
-                  {inc.jenis && <span style={{ fontSize: 12, fontWeight: 600, color: '#ef4444' }}>{inc.jenis}</span>}
+                  <span style={{ background: 'rgba(56,189,248,0.15)', color: 'var(--accent)', fontWeight: 800, fontSize: 11, padding: '2px 8px', borderRadius: 20 }}>{i + 1}</span>
+                  {inc.jenis && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--status-alert)' }}>{inc.jenis}</span>}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 70px', gap: 8, marginBottom: 8 }}>
                   <Field label="Waktu UTC"><SmInp placeholder="0000" value={inc.waktu} onChange={e => updateInc(i, 'waktu', e.target.value)} /></Field>
@@ -674,14 +674,14 @@ export default function DailyReport() {
       {/* ══ F — CATATAN ══ */}
       {activeSection === 'F' && (
         <>
-          <Panel badge="F" title="Catatan Operasional & Hal Penting Lainnya" glow="#8b5cf6">
+          <Panel badge="F" title="Catatan Operasional & Hal Penting Lainnya" glow='var(--purple)'>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={8}
               placeholder="Tuliskan catatan operasional, koordinasi khusus, atau hal penting lain yang perlu dilaporkan kepada INMC..."
               style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)', fontSize: 13, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6, minHeight: 160, outline: 'none' }}
-              onFocus={e => e.target.style.borderColor = '#38bdf8'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+              onFocus={e => e.target.style.borderColor = 'var(--accent)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
           </Panel>
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '20px', marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 14 }}>✍️ Dibuat Oleh</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 14 }}>✍️ Dibuat Oleh</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
               {[['Nama', secA.managerName || '—'], ['Jabatan', 'Manager Operasi'], ['Tanggal', reportDate], ['Unit', secA.unitName || '—']].map(([k, v]) => (
                 <div key={k} style={{ textAlign: 'center', padding: '12px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>

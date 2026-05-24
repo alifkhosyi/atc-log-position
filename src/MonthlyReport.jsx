@@ -193,39 +193,39 @@ export default function MonthlyReport() {
       {/* OVERVIEW STATS                          */}
       {/* ═══════════════════════════════════════ */}
       <div style={s.statGrid}>
-        <div style={s.stat('#0EA5E9')}>
-          <div style={s.statNum('#0EA5E9')}>{totalTraffic}</div>
+        <div style={s.stat('var(--accent)')}>
+          <div style={s.statNum('var(--accent)')}>{totalTraffic}</div>
           <div style={s.statLabel}>Total Traffic</div>
           <div style={s.statSub}>{monthName}</div>
         </div>
-        <div style={s.stat('#10B981')}>
-          <div style={s.statNum('#10B981')}>{totalDep}</div>
+        <div style={s.stat('var(--status-on)')}>
+          <div style={s.statNum('var(--status-on)')}>{totalDep}</div>
           <div style={s.statLabel}>Departure</div>
         </div>
-        <div style={s.stat('#F59E0B')}>
-          <div style={s.statNum('#F59E0B')}>{totalArr}</div>
+        <div style={s.stat('var(--status-warn)')}>
+          <div style={s.statNum('var(--status-warn)')}>{totalArr}</div>
           <div style={s.statLabel}>Arrival</div>
         </div>
-        <div style={s.stat('#64748B')}>
-          <div style={s.statNum('#64748B')}>{totalOvf}</div>
+        <div style={s.stat('var(--text-muted)')}>
+          <div style={s.statNum('var(--text-muted)')}>{totalOvf}</div>
           <div style={s.statLabel}>Overfly</div>
         </div>
-        <div style={s.stat('#8B5CF6')}>
-          <div style={s.statNum('#8B5CF6')}>{totalOnMic}</div>
+        <div style={s.stat('var(--purple)')}>
+          <div style={s.statNum('var(--purple)')}>{totalOnMic}</div>
           <div style={s.statLabel}>Total On Mic</div>
           <div style={s.statSub}>{totalHours} jam</div>
         </div>
-        <div style={s.stat('#EC4899')}>
-          <div style={s.statNum('#EC4899')}>{activePersonnel}/{personnel.length}</div>
+        <div style={s.stat('var(--status-alert)')}>
+          <div style={s.statNum('var(--status-alert)')}>{activePersonnel}/{personnel.length}</div>
           <div style={s.statLabel}>Personel Aktif</div>
         </div>
-        <div style={s.stat('#0EA5E9')}>
-          <div style={s.statNum('#0EA5E9')}>{dailyReports.length}/{daysInMonth}</div>
+        <div style={s.stat('var(--accent)')}>
+          <div style={s.statNum('var(--accent)')}>{dailyReports.length}/{daysInMonth}</div>
           <div style={s.statLabel}>Daily Reports</div>
           <div style={s.statSub}>Terisi</div>
         </div>
-        <div style={s.stat(totalNotOk > 0 ? '#EF4444' : '#10B981')}>
-          <div style={s.statNum(totalNotOk > 0 ? '#EF4444' : '#10B981')}>{checklists.length}</div>
+        <div style={s.stat(totalNotOk > 0 ? 'var(--status-alert)' : 'var(--status-on)')}>
+          <div style={s.statNum(totalNotOk > 0 ? 'var(--status-alert)' : 'var(--status-on)')}>{checklists.length}</div>
           <div style={s.statLabel}>Handover Checklist</div>
           <div style={s.statSub}>{totalNotOk > 0 ? totalNotOk + ' Not OK' : 'Semua OK'}</div>
         </div>
@@ -251,9 +251,9 @@ export default function MonthlyReport() {
               return (
                 <g key={d}>
                   {total > 0 && <>
-                    <rect x={x} y={10 + 150 - barH} width={16} height={barH * (v.dep / total)} fill="#0EA5E9" rx="1" />
-                    <rect x={x} y={10 + 150 - barH + barH * (v.dep / total)} width={16} height={barH * (v.arr / total)} fill="#F59E0B" rx="1" />
-                    <rect x={x} y={10 + 150 - barH + barH * ((v.dep + v.arr) / total)} width={16} height={barH * (v.ovf / total)} fill="#94A3B8" rx="1" />
+                    <rect x={x} y={10 + 150 - barH} width={16} height={barH * (v.dep / total)} fill='var(--accent)' rx="1" />
+                    <rect x={x} y={10 + 150 - barH + barH * (v.dep / total)} width={16} height={barH * (v.arr / total)} fill='var(--status-warn)' rx="1" />
+                    <rect x={x} y={10 + 150 - barH + barH * ((v.dep + v.arr) / total)} width={16} height={barH * (v.ovf / total)} fill='var(--text-muted)' rx="1" />
                     <text x={x + 8} y={10 + 150 - barH - 4} textAnchor="middle" fontSize="8" fontWeight="600" fill="var(--fg-muted)">{total}</text>
                   </>}
                   <text x={x + 8} y={175} textAnchor="middle" fontSize="8" fill="var(--fg-muted)">{dayNum}</text>
@@ -263,7 +263,7 @@ export default function MonthlyReport() {
           </svg>
         </div>
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, fontSize: 11 }}>
-          {[['DEP', '#0EA5E9'], ['ARR', '#F59E0B'], ['OVF', '#94A3B8']].map(([l, c]) => (
+          {[['DEP', 'var(--accent)'], ['ARR', 'var(--status-warn)'], ['OVF', 'var(--text-muted)']].map(([l, c]) => (
             <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--fg-muted)' }}>
               <div style={{ width: 10, height: 10, borderRadius: 2, background: c }} />{l}
             </div>
@@ -298,29 +298,29 @@ export default function MonthlyReport() {
                   <tr key={dr.id}>
                     <td style={{ ...s.td, fontWeight: 600, whiteSpace: 'nowrap' }}>{new Date(dr.report_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}</td>
                     <td style={s.td}>
-                      <span style={s.pill(dr.status === 'submitted' ? '#dcfce7' : '#fef3c7', dr.status === 'submitted' ? '#166534' : '#92400e')}>
+                      <span style={s.pill(dr.status === 'submitted' ? 'var(--status-on-soft)' : 'var(--status-warn-soft)', dr.status === 'submitted' ? 'var(--status-on)' : 'var(--status-warn)')}>
                         {dr.status === 'submitted' ? 'Submitted' : 'Draft'}
                       </span>
                     </td>
                     <td style={{ ...s.td, fontSize: 11 }}>{dr.manager_name || '-'}</td>
                     <td style={s.td}>
-                      <span style={s.pill(dr.condition_general_status === 'OK' ? '#dcfce7' : '#fef2f2', dr.condition_general_status === 'OK' ? '#166534' : '#991b1b')}>
+                      <span style={s.pill(dr.condition_general_status === 'OK' ? 'var(--status-on-soft)' : 'var(--status-alert-soft)', dr.condition_general_status === 'OK' ? 'var(--status-on)' : 'var(--status-alert)')}>
                         {dr.condition_general_status || '-'}
                       </span>
                     </td>
                     <td style={s.td}>
-                      <span style={s.pill(dr.condition_weather_status === 'OK' ? '#dcfce7' : '#fef2f2', dr.condition_weather_status === 'OK' ? '#166534' : '#991b1b')}>
+                      <span style={s.pill(dr.condition_weather_status === 'OK' ? 'var(--status-on-soft)' : 'var(--status-alert-soft)', dr.condition_weather_status === 'OK' ? 'var(--status-on)' : 'var(--status-alert)')}>
                         {dr.condition_weather_status || '-'}
                       </span>
                     </td>
                     <td style={s.td}>
-                      <span style={s.pill(dr.condition_notam_status === 'OK' ? '#dcfce7' : '#fef2f2', dr.condition_notam_status === 'OK' ? '#166534' : '#991b1b')}>
+                      <span style={s.pill(dr.condition_notam_status === 'OK' ? 'var(--status-on-soft)' : 'var(--status-alert-soft)', dr.condition_notam_status === 'OK' ? 'var(--status-on)' : 'var(--status-alert)')}>
                         {dr.condition_notam_status || '-'}
                       </span>
                     </td>
                     <td style={{ ...s.td, textAlign: 'center' }}>
                       {(dr.incident_reports?.length || 0) > 0
-                        ? <span style={s.pill('#fef2f2', '#991b1b')}>{dr.incident_reports.length}</span>
+                        ? <span style={s.pill('var(--status-alert-soft)', 'var(--status-alert)')}>{dr.incident_reports.length}</span>
                         : <span style={{ color: 'var(--fg-muted)', fontSize: 11 }}>0</span>}
                     </td>
                     <td style={{ ...s.td, fontSize: 11, color: 'var(--fg-muted)', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -410,9 +410,9 @@ export default function MonthlyReport() {
                   <th style={{ ...s.th, textAlign: 'center' }}>On Mic</th>
                   <th style={{ ...s.th, textAlign: 'center' }}>Jam Kerja</th>
                   <th style={{ ...s.th, textAlign: 'center' }}>Rata-rata</th>
-                  <th style={{ ...s.th, textAlign: 'center', color: '#0EA5E9' }}>DEP</th>
-                  <th style={{ ...s.th, textAlign: 'center', color: '#F59E0B' }}>ARR</th>
-                  <th style={{ ...s.th, textAlign: 'center', color: '#64748B' }}>OVF</th>
+                  <th style={{ ...s.th, textAlign: 'center', color: 'var(--accent)' }}>DEP</th>
+                  <th style={{ ...s.th, textAlign: 'center', color: 'var(--status-warn)' }}>ARR</th>
+                  <th style={{ ...s.th, textAlign: 'center', color: 'var(--text-muted)' }}>OVF</th>
                   <th style={{ ...s.th, textAlign: 'center' }}>Traffic</th>
                   <th style={{ ...s.th, textAlign: 'center' }}>Pagi</th>
                   <th style={{ ...s.th, textAlign: 'center' }}>Siang</th>
@@ -428,11 +428,11 @@ export default function MonthlyReport() {
                     <tr key={p.name}>
                       <td style={{ ...s.td, fontWeight: 600 }}>{p.name}</td>
                       <td style={{ ...s.td, textAlign: 'center' }}>{p.count}</td>
-                      <td style={{ ...s.td, textAlign: 'center', fontWeight: 600, color: '#0EA5E9' }}>{hrs}h</td>
+                      <td style={{ ...s.td, textAlign: 'center', fontWeight: 600, color: 'var(--accent)' }}>{hrs}h</td>
                       <td style={{ ...s.td, textAlign: 'center', color: 'var(--fg-muted)' }}>{avg}m</td>
-                      <td style={{ ...s.td, textAlign: 'center', color: '#0EA5E9' }}>{p.dep}</td>
-                      <td style={{ ...s.td, textAlign: 'center', color: '#F59E0B' }}>{p.arr}</td>
-                      <td style={{ ...s.td, textAlign: 'center', color: '#64748B' }}>{p.ovf}</td>
+                      <td style={{ ...s.td, textAlign: 'center', color: 'var(--accent)' }}>{p.dep}</td>
+                      <td style={{ ...s.td, textAlign: 'center', color: 'var(--status-warn)' }}>{p.arr}</td>
+                      <td style={{ ...s.td, textAlign: 'center', color: 'var(--text-muted)' }}>{p.ovf}</td>
                       <td style={{ ...s.td, textAlign: 'center', fontWeight: 700 }}>{tc}</td>
                       <td style={{ ...s.td, textAlign: 'center', fontSize: 11 }}>{p.shifts.Morning || 0}</td>
                       <td style={{ ...s.td, textAlign: 'center', fontSize: 11 }}>{p.shifts.Afternoon || 0}</td>
@@ -445,11 +445,11 @@ export default function MonthlyReport() {
                 <tr style={{ fontWeight: 700 }}>
                   <td style={{ ...s.td, textAlign: 'right', color: 'var(--fg-muted)' }}>TOTAL</td>
                   <td style={{ ...s.td, textAlign: 'center' }}>{totalOnMic}</td>
-                  <td style={{ ...s.td, textAlign: 'center', color: '#0EA5E9' }}>{totalHours}h</td>
+                  <td style={{ ...s.td, textAlign: 'center', color: 'var(--accent)' }}>{totalHours}h</td>
                   <td style={s.td}></td>
-                  <td style={{ ...s.td, textAlign: 'center', color: '#0EA5E9' }}>{totalDep}</td>
-                  <td style={{ ...s.td, textAlign: 'center', color: '#F59E0B' }}>{totalArr}</td>
-                  <td style={{ ...s.td, textAlign: 'center', color: '#64748B' }}>{totalOvf}</td>
+                  <td style={{ ...s.td, textAlign: 'center', color: 'var(--accent)' }}>{totalDep}</td>
+                  <td style={{ ...s.td, textAlign: 'center', color: 'var(--status-warn)' }}>{totalArr}</td>
+                  <td style={{ ...s.td, textAlign: 'center', color: 'var(--text-muted)' }}>{totalOvf}</td>
                   <td style={{ ...s.td, textAlign: 'center' }}>{totalTraffic}</td>
                   <td colSpan={3}></td>
                 </tr>
@@ -487,13 +487,13 @@ export default function MonthlyReport() {
                   return (
                     <tr key={it}>
                       <td style={{ ...s.td, fontWeight: 600 }}>{label}</td>
-                      <td style={{ ...s.td, textAlign: 'center' }}><span style={s.pill('#dcfce7', '#166534')}>{d.ok}</span></td>
-                      <td style={{ ...s.td, textAlign: 'center' }}>{d.notOk > 0 ? <span style={s.pill('#fef2f2', '#991b1b')}>{d.notOk}</span> : <span style={{ color: 'var(--fg-muted)' }}>0</span>}</td>
+                      <td style={{ ...s.td, textAlign: 'center' }}><span style={s.pill('var(--status-on-soft)', 'var(--status-on)')}>{d.ok}</span></td>
+                      <td style={{ ...s.td, textAlign: 'center' }}>{d.notOk > 0 ? <span style={s.pill('var(--status-alert-soft)', 'var(--status-alert)')}>{d.notOk}</span> : <span style={{ color: 'var(--fg-muted)' }}>0</span>}</td>
                       <td style={{ ...s.td, textAlign: 'center', color: 'var(--fg-muted)' }}>{d.na}</td>
                       <td style={s.td}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ flex: 1, height: 8, background: 'var(--bg)', borderRadius: 4, overflow: 'hidden' }}>
-                            <div style={{ width: ratio + '%', height: '100%', background: ratio >= 80 ? '#10B981' : ratio >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 4 }} />
+                            <div style={{ width: ratio + '%', height: '100%', background: ratio >= 80 ? 'var(--status-on)' : ratio >= 50 ? 'var(--status-warn)' : 'var(--status-alert)', borderRadius: 4 }} />
                           </div>
                           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)', minWidth: 32 }}>{ratio}%</span>
                         </div>
@@ -521,8 +521,8 @@ export default function MonthlyReport() {
                 <div key={f} style={{ background: 'var(--bg)', borderRadius: 8, padding: '12px 14px', border: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg)', marginBottom: 6 }}>{label}</div>
                   <div style={{ display: 'flex', gap: 8, fontSize: 12 }}>
-                    <span style={s.pill('#dcfce7', '#166534')}>OK: {d.ok}</span>
-                    {d.notOk > 0 && <span style={s.pill('#fef2f2', '#991b1b')}>Issue: {d.notOk}</span>}
+                    <span style={s.pill('var(--status-on-soft)', 'var(--status-on)')}>OK: {d.ok}</span>
+                    {d.notOk > 0 && <span style={s.pill('var(--status-alert-soft)', 'var(--status-alert)')}>Issue: {d.notOk}</span>}
                   </div>
                 </div>
               );
@@ -540,11 +540,11 @@ export default function MonthlyReport() {
           <div style={{ display: 'flex', gap: 20, marginBottom: 12 }}>
             <div style={{ fontSize: 13 }}>
               <span style={{ color: 'var(--fg-muted)' }}>Total Insiden: </span>
-              <strong style={{ color: totalIncidents > 0 ? '#EF4444' : 'var(--fg)' }}>{totalIncidents}</strong>
+              <strong style={{ color: totalIncidents > 0 ? 'var(--status-alert)' : 'var(--fg)' }}>{totalIncidents}</strong>
             </div>
             <div style={{ fontSize: 13 }}>
               <span style={{ color: 'var(--fg-muted)' }}>Total Gangguan: </span>
-              <strong style={{ color: totalDisruptions > 0 ? '#F59E0B' : 'var(--fg)' }}>{totalDisruptions}</strong>
+              <strong style={{ color: totalDisruptions > 0 ? 'var(--status-warn)' : 'var(--fg)' }}>{totalDisruptions}</strong>
             </div>
           </div>
           {dailyReports.filter(dr => (dr.incident_reports?.length || 0) > 0).map(dr => (
@@ -553,7 +553,7 @@ export default function MonthlyReport() {
                 {new Date(dr.report_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
               </div>
               {dr.incident_reports.map((inc, idx) => (
-                <div key={idx} style={{ background: '#fef2f2', borderRadius: 6, padding: '8px 12px', marginBottom: 4, fontSize: 12, color: '#991b1b', border: '1px solid #fecaca' }}>
+                <div key={idx} style={{ background: 'var(--status-alert-soft)', borderRadius: 6, padding: '8px 12px', marginBottom: 4, fontSize: 12, color: 'var(--status-alert)', border: '1px solid #fecaca' }}>
                   <strong>{inc.incident_type || 'Insiden'}</strong>
                   {inc.affected_system && <span> — {inc.affected_system}</span>}
                   {inc.duration_minutes > 0 && <span> ({inc.duration_minutes} mnt)</span>}
