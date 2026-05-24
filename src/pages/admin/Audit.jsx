@@ -56,7 +56,12 @@ export const AdminAudit = () => {
 
   return (
     <div className="page-content">
-      <Header title="Audit Log" sub="Aktivitas seluruh sistem"/>
+      <div className="topbar">
+        <div>
+          <h1 className="topbar-title">Audit Log</h1>
+          <p className="topbar-sub">Aktivitas seluruh sistem · {filtered.length} entries</p>
+        </div>
+      </div>
 
       {/* Filters */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,flexWrap:"wrap"}}>

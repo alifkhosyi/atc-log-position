@@ -1,35 +1,59 @@
 // ============================================================
-// src/pages/cabang/RekapTraffic.jsx — Traffic recap with charts
+// src/pages/cabang/RekapTraffic.jsx — Traffic recap (REDESIGN)
+// ──────────────────────────────────────────────────────────
+// No dedicated mockup file — apply same pattern as Rekap Personnel
+// (period chips + filter row + stats + chart panels + detail table).
+//
+// Logic preserved exactly from original:
+//   - myLogs filter (off_time AND has traffic > 0)
+//   - period filter (today/week/month)
+//   - filterName + filterSector text matches
+//   - totals reduce shape
+//   - byDate breakdown for trend chart
+//   - bySector aggregation for per-sector bar chart
+//   - SVG trend line rendering
+//   - exportCSV (same column shape)
+// New affordances:
+//   - Period chips replace .filter-bar
+//   - Stack chart per-sektor (DEP/ARR/OVF stacked horizontally)
+//   - Stack legend in chart header
+//   - Toast on CSV export
 // ============================================================
 import React, { useState } from "react"
 import { useApp } from "../../lib/context.jsx"
 import { fmtT, fmtD, getAccessibleBranches } from "../../lib/utils.js"
 import { I } from "../../components/Icons.jsx"
-import { Header } from "../../components/Header.jsx"
 import { Stat } from "../../components/Stat.jsx"
+import { useToast } from "../../components/Toast.jsx"
 
 export const CabangRekap = () => {
   const ctx = useApp()
+  const toast = useToast()
+
+  // ── Same filter as original ──
   const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
   const myLogs = ctx.logs.filter(l =>
     myBranches.includes(l.branch_code) && l.off_time &&
     ((l.departure_count || 0) + (l.arrival_count || 0) + (l.overfly_count || 0)) > 0
   )
 
+  // ── State ──
   const [period, setPeriod] = useState("month")
   const [filterName, setFilterName] = useState("")
   const [filterSector, setFilterSector] = useState("")
 
+  // ── Filtered + sorted (same as original) ──
   const filtered = myLogs.filter(l => {
     const d = (new Date() - new Date(l.on_time)) / 864e5
     const pOk = period === "today"
       ? new Date(l.on_time).toDateString() === new Date().toDateString()
       : period === "week" ? d <= 7 : d <= 30
-    const nmOk = !filterName  || (l.atc_name || "").toLowerCase().includes(filterName.toLowerCase())
-    const secOk = !filterSector || (l.sector  || "").toLowerCase().includes(filterSector.toLowerCase())
+    const nmOk  = !filterName   || (l.atc_name || "").toLowerCase().includes(filterName.toLowerCase())
+    const secOk = !filterSector || (l.sector   || "").toLowerCase().includes(filterSector.toLowerCase())
     return pOk && nmOk && secOk
   }).sort((a, b) => new Date(b.on_time) - new Date(a.on_time))
 
+  // ── Totals + aggregations (preserved) ──
   const totals = filtered.reduce((a, l) => ({
     dep: a.dep + (l.departure_count || 0),
     arr: a.arr + (l.arrival_count || 0),
@@ -37,7 +61,6 @@ export const CabangRekap = () => {
     tc:  a.tc  + (l.departure_count || 0) + (l.arrival_count || 0) + (l.overfly_count || 0),
   }), { dep: 0, arr: 0, ovf: 0, tc: 0 })
 
-  // Per-date breakdown
   const byDate = {}
   filtered.forEach(l => {
     const dt = new Date(l.on_time).toISOString().slice(0, 10)
@@ -49,7 +72,6 @@ export const CabangRekap = () => {
   const dates = Object.keys(byDate).sort()
   const chartMax = Math.max(1, ...dates.map(d => byDate[d].dep + byDate[d].arr + byDate[d].ovf))
 
-  // Per-sector breakdown
   const bySector = {}
   filtered.forEach(l => {
     const sk = l.unit + " — " + l.sector
@@ -62,15 +84,23 @@ export const CabangRekap = () => {
     (bySector[b].dep + bySector[b].arr + bySector[b].ovf) -
     (bySector[a].dep + bySector[a].arr + bySector[a].ovf)
   )
-  const sectorMax = Math.max(1, ...sectorKeys.map(k => bySector[k].dep + bySector[k].arr + bySector[k].ovf))
+  const sectorMax = Math.max(1, ...sectorKeys.map(k =>
+    bySector[k].dep + bySector[k].arr + bySector[k].ovf
+  ))
 
+  const periodLabel = period === "today"
+    ? "Hari ini"
+    : period === "week" ? "7 hari terakhir" : "30 hari terakhir"
+
+  // ── Export CSV (preserved + Toast) ──
   const exportCSV = () => {
     const head = ["Tanggal","On","Off","Controller","Unit","Sektor","Shift","DEP","ARR","OVF","Total"]
     const rows = filtered.map(l => {
       const dt = new Date(l.on_time).toISOString().slice(0, 10)
-      return [dt, fmtT(l.on_time), fmtT(l.off_time), l.atc_name || "", l.unit || "", l.sector || "",
-              l.shift || "", l.departure_count || 0, l.arrival_count || 0, l.overfly_count || 0,
-              (l.departure_count || 0) + (l.arrival_count || 0) + (l.overfly_count || 0)]
+      return [dt, fmtT(l.on_time), fmtT(l.off_time),
+        l.atc_name || "", l.unit || "", l.sector || "", l.shift || "",
+        l.departure_count || 0, l.arrival_count || 0, l.overfly_count || 0,
+        (l.departure_count || 0) + (l.arrival_count || 0) + (l.overfly_count || 0)]
     })
     const csv = [head.join(","), ...rows.map(r => r.join(","))].join("\n")
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" })
@@ -79,53 +109,127 @@ export const CabangRekap = () => {
     a.download = `rekap_traffic_${ctx.user.branch_code}_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(a.href)
+    toast.success("Export berhasil", `${filtered.length} laporan diunduh sebagai CSV`)
   }
 
   return (
     <div className="page-content">
-      <Header title="Rekap Traffic" sub={"Data traffic per sektor — " + ctx.user.branch_code}/>
-
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <div className="filter-bar" style={{ margin:0 }}>
-          {[["today","Hari Ini"],["week","7 Hari"],["month","30 Hari"]].map(([k,v]) => (
-            <button key={k} className={"filter-btn" + (period === k ? " filter-btn-active" : "")}
-                    onClick={() => setPeriod(k)}>{v}</button>
-          ))}
+      {/* TOPBAR */}
+      <div className="topbar">
+        <div>
+          <h1 className="topbar-title">Rekap Traffic</h1>
+          <p className="topbar-sub">
+            Data traffic per sektor — Cabang {ctx.user.branch_code} · {periodLabel}
+          </p>
         </div>
-        <input value={filterName} onChange={e => setFilterName(e.target.value)}
-               placeholder="Filter controller..."
-               style={{ flex:1, minWidth:100, padding:"6px 10px", borderRadius:8,
-                        border:"1px solid var(--border)", background:"var(--card)",
-                        color:"var(--fg)", fontSize:12 }}/>
-        <input value={filterSector} onChange={e => setFilterSector(e.target.value)}
-               placeholder="Sektor..."
-               style={{ width:100, padding:"6px 10px", borderRadius:8,
-                        border:"1px solid var(--border)", background:"var(--card)",
-                        color:"var(--fg)", fontSize:12 }}/>
+        <button className="btn btn-sm" onClick={exportCSV} disabled={filtered.length === 0}>
+          <I n="download" s={14}/> Export CSV
+        </button>
       </div>
 
+      {/* PERIOD + FILTERS */}
+      <div className="row" style={{ marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div className="period-chips">
+          <button
+            className={"period-chip" + (period === "today" ? " active" : "")}
+            onClick={() => setPeriod("today")}
+          >Hari Ini</button>
+          <button
+            className={"period-chip" + (period === "week" ? " active" : "")}
+            onClick={() => setPeriod("week")}
+          >7 Hari</button>
+          <button
+            className={"period-chip" + (period === "month" ? " active" : "")}
+            onClick={() => setPeriod("month")}
+          >30 Hari</button>
+        </div>
+        <input
+          className="filter-input"
+          placeholder="Filter controller..."
+          value={filterName}
+          onChange={e => setFilterName(e.target.value)}
+        />
+        <input
+          className="filter-input"
+          style={{ width: 140, minWidth: 100 }}
+          placeholder="Filter sektor..."
+          value={filterSector}
+          onChange={e => setFilterSector(e.target.value)}
+        />
+      </div>
+
+      {/* STATS */}
       <div className="stats-grid">
-        <Stat icon="plane"    label="Total Traffic" value={totals.tc}  sub={filtered.length + " laporan"} color="var(--status-on)"/>
-        <Stat icon="upload"   label="Departure"     value={totals.dep} color="var(--traffic-dep)"/>
-        <Stat icon="download" label="Arrival"       value={totals.arr} color="var(--traffic-arr)"/>
-        <Stat icon="radar"    label="Overfly"       value={totals.ovf} color="var(--traffic-ovf)"/>
+        <Stat
+          icon="plane" label="Total Traffic" value={totals.tc}
+          sub={`${filtered.length} laporan`}
+          color="var(--status-on)"
+        />
+        <Stat icon="upload"   label="Departure" value={totals.dep} color="var(--traffic-dep)"/>
+        <Stat icon="download" label="Arrival"   value={totals.arr} color="var(--traffic-arr)"/>
+        <Stat icon="radar"    label="Overfly"   value={totals.ovf} color="var(--text-faint)"/>
       </div>
 
+      {/* PER-SECTOR STACKED BAR */}
       {sectorKeys.length > 0 && (
         <div className="panel">
-          <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Traffic Per Sektor</h2></div>
+          <div className="panel-header">
+            <h2 className="panel-title">
+              <I n="chart" s={16}/> Traffic per Sektor
+            </h2>
+            <div className="stack-legend">
+              <span className="stack-legend-item">
+                <span className="stack-legend-swatch" style={{ background: "var(--traffic-dep)" }}/>
+                DEP
+              </span>
+              <span className="stack-legend-item">
+                <span className="stack-legend-swatch" style={{ background: "var(--traffic-arr)" }}/>
+                ARR
+              </span>
+              <span className="stack-legend-item">
+                <span className="stack-legend-swatch" style={{ background: "var(--text-faint)" }}/>
+                OVF
+              </span>
+            </div>
+          </div>
           <div className="panel-body">
-            <div className="simple-chart">
+            <div className="stack-chart">
               {sectorKeys.map(sk => {
-                const t = bySector[sk].dep + bySector[sk].arr + bySector[sk].ovf
+                const s = bySector[sk]
+                const t = s.dep + s.arr + s.ovf
+                const fullPct = (t / sectorMax) * 100
+                // Each segment's width *within the bar* is proportional to t,
+                // and the whole bar's width is proportional to fullPct of track.
+                const depPct = t > 0 ? (s.dep / t * fullPct) : 0
+                const arrPct = t > 0 ? (s.arr / t * fullPct) : 0
+                const ovfPct = t > 0 ? (s.ovf / t * fullPct) : 0
                 return (
-                  <div key={sk} className="chart-bar-row">
-                    <span className="chart-label">{sk}</span>
-                    <div className="chart-bar-track">
-                      <div className="chart-bar-fill" style={{ width: (t / sectorMax * 100) + "%" }}>
-                        <span className="chart-bar-value">{t}</span>
-                      </div>
+                  <div key={sk} className="stack-row">
+                    <span className="stack-label">{sk}</span>
+                    <div className="stack-track">
+                      {depPct > 0 && (
+                        <div className="stack-seg stack-seg-dep"
+                             style={{ width: depPct + "%" }}
+                             title={`DEP: ${s.dep}`}>
+                          {s.dep > 0 && depPct > 6 ? s.dep : ""}
+                        </div>
+                      )}
+                      {arrPct > 0 && (
+                        <div className="stack-seg stack-seg-arr"
+                             style={{ width: arrPct + "%" }}
+                             title={`ARR: ${s.arr}`}>
+                          {s.arr > 0 && arrPct > 6 ? s.arr : ""}
+                        </div>
+                      )}
+                      {ovfPct > 0 && (
+                        <div className="stack-seg stack-seg-ovf"
+                             style={{ width: ovfPct + "%" }}
+                             title={`OVF: ${s.ovf}`}>
+                          {s.ovf > 0 && ovfPct > 6 ? s.ovf : ""}
+                        </div>
+                      )}
                     </div>
+                    <span className="stack-total">{t}</span>
                   </div>
                 )
               })}
@@ -134,14 +238,22 @@ export const CabangRekap = () => {
         </div>
       )}
 
+      {/* DAILY TREND SVG (preserved logic from original) */}
       {dates.length > 1 && (
         <div className="panel">
-          <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Trend Harian</h2></div>
+          <div className="panel-header">
+            <h2 className="panel-title">
+              <I n="chart" s={16}/> Trend Harian
+            </h2>
+          </div>
           <div className="panel-body">
-            <svg viewBox="0 0 680 200" width="100%" style={{ display:"block" }}>
-              {[0,.25,.5,.75,1].map(f => {
+            <svg viewBox="0 0 680 200" width="100%" style={{ display: "block" }}>
+              {[0, .25, .5, .75, 1].map(f => {
                 const y = 16 + (1 - f) * 150
-                return <line key={f} x1="46" y1={y} x2="664" y2={y} stroke="var(--border)" strokeWidth=".5"/>
+                return (
+                  <line key={f} x1="46" y1={y} x2="664" y2={y}
+                        stroke="var(--border)" strokeWidth=".5"/>
+                )
               })}
               {(() => {
                 const pts = dates.map((d, i) => ({
@@ -153,13 +265,27 @@ export const CabangRekap = () => {
                 const pathD = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ")
                 return (
                   <>
-                    <path d={`${pathD} L${pts[pts.length-1].x},166 L${pts[0].x},166 Z`} fill="var(--traffic-dep)" opacity=".1"/>
-                    <path d={pathD} fill="none" stroke="var(--traffic-dep)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path
+                      d={`${pathD} L${pts[pts.length - 1].x},166 L${pts[0].x},166 Z`}
+                      fill="var(--traffic-dep)" opacity=".1"
+                    />
+                    <path
+                      d={pathD} fill="none"
+                      stroke="var(--traffic-dep)" strokeWidth="2"
+                      strokeLinecap="round" strokeLinejoin="round"
+                    />
                     {pts.map((p, i) => (
                       <g key={i}>
-                        <circle cx={p.x} cy={p.y} r="4" fill="var(--card)" stroke="var(--traffic-dep)" strokeWidth="2"/>
-                        <text x={p.x} y={p.y - 10} textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--traffic-dep)">{p.v}</text>
-                        <text x={p.x} y={185} textAnchor="middle" fontSize="9" fill="var(--fg-muted)">{p.d.slice(5)}</text>
+                        <circle cx={p.x} cy={p.y} r="4"
+                                fill="var(--bg2)"
+                                stroke="var(--traffic-dep)" strokeWidth="2"/>
+                        <text x={p.x} y={p.y - 10} textAnchor="middle"
+                              fontSize="10" fontWeight="600"
+                              fill="var(--traffic-dep)">{p.v}</text>
+                        <text x={p.x} y={185} textAnchor="middle"
+                              fontSize="9" fill="var(--text-muted)">
+                          {p.d.slice(5)}
+                        </text>
                       </g>
                     ))}
                   </>
@@ -170,65 +296,69 @@ export const CabangRekap = () => {
         </div>
       )}
 
+      {/* DETAIL TABLE */}
       <div className="panel">
         <div className="panel-header">
           <h2 className="panel-title">Data Detail</h2>
-          <span className="panel-counter">{filtered.length}</span>
+          <span className="panel-counter">{filtered.length} log</span>
         </div>
-        <div className="panel-body">
-          {filtered.length === 0
-            ? <div className="empty-state"><p>Tidak ada data untuk filter ini</p></div>
-            : <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Tanggal</th><th>On–Off</th><th>Controller</th><th>Unit</th><th>Sektor</th><th>Shift</th>
-                      <th style={{ textAlign:"center", color:"var(--traffic-dep)" }}>DEP</th>
-                      <th style={{ textAlign:"center", color:"var(--traffic-arr)" }}>ARR</th>
-                      <th style={{ textAlign:"center", color:"var(--traffic-ovf)" }}>OVF</th>
-                      <th style={{ textAlign:"center" }}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(l => {
-                      const tc = (l.departure_count || 0) + (l.arrival_count || 0) + (l.overfly_count || 0)
-                      return (
-                        <tr key={l.id}>
-                          <td style={{ whiteSpace:"nowrap" }}>{fmtD(l.on_time)}</td>
-                          <td style={{ whiteSpace:"nowrap", color:"var(--fg-muted)", fontSize:12 }}>
-                            {fmtT(l.on_time)}–{fmtT(l.off_time)}
-                          </td>
-                          <td><strong>{l.atc_name || "-"}</strong></td>
-                          <td><span className="unit-tag">{l.unit}</span></td>
-                          <td>{l.sector || "-"}</td>
-                          <td>{l.shift || "-"}</td>
-                          <td style={{ textAlign:"center", color:"var(--traffic-dep)", fontWeight:700 }}>{l.departure_count || 0}</td>
-                          <td style={{ textAlign:"center", color:"var(--traffic-arr)", fontWeight:700 }}>{l.arrival_count || 0}</td>
-                          <td style={{ textAlign:"center", color:"var(--traffic-ovf)", fontWeight:700 }}>{l.overfly_count || 0}</td>
-                          <td style={{ textAlign:"center", fontWeight:800 }}>{tc}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ fontWeight:700 }}>
-                      <td colSpan={6} style={{ textAlign:"right", color:"var(--fg-muted)" }}>TOTAL</td>
-                      <td style={{ textAlign:"center", color:"var(--traffic-dep)" }}>{totals.dep}</td>
-                      <td style={{ textAlign:"center", color:"var(--traffic-arr)" }}>{totals.arr}</td>
-                      <td style={{ textAlign:"center", color:"var(--traffic-ovf)" }}>{totals.ovf}</td>
-                      <td style={{ textAlign:"center" }}>{totals.tc}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>}
+        <div className="panel-body" style={{ padding: 0 }}>
+          {filtered.length === 0 ? (
+            <div className="empty-state">
+              <p>Tidak ada data untuk filter ini</p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Tanggal</th>
+                    <th>On–Off</th>
+                    <th>Controller</th>
+                    <th>Unit</th>
+                    <th>Sektor</th>
+                    <th>Shift</th>
+                    <th className="center">DEP</th>
+                    <th className="center">ARR</th>
+                    <th className="center">OVF</th>
+                    <th className="center">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(l => {
+                    const tc = (l.departure_count || 0) + (l.arrival_count || 0) + (l.overfly_count || 0)
+                    return (
+                      <tr key={l.id}>
+                        <td style={{ whiteSpace: "nowrap" }}>{fmtD(l.on_time)}</td>
+                        <td className="muted mono" style={{ whiteSpace: "nowrap" }}>
+                          {fmtT(l.on_time)}–{fmtT(l.off_time)}
+                        </td>
+                        <td><strong>{l.atc_name || "-"}</strong></td>
+                        <td><span className="unit-tag">{l.unit}</span></td>
+                        <td>{l.sector || "-"}</td>
+                        <td className="muted">{l.shift || "-"}</td>
+                        <td className="td-dep">{l.departure_count || 0}</td>
+                        <td className="td-arr">{l.arrival_count || 0}</td>
+                        <td className="td-ovf">{l.overfly_count || 0}</td>
+                        <td className="center mono"><strong>{tc}</strong></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ fontWeight: 700, background: "var(--bg3)" }}>
+                    <td colSpan={6} style={{ textAlign: "right", color: "var(--text-muted)" }}>TOTAL</td>
+                    <td className="td-dep">{totals.dep}</td>
+                    <td className="td-arr">{totals.arr}</td>
+                    <td className="td-ovf">{totals.ovf}</td>
+                    <td className="center mono"><strong>{totals.tc}</strong></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </div>
       </div>
-
-      {filtered.length > 0 && (
-        <button className="btn btn-primary" onClick={exportCSV} style={{ marginTop:4 }}>
-          <I n="download" s={16}/> Export CSV
-        </button>
-      )}
     </div>
   )
 }

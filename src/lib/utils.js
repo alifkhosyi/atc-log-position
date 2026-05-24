@@ -9,6 +9,15 @@ export const fmtD = d => d ? new Date(d).toLocaleDateString("id-ID",{day:"2-digi
 export const fmtDT = d => d ? new Date(d).toLocaleString("id-ID",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "-"
 export const durMin = (a,b) => a && b ? Math.round((new Date(b)-new Date(a))/60000) : 0
 
+// ── REDESIGN: stale check (for alert feed) ──
+// Returns true if `date` is older than `hours` ago (or null/undefined).
+export const isStaleSince = (date, hours = 4) => {
+  if (!date) return true
+  const d = new Date(date).getTime()
+  if (isNaN(d)) return true
+  return (Date.now() - d) > hours * 3600 * 1000
+}
+
 // ── Shift logic ──────────────────────────────────────────────
 export const SHIFTS = ["Morning","Afternoon","Night"]
 export const getShift = () => {

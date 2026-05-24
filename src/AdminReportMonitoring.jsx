@@ -518,13 +518,10 @@ function DailyMonitoring() {
     <div style={{ paddingBottom: 40 }}>
 
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+      <div className="topbar">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <span style={{ fontSize: 20 }}>📊</span>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--fg)' }}>Monitoring Daily Reports</h2>
-          </div>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--fg-muted)' }}>Pantau laporan harian dari semua cabang</p>
+          <h1 className="topbar-title">📊 Monitoring Daily Reports</h1>
+          <p className="topbar-sub">Pantau laporan harian dari semua cabang{filterBranch ? " · " + filterBranch : ""}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div>

@@ -1,24 +1,43 @@
 // ============================================================
-// src/pages/cabang/RekapPersonnel.jsx — Personnel statistics
+// src/pages/cabang/RekapPersonnel.jsx — Personnel rekap (REDESIGN)
+// ──────────────────────────────────────────────────────────
+// Visual: Rekap Personnel Redesign.html mockup
+// Logic preserved exactly from original:
+//   - myBranches/myPersonnel/myLogs computation
+//   - period filter (today/week/month)
+//   - byPerson aggregation (count, totalMin, dep/arr/ovf, shifts, sectors)
+//   - sort: hours/count/traffic (+ new: name)
+//   - exportCSV (same column shape)
+// New affordances:
+//   - Period chips (segmented control style)
+//   - Top-10 ranking with gradient bars + rank-1 gold + rank-3 cyan
+//   - Detail table with inline shift distribution bar
+//   - Expandable row with stats grid + log history table
+//   - Toast on CSV export success
 // ============================================================
 import React, { useState } from "react"
 import { useApp } from "../../lib/context.jsx"
 import { fmtT, fmtD, durMin, getAccessibleBranches } from "../../lib/utils.js"
 import { I } from "../../components/Icons.jsx"
-import { Header } from "../../components/Header.jsx"
 import { Stat } from "../../components/Stat.jsx"
+import { useToast } from "../../components/Toast.jsx"
 
 export const CabangRekapPersonnel = () => {
   const ctx = useApp()
+  const toast = useToast()
+
+  // ── Same data filter as original ──
   const myBranches  = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
   const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
   const myLogs      = ctx.logs.filter(l => myBranches.includes(l.branch_code) && l.off_time)
 
+  // ── State ──
   const [period, setPeriod] = useState("month")
   const [search, setSearch] = useState("")
-  const [expandedName, setExpandedName] = useState(null)
   const [sortBy, setSortBy] = useState("hours")
+  const [expanded, setExpanded] = useState(null)
 
+  // ── Period filter ──
   const filtered = myLogs.filter(l => {
     const d = (new Date() - new Date(l.on_time)) / 864e5
     return period === "today"
@@ -26,12 +45,15 @@ export const CabangRekapPersonnel = () => {
       : period === "week" ? d <= 7 : d <= 30
   })
 
-  // Build per-person stats
+  // ── Build per-person aggregation (preserved from original) ──
   const byPerson = {}
   filtered.forEach(l => {
     const nm = l.atc_name
-    if (!byPerson[nm]) byPerson[nm] = { name: nm, count:0, totalMin:0, dep:0, arr:0, ovf:0,
-                                         shifts:{ Morning:0, Afternoon:0, Night:0 }, sectors:new Set(), logs:[] }
+    if (!byPerson[nm]) byPerson[nm] = {
+      name: nm, count: 0, totalMin: 0, dep: 0, arr: 0, ovf: 0,
+      shifts: { Morning: 0, Afternoon: 0, Night: 0 },
+      sectors: new Set(), logs: [],
+    }
     const p = byPerson[nm]
     p.count++
     p.totalMin += durMin(l.on_time, l.off_time)
@@ -42,26 +64,43 @@ export const CabangRekapPersonnel = () => {
     if (l.sector) p.sectors.add(l.sector)
     p.logs.push(l)
   })
-  // Include personnel with 0 activity
+  // Include personnel with 0 activity (preserved)
   myPersonnel.forEach(p => {
-    if (!byPerson[p.name]) byPerson[p.name] = { name:p.name, count:0, totalMin:0, dep:0, arr:0, ovf:0,
-                                                 shifts:{ Morning:0, Afternoon:0, Night:0 }, sectors:new Set(), logs:[] }
+    if (!byPerson[p.name]) byPerson[p.name] = {
+      name: p.name, count: 0, totalMin: 0, dep: 0, arr: 0, ovf: 0,
+      shifts: { Morning: 0, Afternoon: 0, Night: 0 },
+      sectors: new Set(), logs: [],
+    }
   })
 
+  // ── Filter + sort (preserved + new "name" sort) ──
   let personList = Object.values(byPerson)
-  if (search) personList = personList.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-  personList.sort((a, b) => {
-    if (sortBy === "hours") return b.totalMin - a.totalMin
-    if (sortBy === "count") return b.count - a.count
-    return (b.dep + b.arr + b.ovf) - (a.dep + a.arr + a.ovf)
+  if (search) personList = personList.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  )
+  personList = [...personList].sort((a, b) => {
+    if (sortBy === "hours")   return b.totalMin - a.totalMin
+    if (sortBy === "count")   return b.count - a.count
+    if (sortBy === "traffic") return (b.dep + b.arr + b.ovf) - (a.dep + a.arr + a.ovf)
+    if (sortBy === "name")    return a.name.localeCompare(b.name)
+    return 0
   })
 
-  const totalPersonnel  = myPersonnel.length
-  const activePersonnel = Object.values(byPerson).filter(p => p.count > 0).length
-  const totalHours      = Math.round(Object.values(byPerson).reduce((a, p) => a + p.totalMin, 0) / 60 * 10) / 10
-  const totalTraffic    = Object.values(byPerson).reduce((a, p) => a + p.dep + p.arr + p.ovf, 0)
-  const topMax          = personList.length > 0 ? personList[0].totalMin : 1
+  // ── Stats ──
+  const active           = Object.values(byPerson).filter(p => p.count > 0)
+  const totalPersonnel   = myPersonnel.length
+  const totalHours       = Math.round(Object.values(byPerson).reduce((a, p) => a + p.totalMin, 0) / 60 * 10) / 10
+  const totalOnMic       = filtered.length
+  const totalTraffic     = Object.values(byPerson).reduce((a, p) => a + p.dep + p.arr + p.ovf, 0)
+  const topMin           = active.length ? Math.max(...active.map(p => p.totalMin)) : 1
+  const avgHrsPerActive  = active.length ? (totalHours / active.length).toFixed(1) : "0"
+  const avgOnMicPerActive = active.length ? Math.round(totalOnMic / active.length) : 0
 
+  const periodLabel = period === "today"
+    ? "Hari ini"
+    : period === "week" ? "7 hari terakhir" : "30 hari terakhir"
+
+  // ── Export CSV (preserved logic + Toast feedback) ──
   const exportCSV = () => {
     const head = ["Nama","On Mic","Total Jam","Rata-rata (mnt)","DEP","ARR","OVF","Total Traffic","Shift Pagi","Shift Siang","Shift Malam","Sektor"]
     const rows = personList.map(p => [
@@ -75,68 +114,135 @@ export const CabangRekapPersonnel = () => {
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" })
     const a = document.createElement("a")
     a.href = URL.createObjectURL(blob)
-    a.download = `rekap_personel_${ctx.user.branch_code}_${new Date().toISOString().slice(0,10)}.csv`
+    a.download = `rekap_personel_${ctx.user.branch_code}_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(a.href)
+    toast.success("Export berhasil", `${personList.length} personnel diunduh sebagai CSV`)
   }
 
   return (
     <div className="page-content">
-      <Header title="Rekap Personel" sub={"Statistik personel ATC — " + ctx.user.branch_code}/>
-
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <div className="filter-bar" style={{ margin:0 }}>
-          {[["today","Hari Ini"],["week","7 Hari"],["month","30 Hari"]].map(([k, v]) => (
-            <button key={k} className={"filter-btn" + (period === k ? " filter-btn-active" : "")}
-                    onClick={() => setPeriod(k)}>{v}</button>
-          ))}
+      {/* TOPBAR */}
+      <div className="topbar">
+        <div>
+          <h1 className="topbar-title">Rekap Personnel</h1>
+          <p className="topbar-sub">
+            Statistik kerja ATC — Cabang {ctx.user.branch_code} · {periodLabel}
+          </p>
         </div>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama..."
-               style={{ flex:1, minWidth:120, padding:"6px 10px", borderRadius:8,
-                        border:"1px solid var(--border)", background:"var(--card)",
-                        color:"var(--fg)", fontSize:12 }}/>
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-                style={{ padding:"6px 10px", borderRadius:8, border:"1px solid var(--border)",
-                         background:"var(--card)", color:"var(--fg)", fontSize:12 }}>
-          <option value="hours">Urutkan: Jam Kerja</option>
-          <option value="count">Urutkan: Frekuensi</option>
-          <option value="traffic">Urutkan: Traffic</option>
+        <button className="btn btn-sm" onClick={exportCSV} disabled={personList.length === 0}>
+          <I n="download" s={14}/> Export CSV
+        </button>
+      </div>
+
+      {/* PERIOD + FILTERS ROW */}
+      <div className="row" style={{ marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div className="period-chips">
+          <button
+            className={"period-chip" + (period === "today" ? " active" : "")}
+            onClick={() => setPeriod("today")}
+          >Hari Ini</button>
+          <button
+            className={"period-chip" + (period === "week" ? " active" : "")}
+            onClick={() => setPeriod("week")}
+          >7 Hari</button>
+          <button
+            className={"period-chip" + (period === "month" ? " active" : "")}
+            onClick={() => setPeriod("month")}
+          >30 Hari</button>
+        </div>
+        <div style={{ position: "relative", flex: "0 1 240px" }}>
+          <span style={{
+            position: "absolute", left: 10, top: "50%",
+            transform: "translateY(-50%)",
+            color: "var(--text-faint)", pointerEvents: "none",
+            display: "inline-flex",
+          }}>
+            <I n="search" s={14}/>
+          </span>
+          <input
+            className="filter-input"
+            style={{ paddingLeft: 30 }}
+            placeholder="Cari nama personnel..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+          style={{
+            width: "auto", padding: "7px 12px", fontSize: 12,
+            borderRadius: 6, border: "1px solid var(--border)",
+            background: "var(--bg2)", color: "var(--text)",
+            fontFamily: "var(--font)", cursor: "pointer", outline: "none",
+          }}
+        >
+          <option value="hours">Urutkan: Jam kerja</option>
+          <option value="count">Urutkan: Frekuensi on mic</option>
+          <option value="traffic">Urutkan: Total traffic</option>
+          <option value="name">Urutkan: Nama (A–Z)</option>
         </select>
       </div>
 
+      {/* STATS */}
       <div className="stats-grid">
-        <Stat icon="users" label="Total Personel" value={totalPersonnel} sub={activePersonnel + " aktif"} color="var(--purple)"/>
-        <Stat icon="clock" label="Total Jam Kerja" value={totalHours + " jam"} color="var(--accent)"/>
-        <Stat icon="mic"   label="Total On Mic"   value={filtered.length} sub="periode ini" color="var(--status-on)"/>
-        <Stat icon="plane" label="Total Traffic"  value={totalTraffic} color="var(--status-warn)"/>
+        <Stat
+          icon="users" label="Total Personnel" value={totalPersonnel}
+          sub={`${active.length} aktif · ${totalPersonnel - active.length} idle`}
+          color="var(--purple)"
+        />
+        <Stat
+          icon="clock" label="Total Jam Kerja" value={`${totalHours}h`}
+          sub={`${avgHrsPerActive}h rata-rata`}
+          color="var(--accent)"
+        />
+        <Stat
+          icon="mic" label="Total On Mic" value={totalOnMic}
+          sub={`${avgOnMicPerActive}× per orang`}
+          color="var(--status-on)"
+        />
+        <Stat
+          icon="plane" label="Total Traffic" value={totalTraffic}
+          sub="Departures + Arrivals + Overfly"
+          color="var(--status-warn)"
+        />
       </div>
 
-      {personList.filter(p => p.count > 0).length > 0 && (
+      {/* TOP-10 RANKING */}
+      {active.length > 0 && (
         <div className="panel">
-          <div className="panel-header"><h2 className="panel-title"><I n="chart" s={16}/> Top Personel (Jam Kerja)</h2></div>
+          <div className="panel-header">
+            <h2 className="panel-title">
+              <I n="chart" s={16}/> Top Personnel (berdasarkan jam kerja)
+            </h2>
+            <span className="panel-counter">Top {Math.min(10, active.length)}</span>
+          </div>
           <div className="panel-body">
-            <div style={{ display:"grid", gridTemplateColumns:"140px 1fr 60px 50px 50px", gap:8,
-                          marginBottom:8, paddingBottom:8, borderBottom:"1px solid var(--border)" }}>
-              <span/><span/>
-              <span style={{ fontSize:9, fontWeight:700, color:"var(--fg-muted)", textAlign:"right", textTransform:"uppercase", letterSpacing:".5px" }}>Jam</span>
-              <span style={{ fontSize:9, fontWeight:700, color:"var(--fg-muted)", textAlign:"center", textTransform:"uppercase", letterSpacing:".5px" }}>On Mic</span>
-              <span style={{ fontSize:9, fontWeight:700, color:"var(--fg-muted)", textAlign:"center", textTransform:"uppercase", letterSpacing:".5px" }}>Traffic</span>
-            </div>
-            <div className="simple-chart">
-              {personList.filter(p => p.count > 0).slice(0, 10).map(p => {
+            <div className="ranking">
+              {active.slice().sort((a, b) => b.totalMin - a.totalMin).slice(0, 10).map((p, i) => {
                 const hrs = Math.round(p.totalMin / 60 * 10) / 10
                 const traffic = p.dep + p.arr + p.ovf
+                const pct = (p.totalMin / topMin) * 100
+                const cls = "rank-row" + (i < 3 ? " top-3" : "") + (i === 0 ? " top-1" : "")
                 return (
-                  <div key={p.name} style={{ display:"grid", gridTemplateColumns:"140px 1fr 60px 50px 50px",
-                                              gap:8, alignItems:"center", marginBottom:6 }}>
-                    <span style={{ fontSize:11, fontWeight:600, color:"var(--fg)", textAlign:"right",
-                                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</span>
-                    <div className="chart-bar-track">
-                      <div className="chart-bar-fill" style={{ width:((p.totalMin / topMax) * 100) + "%", minWidth:4 }}/>
+                  <div key={p.name} className={cls}>
+                    <div className="rank-num">{(i + 1).toString().padStart(2, "0")}</div>
+                    <div>
+                      <div className="rank-name">{p.name}</div>
+                      <div className="rank-bar-wrap">
+                        <div className="rank-bar" style={{ width: pct + "%" }}>{hrs}h</div>
+                      </div>
                     </div>
-                    <span style={{ fontSize:12, fontWeight:700, color:"var(--accent)", textAlign:"right" }}>{hrs}</span>
-                    <span style={{ fontSize:11, fontWeight:600, color:"var(--purple)", textAlign:"center" }}>{p.count}x</span>
-                    <span style={{ fontSize:11, fontWeight:600, color:"var(--fg-muted)", textAlign:"center" }}>{traffic > 0 ? traffic : "—"}</span>
+                    <div className="rank-metric">
+                      <span className="l">On Mic</span>{p.count}×
+                    </div>
+                    <div className="rank-metric">
+                      <span className="l">Traffic</span>{traffic}
+                    </div>
+                    <div className="rank-metric">
+                      <span className="l">Sektor</span>{p.sectors.size}
+                    </div>
                   </div>
                 )
               })}
@@ -145,92 +251,198 @@ export const CabangRekapPersonnel = () => {
         </div>
       )}
 
+      {/* DETAIL TABLE */}
       <div className="panel">
         <div className="panel-header">
-          <h2 className="panel-title">Detail Personel</h2>
-          <span className="panel-counter">{personList.length}</span>
+          <h2 className="panel-title">Detail Personnel ({personList.length})</h2>
+          <span className="muted text-sm">Klik baris untuk detail</span>
         </div>
-        <div className="panel-body">
-          {personList.length === 0
-            ? <div className="empty-state"><I n="users" s={44}/><p>Tidak ada data</p></div>
-            : personList.map(p => {
-                const isExp = expandedName === p.name
-                const hrs = Math.round(p.totalMin / 60 * 10) / 10
-                const avg = p.count ? Math.round(p.totalMin / p.count) : 0
-                return (
-                  <div key={p.name} className="handover-card handover-normal"
-                       style={{ cursor:"pointer", opacity: p.count > 0 ? 1 : .5, marginBottom:4 }}
-                       onClick={() => setExpandedName(isExp ? null : p.name)}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-                        <span style={{ fontSize:13 }}>{isExp ? "▾" : "▸"}</span>
-                        <strong style={{ fontSize:13 }}>{p.name}</strong>
-                        {p.count === 0 && <span style={{ fontSize:10, color:"var(--fg-muted)", fontStyle:"italic" }}>Belum on mic</span>}
-                      </div>
-                      {p.count > 0 && (
-                        <div style={{ display:"flex", alignItems:"center", gap:12, fontSize:11, fontWeight:600 }}>
-                          <span style={{ color:"var(--accent)" }}>{hrs} jam</span>
-                          <span style={{ color:"var(--status-on)" }}>{p.count}x</span>
-                          <span style={{ color:"var(--traffic-dep)" }}>{p.dep}<span style={{ fontWeight:400, fontSize:9 }}> D</span></span>
-                          <span style={{ color:"var(--traffic-arr)" }}>{p.arr}<span style={{ fontWeight:400, fontSize:9 }}> A</span></span>
-                          <span style={{ color:"var(--traffic-ovf)" }}>{p.ovf}<span style={{ fontWeight:400, fontSize:9 }}> O</span></span>
-                        </div>
-                      )}
-                    </div>
-                    {isExp && p.count > 0 && (
-                      <div style={{ padding:"10px 0 4px", borderTop:"1px solid var(--border)" }}>
-                        <div style={{ display:"flex", gap:12, marginBottom:10, fontSize:11 }}>
-                          <span>Rata-rata: <strong>{avg} mnt</strong></span>
-                          <span>Pagi: <strong>{p.shifts.Morning || 0}</strong></span>
-                          <span>Siang: <strong>{p.shifts.Afternoon || 0}</strong></span>
-                          <span>Malam: <strong>{p.shifts.Night || 0}</strong></span>
-                          <span>Sektor: <strong>{[...p.sectors].join(", ") || "-"}</strong></span>
-                        </div>
-                        <div className="table-wrap">
-                          <table className="data-table" style={{ fontSize:11 }}>
-                            <thead>
-                              <tr>
-                                <th>Tanggal</th><th>On–Off</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>Durasi</th>
-                                <th style={{ textAlign:"center", color:"var(--traffic-dep)" }}>D</th>
-                                <th style={{ textAlign:"center", color:"var(--traffic-arr)" }}>A</th>
-                                <th style={{ textAlign:"center", color:"var(--traffic-ovf)" }}>O</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {p.logs.sort((a, b) => new Date(b.on_time) - new Date(a.on_time)).slice(0, 20).map(l => (
-                                <tr key={l.id}>
-                                  <td style={{ whiteSpace:"nowrap" }}>{fmtD(l.on_time)}</td>
-                                  <td style={{ whiteSpace:"nowrap", color:"var(--fg-muted)" }}>{fmtT(l.on_time)}–{fmtT(l.off_time)}</td>
-                                  <td><span className="unit-tag">{l.unit}</span></td>
-                                  <td>{l.sector}</td>
-                                  <td>{l.cwp}</td>
-                                  <td>{durMin(l.on_time, l.off_time)}m</td>
-                                  <td style={{ textAlign:"center", color:"var(--traffic-dep)", fontWeight:600 }}>{l.departure_count || 0}</td>
-                                  <td style={{ textAlign:"center", color:"var(--traffic-arr)", fontWeight:600 }}>{l.arrival_count || 0}</td>
-                                  <td style={{ textAlign:"center", color:"var(--traffic-ovf)", fontWeight:600 }}>{l.overfly_count || 0}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        {p.logs.length > 20 && (
-                          <div style={{ fontSize:10, color:"var(--fg-muted)", marginTop:4 }}>
-                            Menampilkan 20 terbaru dari {p.logs.length} log
-                          </div>
+        <div className="panel-body" style={{ padding: 0 }}>
+          {personList.length === 0 ? (
+            <div className="empty-state">
+              <I n="users" s={44}/>
+              <p>Tidak ada personnel yang cocok</p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table person-table">
+                <thead>
+                  <tr>
+                    <th>Nama</th>
+                    <th className="center">Status</th>
+                    <th className="center">On Mic</th>
+                    <th className="center">Jam</th>
+                    <th className="center">Rata² (mnt)</th>
+                    <th className="center">DEP</th>
+                    <th className="center">ARR</th>
+                    <th className="center">OVF</th>
+                    <th className="center">Total</th>
+                    <th>Distribusi Shift</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {personList.map(p => {
+                    const isOpen = expanded === p.name
+                    const hrs = Math.round(p.totalMin / 60 * 10) / 10
+                    const avg = p.count ? Math.round(p.totalMin / p.count) : 0
+                    const tot = p.dep + p.arr + p.ovf
+                    const shiftTotal =
+                      (p.shifts.Morning + p.shifts.Afternoon + p.shifts.Night) || 1
+                    return (
+                      <React.Fragment key={p.name}>
+                        <tr
+                          onClick={() => setExpanded(isOpen ? null : p.name)}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <td>
+                            <span className={"activity-dot" + (p.count === 0 ? " inactive" : "")}/>
+                            <strong>{p.name}</strong>
+                          </td>
+                          <td className="center">
+                            {p.count > 0
+                              ? <span className="status-badge status-on">Aktif</span>
+                              : <span className="status-badge status-off">Idle</span>}
+                          </td>
+                          <td className="center mono">{p.count}</td>
+                          <td className="center mono">{hrs}h</td>
+                          <td className="center mono">{avg}m</td>
+                          <td className="center td-dep">
+                            {p.dep || <span className="faint">—</span>}
+                          </td>
+                          <td className="center td-arr">
+                            {p.arr || <span className="faint">—</span>}
+                          </td>
+                          <td className="center td-ovf">
+                            {p.ovf || <span className="faint">—</span>}
+                          </td>
+                          <td className="center mono"><strong>{tot}</strong></td>
+                          <td>
+                            <div className="shift-bar">
+                              <div className="shift-seg" style={{
+                                width: (p.shifts.Morning / shiftTotal * 100) + "%",
+                                background: "var(--status-warn)",
+                              }}/>
+                              <div className="shift-seg" style={{
+                                width: (p.shifts.Afternoon / shiftTotal * 100) + "%",
+                                background: "var(--accent)",
+                              }}/>
+                              <div className="shift-seg" style={{
+                                width: (p.shifts.Night / shiftTotal * 100) + "%",
+                                background: "var(--purple)",
+                              }}/>
+                            </div>
+                            <div className="shift-bar-legend">
+                              <span>P:{p.shifts.Morning || 0}</span>
+                              <span>S:{p.shifts.Afternoon || 0}</span>
+                              <span>M:{p.shifts.Night || 0}</span>
+                            </div>
+                          </td>
+                          <td><I n="caret" s={14}/></td>
+                        </tr>
+                        {isOpen && (
+                          <tr>
+                            <td colSpan={11} style={{ padding: 0 }}>
+                              <div className="person-detail">
+                                <div className="person-detail-grid">
+                                  <div className="pd-stat">
+                                    <div className="pd-stat-l">Sesi On Mic</div>
+                                    <div className="pd-stat-v">{p.count}</div>
+                                    <div className="pd-stat-sub">
+                                      total dalam {periodLabel.toLowerCase()}
+                                    </div>
+                                  </div>
+                                  <div className="pd-stat">
+                                    <div className="pd-stat-l">Jam Kerja</div>
+                                    <div className="pd-stat-v">{hrs}h</div>
+                                    <div className="pd-stat-sub">rata² {avg} mnt per sesi</div>
+                                  </div>
+                                  <div className="pd-stat">
+                                    <div className="pd-stat-l">Traffic Handled</div>
+                                    <div className="pd-stat-v">{tot}</div>
+                                    <div className="pd-stat-sub">
+                                      {p.dep} DEP · {p.arr} ARR · {p.ovf} OVF
+                                    </div>
+                                  </div>
+                                  <div className="pd-stat">
+                                    <div className="pd-stat-l">Distribusi Shift</div>
+                                    <div className="pd-stat-v" style={{ fontSize: 14 }}>
+                                      {p.shifts.Morning} / {p.shifts.Afternoon} / {p.shifts.Night}
+                                    </div>
+                                    <div className="pd-stat-sub">Pagi / Siang / Malam</div>
+                                  </div>
+                                  <div className="pd-stat">
+                                    <div className="pd-stat-l">Sektor yang Dipegang</div>
+                                    <div className="pd-sector-list">
+                                      {p.sectors.size === 0
+                                        ? <span className="faint text-sm">—</span>
+                                        : [...p.sectors].map(s => (
+                                            <span key={s} className="pd-sector">{s}</span>
+                                          ))}
+                                    </div>
+                                  </div>
+                                </div>
+                                {p.logs.length > 0 && (
+                                  <div style={{
+                                    marginTop: 16, paddingTop: 12,
+                                    borderTop: "1px solid var(--border-subtle)",
+                                  }}>
+                                    <div className="pd-stat-l" style={{ marginBottom: 8 }}>
+                                      Riwayat Log ({Math.min(20, p.logs.length)} dari {p.logs.length})
+                                    </div>
+                                    <div className="table-wrap">
+                                      <table className="pd-logs-table">
+                                        <thead>
+                                          <tr>
+                                            <th>Tanggal</th>
+                                            <th>On–Off</th>
+                                            <th>Unit</th>
+                                            <th>Sektor</th>
+                                            <th>CWP</th>
+                                            <th>Durasi</th>
+                                            <th className="center" style={{ color: "var(--traffic-dep)" }}>D</th>
+                                            <th className="center" style={{ color: "var(--traffic-arr)" }}>A</th>
+                                            <th className="center" style={{ color: "var(--traffic-ovf)" }}>O</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {p.logs
+                                            .slice()
+                                            .sort((a, b) => new Date(b.on_time) - new Date(a.on_time))
+                                            .slice(0, 20)
+                                            .map(l => (
+                                              <tr key={l.id}>
+                                                <td style={{ whiteSpace: "nowrap" }}>{fmtD(l.on_time)}</td>
+                                                <td className="muted mono" style={{ whiteSpace: "nowrap" }}>
+                                                  {fmtT(l.on_time)}–{fmtT(l.off_time)}
+                                                </td>
+                                                <td><span className="unit-tag">{l.unit}</span></td>
+                                                <td>{l.sector}</td>
+                                                <td className="muted">{l.cwp}</td>
+                                                <td className="mono">{durMin(l.on_time, l.off_time)}m</td>
+                                                <td className="td-dep">{l.departure_count || 0}</td>
+                                                <td className="td-arr">{l.arrival_count   || 0}</td>
+                                                <td className="td-ovf">{l.overfly_count   || 0}</td>
+                                              </tr>
+                                            ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                      </React.Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
-
-      {personList.filter(p => p.count > 0).length > 0 && (
-        <button className="btn btn-primary" onClick={exportCSV} style={{ marginTop:4 }}>
-          <I n="download" s={16}/> Export CSV
-        </button>
-      )}
     </div>
   )
 }

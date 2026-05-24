@@ -1,3 +1,7 @@
+// ============================================================
+// src/DailyReport.jsx — Daily Report MO → INMC (REDESIGN sesi 4)
+// Class-based styling, logic 1:1 with pre-redesign version.
+// ============================================================
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 
@@ -13,15 +17,15 @@ const TRAFFIC_TYPES = [
 ];
 
 const TRAFFIC_GROUPS = [
-  { label: 'DEPARTURE', color: 'var(--status-on)', cols: [
+  { label: 'DEPARTURE', className: 'group-dep', cols: [
     { key: 'depDom', label: 'DOM' },
     { key: 'depInt', label: 'INT' },
   ]},
-  { label: 'ARRIVAL', color: 'var(--accent)', cols: [
+  { label: 'ARRIVAL',   className: 'group-arr', cols: [
     { key: 'arrDom', label: 'DOM' },
     { key: 'arrInt', label: 'INT' },
   ]},
-  { label: 'OTHERS', color: 'var(--text-muted)', cols: [
+  { label: 'OTHERS',    className: 'group-other', cols: [
     { key: 'ovf', label: 'OVF' },
     { key: 'adv', label: 'ADV' },
     { key: 'ext', label: 'EXT' },
@@ -64,7 +68,7 @@ const SECTIONS = [
   { id: 'A', label: 'Identifikasi',  icon: '📄' },
   { id: 'B', label: 'Kondisi Ops',   icon: '🌐' },
   { id: 'C', label: 'Traffic',       icon: '✈️' },
-  { id: 'D', label: 'Peralatan',    icon: '📡' },
+  { id: 'D', label: 'Peralatan',     icon: '📡' },
   { id: 'E', label: 'Insiden',       icon: '⚠️' },
   { id: 'F', label: 'Catatan',       icon: '📝' },
 ];
@@ -77,104 +81,29 @@ const initSecD        = () => COMM_SYSTEMS.reduce((a, s) => ({ ...a, [s.key]: { 
 
 // ─── Sub-components ───────────────────────────────────────────
 const StatusBadge = ({ status }) => {
-  const map = {
-    Normal: { bg: 'var(--status-on-soft)', color: 'var(--status-on)' },
-    Perhatian: { bg: 'var(--status-warn-soft)', color: 'var(--status-warn)' },
-    Gangguan: { bg: 'var(--status-alert-soft)', color: 'var(--status-alert)' },
-    Operational: { bg: 'var(--status-on-soft)', color: 'var(--status-on)' },
-    Unserviceable: { bg: 'var(--status-alert-soft)', color: 'var(--status-alert)' },
-    draft: { bg: 'var(--status-warn-soft)', color: 'var(--status-warn)' },
-    submitted: { bg: 'var(--status-on-soft)', color: 'var(--status-on)' },
-  };
-  const s = map[status] || { bg: 'var(--status-off-soft)', color: 'var(--text-muted)' };
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px',
-      borderRadius: 20, background: s.bg, color: s.color, fontSize: 11, fontWeight: 700 }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
-      {status}
-    </span>
-  );
+  if (!status) return null;
+  const cls =
+    status === 'submitted' ? 'submitted' :
+    status === 'draft'     ? 'draft' :
+    status === 'Normal' || status === 'Operational' ? 'submitted' :
+    'draft';
+  return <span className={`dr-status ${cls}`}>● {status}</span>;
 };
 
-const StatusToggle = ({ value, onChange, options }) => (
-  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+const StatusSegment = ({ value, onChange, options }) => (
+  <div className="ops-seg">
     {options.map(([val, label, color]) => {
       const active = value === val;
       return (
-        <button key={val} type="button" onClick={() => onChange(val)} style={{
-          padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-          border: `1.5px solid ${active ? color : 'var(--border)'}`,
-          background: active ? color + '22' : 'transparent',
-          color: active ? color : 'var(--fg-muted)', transition: 'all .15s',
-        }}>{label}</button>
+        <button
+          key={val} type="button"
+          className={`ops-seg-btn ${active ? `active-${color}` : ''}`}
+          onClick={() => onChange(val)}
+        >{label}</button>
       );
     })}
   </div>
 );
-
-const Panel = ({ title, badge, glow, children, action }) => (
-  <div style={{
-    background: 'var(--card)', border: `1px solid ${glow ? glow + '44' : 'var(--border)'}`,
-    borderRadius: 12, marginBottom: 20, overflow: 'hidden',
-    boxShadow: glow ? `0 0 20px ${glow}18, 0 0 6px ${glow}10` : 'none',
-  }}>
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '12px 18px', borderBottom: '1px solid var(--border)',
-      background: glow ? glow + '08' : 'rgba(255,255,255,0.02)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {badge && <span style={{ background: 'rgba(56,189,248,0.15)', color: 'var(--accent)',
-          padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800 }}>{badge}</span>}
-        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--fg)',
-          textTransform: 'uppercase', letterSpacing: '.5px' }}>{title}</h3>
-      </div>
-      {action}
-    </div>
-    <div style={{ padding: '18px' }}>{children}</div>
-  </div>
-);
-
-const Field = ({ label, children, flex }) => (
-  <div style={{ flex, marginBottom: 0 }}>
-    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--fg-muted)',
-      textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 5 }}>{label}</label>
-    {children}
-  </div>
-);
-
-const Inp = ({ style, ...props }) => (
-  <input {...props} style={{
-    width: '100%', padding: '8px 11px', borderRadius: 7,
-    border: '1px solid var(--border)', background: 'var(--bg)',
-    color: 'var(--fg)', fontSize: 13, boxSizing: 'border-box',
-    outline: 'none', transition: 'border-color .15s', ...style,
-  }}
-    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-    onBlur={e => e.target.style.borderColor = 'var(--border)'}
-  />
-);
-
-const SmInp = ({ style, ...props }) => (
-  <input {...props} style={{
-    width: '100%', padding: '4px 5px', borderRadius: 5,
-    border: '1px solid var(--border)', background: 'var(--bg)',
-    color: 'var(--fg)', fontSize: 11, textAlign: 'center',
-    boxSizing: 'border-box', outline: 'none', ...style,
-  }}
-    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-    onBlur={e => e.target.style.borderColor = 'var(--border)'}
-  />
-);
-
-const th = (extra) => ({
-  padding: '7px 8px', fontWeight: 700, fontSize: 10, textTransform: 'uppercase',
-  letterSpacing: '.4px', border: '1px solid var(--border)', textAlign: 'center',
-  whiteSpace: 'nowrap', ...extra,
-});
-const td = (extra) => ({
-  border: '1px solid var(--border)', padding: '3px 4px', textAlign: 'center', ...extra,
-});
 
 // ─── Main Component ───────────────────────────────────────────
 export default function DailyReport() {
@@ -195,7 +124,8 @@ export default function DailyReport() {
   const [otp, setOtp]               = useState({ airline: '', dep: '', arr: '' });
   const [secD, setSecD]             = useState(initSecD());
   const [commSystems, setCommSystems] = useState(() => {
-    try { const saved = localStorage.getItem('commSystems_custom'); if (saved) return JSON.parse(saved); } catch {}
+    try { const saved = localStorage.getItem('commSystems_custom'); if (saved) return JSON.parse(saved); }
+    catch { /* noop */ }
     return [...COMM_SYSTEMS];
   });
   const [incidents, setIncidents]   = useState([emptyIncident()]);
@@ -209,7 +139,10 @@ export default function DailyReport() {
       if (!acc) return;
       setUserInfo(acc);
       const { data: br } = await supabase.from('branches').select('*').eq('code', acc.branch_code).single();
-      if (br) { setBranchInfo(br); setSecA(p => ({ ...p, unitName: br.name || '', location: br.city || '', managerName: acc.display_name || '' })); }
+      if (br) {
+        setBranchInfo(br);
+        setSecA(p => ({ ...p, unitName: br.name || '', location: br.city || '', managerName: acc.display_name || '' }));
+      }
     })();
   }, []);
 
@@ -225,6 +158,7 @@ export default function DailyReport() {
       else { setExistingId(null); setExistingStatus(null); resetForm(); }
       setLoading(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportDate, userInfo]);
 
   const resetForm = () => {
@@ -294,13 +228,11 @@ export default function DailyReport() {
       if (existingId) {
         await supabase.from('daily_reports').update(payload).eq('id', existingId);
       } else {
-        // Try insert with select — may fail if RLS blocks returning data
-        const { data: ins, error: insErr } = await supabase
+        const { data: ins } = await supabase
           .from('daily_reports').insert(payload).select('id').single();
         if (ins?.id) {
           reportId = ins.id;
         } else {
-          // Fallback: insert succeeded but RLS blocked select — fetch separately
           const { data: fetched } = await supabase
             .from('daily_reports')
             .select('id')
@@ -332,14 +264,14 @@ export default function DailyReport() {
       // Audit log
       if (status === 'submitted') {
         try {
-          supabase.from("audit_logs").insert({
+          supabase.from('audit_logs').insert({
             user_id: userInfo?.id || null,
-            user_name: userInfo?.display_name || userInfo?.username || "-",
-            branch_code: userInfo?.branch_code || "-",
-            action: "DAILY_REPORT_SUBMIT",
-            detail: "Submit Daily Report — " + reportDate + " — " + (secA.unitName || userInfo?.branch_code),
-          }).then(({error}) => { if(error) console.warn("[AUDIT]",error.message) })
-        } catch(e) {}
+            user_name: userInfo?.display_name || userInfo?.username || '-',
+            branch_code: userInfo?.branch_code || '-',
+            action: 'DAILY_REPORT_SUBMIT',
+            detail: 'Submit Daily Report — ' + reportDate + ' — ' + (secA.unitName || userInfo?.branch_code),
+          }).then(({ error }) => { if (error) console.warn('[AUDIT]', error.message); });
+        } catch { /* noop */ }
       }
     } catch (e) { setSaveMsg({ ok: false, text: '❌ Gagal: ' + e.message }); }
     setSaving(false);
@@ -353,340 +285,472 @@ export default function DailyReport() {
 
   // Persist commSystems changes to localStorage
   useEffect(() => {
-    try { localStorage.setItem('commSystems_custom', JSON.stringify(commSystems)); } catch {}
+    try { localStorage.setItem('commSystems_custom', JSON.stringify(commSystems)); }
+    catch { /* noop */ }
   }, [commSystems]);
 
   const removeCommSystem = (key) => {
     setCommSystems(p => p.filter(s => s.key !== key));
     setSecD(p => { const n = { ...p }; delete n[key]; return n; });
   };
-
   const addCommSystem = () => {
     const id = 'custom_' + Date.now();
     setCommSystems(p => [...p, { key: id, label: '' }]);
     setSecD(p => ({ ...p, [id]: { status: 'Normal', notes: '' } }));
   };
-
   const renameCommSystem = (key, newLabel) => {
     setCommSystems(p => p.map(s => s.key === key ? { ...s, label: newLabel } : s));
   };
 
-  const sIdx     = SECTIONS.findIndex(s => s.id === activeSection);
-  const goNext   = () => sIdx < SECTIONS.length - 1 && setActiveSection(SECTIONS[sIdx + 1].id);
-  const goPrev   = () => sIdx > 0 && setActiveSection(SECTIONS[sIdx - 1].id);
+  const sIdx      = SECTIONS.findIndex(s => s.id === activeSection);
+  const goNext    = () => sIdx < SECTIONS.length - 1 && setActiveSection(SECTIONS[sIdx + 1].id);
+  const goPrev    = () => sIdx > 0 && setActiveSection(SECTIONS[sIdx - 1].id);
   const bProblems = OPERATIONAL_ASPECTS.filter(a => secB[a.key].status !== 'Normal').length;
   const dProblems = commSystems.filter(s => secD[s.key] && secD[s.key].status !== 'Normal').length;
 
-  return (
-    <div style={{ paddingBottom: 100 }}>
+  // Section completion for tab indicators
+  const sectionFilled = {
+    A: !!(secA.unitName && secA.managerName),
+    B: true, // always considered filled (defaults to Normal)
+    C: grandTotal() > 0,
+    D: commSystems.length > 0,
+    E: incidents.some(i => i.jenis || i.waktu),
+    F: !!notes.trim(),
+  };
 
-      {/* ── Page Header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+  return (
+    <div style={{ paddingBottom: 24 }}>
+
+      {/* ─── Topbar ─── */}
+      <div className="topbar">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <span style={{ fontSize: 20 }}>📋</span>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--fg)' }}>Daily Report</h2>
-            {existingStatus && <StatusBadge status={existingStatus} />}
-            {loading && <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>memuat...</span>}
+          <div className="topbar-title">Daily Report</div>
+          <div className="topbar-sub">
+            {branchInfo?.name || '—'} ({branchInfo?.code || userInfo?.branch_code || '—'}) — Laporan Harian MO ke INMC
           </div>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--fg-muted)' }}>
-            {branchInfo?.name} ({branchInfo?.code}) — Laporan Harian MO ke INMC
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ fontSize: 11, color: 'var(--fg-muted)', fontWeight: 600 }}>TANGGAL</label>
-          <Inp type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} style={{ width: 'auto' }} />
         </div>
       </div>
 
-      {/* ── Save Message ── */}
+      {/* ─── Date / Status header ─── */}
+      <div className="dr-header">
+        <div className="dr-header-l">
+          <div>
+            <div className="dr-header-eyebrow">Tanggal Laporan</div>
+            <div className="dr-header-date">
+              {new Date(reportDate).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          </div>
+          <div className="dr-date-pick">
+            <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} />
+          </div>
+        </div>
+        <div className="row">
+          {existingStatus && <StatusBadge status={existingStatus} />}
+          {loading && <span className="faint" style={{ fontSize: 12 }}>memuat…</span>}
+        </div>
+      </div>
+
+      {/* ─── Save Message Banner ─── */}
       {saveMsg && (
-        <div style={{
-          padding: '12px 18px', borderRadius: 10, marginBottom: 16, fontSize: 13, fontWeight: 600,
-          background: saveMsg.ok ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-          color: saveMsg.ok ? 'var(--status-on)' : 'var(--status-alert)',
-          border: `1px solid ${saveMsg.ok ? '#10b98133' : '#ef444433'}`,
-        }}>{saveMsg.text}</div>
+        <div className={`dr-save-msg ${saveMsg.ok ? 'ok' : 'err'}`}>{saveMsg.text}</div>
       )}
 
-      {/* ── Step Navigator ── */}
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto' }}>
-        {SECTIONS.map((sec, i) => {
-          const active = activeSection === sec.id;
-          const done   = i < sIdx;
-          return (
-            <React.Fragment key={sec.id}>
-              <button type="button" onClick={() => setActiveSection(sec.id)} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                padding: '8px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                background: active ? 'rgba(56,189,248,0.12)' : 'transparent', transition: 'all .2s', flexShrink: 0,
-              }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 14, fontWeight: 800,
-                  background: active ? 'var(--accent)' : done ? 'rgba(16,185,129,0.2)' : 'var(--bg)',
-                  color: active ? '#0f172a' : done ? 'var(--status-on)' : 'var(--fg-muted)',
-                  border: `2px solid ${active ? 'var(--accent)' : done ? 'var(--status-on)' : 'var(--border)'}`,
-                  boxShadow: active ? '0 0 12px #38bdf866' : 'none', transition: 'all .2s',
-                }}>{done ? '✓' : sec.id}</div>
-                <span style={{ fontSize: 10, fontWeight: 600, color: active ? 'var(--accent)' : done ? 'var(--status-on)' : 'var(--fg-muted)', whiteSpace: 'nowrap' }}>
-                  {sec.icon} {sec.label}
-                </span>
+      {/* ─── Section navigation (sticky) ─── */}
+      <div className="sec-nav">
+        <div className="sec-nav-row">
+          {SECTIONS.map(sec => {
+            const active = activeSection === sec.id;
+            const done   = sectionFilled[sec.id] && !active;
+            return (
+              <button
+                key={sec.id} type="button"
+                className={`sec-tab ${active ? 'active' : ''}`}
+                onClick={() => setActiveSection(sec.id)}
+              >
+                <span className={`sec-tab-id ${done ? 'sec-tab-done' : ''}`}>{sec.id}</span>
+                <span>{sec.icon} {sec.label}</span>
+                {done && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--status-on)" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                )}
               </button>
-              {i < SECTIONS.length - 1 && (
-                <div style={{ flex: 1, height: 2, minWidth: 12, background: i < sIdx ? 'rgba(16,185,129,0.4)' : 'var(--border)', transition: 'background .3s' }} />
-              )}
-            </React.Fragment>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {/* ══ A — IDENTIFIKASI ══ */}
       {activeSection === 'A' && (
-        <Panel badge="A" title="Identifikasi Laporan" glow='var(--accent)'>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-            <Field label="Tanggal Laporan">
-              <Inp type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} />
-            </Field>
-            <Field label="Nomor Laporan (Auto)">
-              <Inp value={secA.reportNumber || `RPT/${userInfo?.branch_code || '____'}/${reportDate.replace(/-/g, '')}`} disabled
-                style={{ background: 'rgba(56,189,248,0.06)', color: 'var(--accent)', fontWeight: 700, cursor: 'not-allowed' }} />
-            </Field>
+        <div className="panel">
+          <div className="panel-header">
+            <h3 className="panel-title"><span className="panel-badge">A</span> Identifikasi Laporan</h3>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-            <Field label="Unit"><Inp value={secA.unitName} disabled style={{ cursor: 'not-allowed', opacity: 0.7 }} /></Field>
-            <Field label="Lokasi"><Inp value={secA.location} disabled style={{ cursor: 'not-allowed', opacity: 0.7 }} /></Field>
+          <div className="panel-body">
+            <div className="form-grid">
+              <div className="field">
+                <label>Tanggal Laporan</label>
+                <input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Nomor Laporan (Auto)</label>
+                <input
+                  value={secA.reportNumber || `RPT/${userInfo?.branch_code || '____'}/${reportDate.replace(/-/g, '')}`}
+                  disabled
+                  style={{ background: 'var(--accent-soft)', color: 'var(--accent)', fontWeight: 700, cursor: 'not-allowed' }}
+                />
+              </div>
+              <div className="field">
+                <label>Unit</label>
+                <input value={secA.unitName} disabled style={{ cursor: 'not-allowed', opacity: 0.75 }} />
+              </div>
+              <div className="field">
+                <label>Lokasi</label>
+                <input value={secA.location} disabled style={{ cursor: 'not-allowed', opacity: 0.75 }} />
+              </div>
+              <div className="field">
+                <label>Manager Operasi</label>
+                <input value={secA.managerName} disabled style={{ cursor: 'not-allowed', opacity: 0.75 }} />
+              </div>
+            </div>
           </div>
-          <Field label="Manager Operasi">
-            <Inp value={secA.managerName} disabled style={{ maxWidth: 400, cursor: 'not-allowed', opacity: 0.7 }} />
-          </Field>
-        </Panel>
+        </div>
       )}
 
       {/* ══ B — KONDISI OPERASIONAL ══ */}
       {activeSection === 'B' && (
-        <Panel badge="B" title="Kondisi Operasional Umum"
-          glow={bProblems > 0 ? 'var(--status-warn)' : 'var(--status-on)'}
-          action={bProblems > 0
-            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--status-alert)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {bProblems} perlu perhatian</span>
-            : <span style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--status-on)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Normal</span>
-          }>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {OPERATIONAL_ASPECTS.map(a => {
-              const b = secB[a.key];
-              const problem = b.status !== 'Normal';
-              return (
-                <div key={a.key} style={{
-                  display: 'grid', gridTemplateColumns: '220px 1fr 100px 180px', gap: 12, alignItems: 'center',
-                  padding: '12px 14px', borderRadius: 10,
-                  border: `1px solid ${problem ? 'rgba(239,68,68,0.3)' : 'var(--border)'}`,
-                  background: problem ? 'rgba(239,68,68,0.04)' : 'rgba(255,255,255,0.01)', transition: 'all .2s',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 16 }}>{a.icon}</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{a.label}</span>
-                  </div>
-                  <StatusToggle value={b.status} onChange={v => updateSecB(a.key, 'status', v)}
-                    options={[['Normal', 'Normal', 'var(--status-on)'], ['Perhatian', 'Perhatian', 'var(--status-warn)'], ['Gangguan', 'Gangguan', 'var(--status-alert)']]} />
-                  <SmInp placeholder="Waktu UTC" value={b.waktu} onChange={e => updateSecB(a.key, 'waktu', e.target.value)} />
-                  <SmInp placeholder="Keterangan..." value={b.notes} style={{ textAlign: 'left' }} onChange={e => updateSecB(a.key, 'notes', e.target.value)} />
-                </div>
-              );
-            })}
+        <div className="panel">
+          <div className="panel-header">
+            <h3 className="panel-title"><span className="panel-badge">B</span> Kondisi Operasional Umum</h3>
+            {bProblems > 0
+              ? <span className="status-badge" style={{ background: 'var(--status-alert-soft)', color: 'var(--status-alert)' }}>⚠ {bProblems} perlu perhatian</span>
+              : <span className="status-badge status-on">✓ Semua Normal</span>}
           </div>
-        </Panel>
+          <div className="panel-body">
+            <div className="ops-grid">
+              {OPERATIONAL_ASPECTS.map(a => {
+                const b = secB[a.key];
+                const problem = b.status !== 'Normal';
+                return (
+                  <div key={a.key} className={`ops-row ${problem ? 'has-problem' : ''}`}>
+                    <div className="ops-row-head">
+                      <div className="ops-row-label">
+                        <span className="ops-row-icon">{a.icon}</span>
+                        {a.label}
+                      </div>
+                      <StatusSegment
+                        value={b.status}
+                        onChange={v => updateSecB(a.key, 'status', v)}
+                        options={[['Normal', 'Normal', 'normal'], ['Perhatian', 'Perhatian', 'warn'], ['Gangguan', 'Gangguan', 'alert']]}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        className="ops-row-waktu"
+                        placeholder="UTC"
+                        value={b.waktu}
+                        onChange={e => updateSecB(a.key, 'waktu', e.target.value)}
+                      />
+                      <input
+                        className="ops-row-note"
+                        placeholder={problem ? 'Wajib isi: jelaskan kondisi' : 'Catatan opsional…'}
+                        value={b.notes}
+                        onChange={e => updateSecB(a.key, 'notes', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ══ C — TRAFFIC ══ */}
       {activeSection === 'C' && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
-            {[
-              { label: 'Total Traffic', val: grandTotal(), color: 'var(--accent)' },
-              { label: 'Departure', val: TRAFFIC_TYPES.reduce((s,t) => s+(parseInt(movements[t.key].depDom)||0)+(parseInt(movements[t.key].depInt)||0), 0), color: 'var(--status-on)' },
-              { label: 'Arrival',   val: TRAFFIC_TYPES.reduce((s,t) => s+(parseInt(movements[t.key].arrDom)||0)+(parseInt(movements[t.key].arrInt)||0), 0), color: 'var(--accent)' },
-              { label: 'Overfly',   val: colTotal('ovf'), color: 'var(--status-warn)' },
-            ].map(({ label, val, color }) => (
-              <div key={label} style={{ background: 'var(--card)', border: `1px solid ${color}33`, borderRadius: 10, padding: '14px 16px', textAlign: 'center', boxShadow: `0 0 14px ${color}12` }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 26, fontWeight: 800, color }}>{val || 0}</div>
-              </div>
-            ))}
+          {/* Stats summary */}
+          <div className="traffic-stats">
+            <div className="traffic-stat color-accent">
+              <div className="traffic-stat-label">Total Traffic</div>
+              <div className="traffic-stat-val">{grandTotal() || 0}</div>
+            </div>
+            <div className="traffic-stat color-on">
+              <div className="traffic-stat-label">Departure</div>
+              <div className="traffic-stat-val">{TRAFFIC_TYPES.reduce((s,t) => s+(parseInt(movements[t.key].depDom)||0)+(parseInt(movements[t.key].depInt)||0), 0)}</div>
+            </div>
+            <div className="traffic-stat color-warn">
+              <div className="traffic-stat-label">Arrival</div>
+              <div className="traffic-stat-val">{TRAFFIC_TYPES.reduce((s,t) => s+(parseInt(movements[t.key].arrDom)||0)+(parseInt(movements[t.key].arrInt)||0), 0)}</div>
+            </div>
+            <div className="traffic-stat color-muted">
+              <div className="traffic-stat-label">Overfly</div>
+              <div className="traffic-stat-val">{colTotal('ovf')}</div>
+            </div>
           </div>
 
-          <Panel badge="C" title="Movement Traffic Harian" glow='var(--status-on)'>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ borderCollapse: 'collapse', fontSize: 11, minWidth: 800 }}>
-                <thead>
-                  <tr>
-                    <th style={th({ textAlign: 'left', minWidth: 140, background: 'var(--bg)', rowSpan: 2 })} rowSpan={2}>Jenis Penerbangan</th>
-                    {TRAFFIC_GROUPS.map(g => (
-                      <th key={g.label} colSpan={g.cols.length} style={th({ background: g.color + '22', color: g.color })}>{g.label}</th>
-                    ))}
-                    <th style={th({ background: 'rgba(56,189,248,0.12)', color: 'var(--accent)', minWidth: 52 })}>TOTAL</th>
-                  </tr>
-                  <tr>
-                    {TRAFFIC_GROUPS.map(g => g.cols.map(c => (
-                      <th key={c.key} style={th({ background: g.color + '11', color: g.color, minWidth: 40 })}>{c.label}</th>
-                    )))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {TRAFFIC_TYPES.map((t, ri) => (
-                    <tr key={t.key} style={{ background: ri % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                      <td style={{ ...td({ textAlign: 'left', padding: '8px 10px' }), fontWeight: 600, fontSize: 12, color: 'var(--fg)' }}>{t.label}</td>
-                      {ALL_COLS.map(c => (
-                        <td key={c.key} style={td({})}>
-                          <SmInp type="number" min="0" value={movements[t.key][c.key]} style={{ width: 38 }}
-                            onChange={e => updateMovement(t.key, c.key, e.target.value)} />
-                        </td>
+          {/* Traffic matrix */}
+          <div className="panel">
+            <div className="panel-header">
+              <h3 className="panel-title"><span className="panel-badge">C</span> Movement Traffic Harian</h3>
+              <span className="panel-counter">Total: <strong style={{ color: 'var(--text)', marginLeft: 6 }}>{grandTotal() || 0}</strong></span>
+            </div>
+            <div className="panel-body" style={{ padding: 0 }}>
+              <div className="tm-wrap">
+                <table className="tm-table">
+                  <thead>
+                    <tr>
+                      <th rowSpan={2} style={{ textAlign: 'left', paddingLeft: 12, minWidth: 140 }}>Jenis Penerbangan</th>
+                      {TRAFFIC_GROUPS.map(g => (
+                        <th key={g.label} colSpan={g.cols.length} className={g.className}>{g.label}</th>
                       ))}
-                      <td style={td({ fontWeight: 800, fontSize: 12, color: 'var(--accent)', background: 'rgba(56,189,248,0.06)' })}>{rowTotal(t.key) || '—'}</td>
+                      <th rowSpan={2}>TOTAL</th>
                     </tr>
-                  ))}
-                  <tr style={{ background: 'rgba(56,189,248,0.05)' }}>
-                    <td style={{ ...td({ textAlign: 'left', padding: '8px 10px' }), fontWeight: 800, color: 'var(--accent)', fontSize: 12 }}>TOTAL</td>
-                    {ALL_COLS.map(c => (<td key={c.key} style={td({ fontWeight: 700, color: 'var(--accent)' })}>{colTotal(c.key) || '—'}</td>))}
-                    <td style={td({ fontWeight: 900, fontSize: 14, color: 'var(--status-warn)', background: 'rgba(245,158,11,0.1)' })}>{grandTotal() || '—'}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </Panel>
-
-          <Panel badge="C.1" title="Total Traffic Per Jam (UTC) — Opsional">
-            <div style={{ overflowX: 'auto' }}>
-              {[0, 1].map(hi => (
-                <table key={hi} style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%', marginBottom: hi === 0 ? 6 : 0 }}>
-                  <thead><tr>{HOURS.slice(hi * 12, hi * 12 + 12).map(h => <th key={h} style={th({ background: 'rgba(56,189,248,0.08)', color: 'var(--accent)', minWidth: 52 })}>{h}</th>)}</tr></thead>
-                  <tbody><tr>{hourly.slice(hi * 12, hi * 12 + 12).map((v, i) => (
-                    <td key={i} style={td({})}>
-                      <SmInp type="number" min="0" value={v} style={{ width: 44 }}
-                        onChange={e => setHourly(p => p.map((x, idx) => idx === i + hi * 12 ? e.target.value : x))} />
-                    </td>
-                  ))}</tr></tbody>
+                    <tr>
+                      {TRAFFIC_GROUPS.flatMap(g => g.cols.map(c => (
+                        <th key={g.label + c.key} className={g.className} style={{ minWidth: 44 }}>{c.label}</th>
+                      )))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {TRAFFIC_TYPES.map(t => (
+                      <tr key={t.key}>
+                        <td className="tm-type-label">{t.label}</td>
+                        {ALL_COLS.map(c => (
+                          <td key={c.key} className="tm-input-cell">
+                            <input
+                              type="number" min="0"
+                              value={movements[t.key][c.key]}
+                              onChange={e => updateMovement(t.key, c.key, e.target.value)}
+                              placeholder="0"
+                            />
+                          </td>
+                        ))}
+                        <td className="tm-row-total">{rowTotal(t.key) || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td className="tm-type-label">TOTAL</td>
+                      {ALL_COLS.map(c => (<td key={c.key}>{colTotal(c.key) || '—'}</td>))}
+                      <td className="tm-grand">{grandTotal() || '—'}</td>
+                    </tr>
+                  </tfoot>
                 </table>
-              ))}
+              </div>
             </div>
-          </Panel>
+          </div>
 
-          <Panel badge="C.2" title="Kinerja Ketepatan Waktu Operasional">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-              {[['airline', 'OTP Airline', 'var(--accent)'], ['dep', 'DEP Punctuality', 'var(--status-on)'], ['arr', 'ARR Punctuality', 'var(--status-warn)']].map(([k, label, color]) => (
-                <div key={k} style={{ background: color + '0d', border: `1px solid ${color}33`, borderRadius: 12, padding: '20px 16px', textAlign: 'center', boxShadow: `0 0 16px ${color}10` }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 12 }}>{label}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                    <input type="number" min="0" max="100" placeholder="—" value={otp[k]} onChange={e => setOtp(p => ({ ...p, [k]: e.target.value }))}
-                      style={{ width: 80, padding: '4px 0', background: 'transparent', border: 'none', borderBottom: `2px solid ${color}66`, color, fontSize: 28, fontWeight: 900, textAlign: 'center', outline: 'none' }} />
-                    <span style={{ fontSize: 22, fontWeight: 700, color }}>%</span>
-                  </div>
-                </div>
-              ))}
+          {/* Hourly */}
+          <div className="panel">
+            <div className="panel-header">
+              <h3 className="panel-title"><span className="panel-badge">C.1</span> Total Traffic Per Jam (UTC)</h3>
+              <span className="panel-counter">{hourly.reduce((s, v) => s + (parseInt(v) || 0), 0)} movements</span>
             </div>
-          </Panel>
+            <div className="panel-body">
+              <div className="hourly-wrap">
+                <div className="hourly-chart">
+                  {hourly.map((v, i) => {
+                    const num = parseInt(v) || 0;
+                    const max = Math.max(1, ...hourly.map(x => parseInt(x) || 0));
+                    return (
+                      <div key={i} className="hourly-bar"
+                           data-tip={`${HOURS[i]} — ${num}`}
+                           style={{ height: `${(num / max) * 100}%`, minHeight: num > 0 ? 4 : 2 }} />
+                    );
+                  })}
+                </div>
+                <div className="hourly-labels">
+                  {[0, 4, 8, 12, 16, 20].map(h => <span key={h}>{String(h).padStart(2, '0')}:00</span>)}
+                  <span>23:00</span>
+                </div>
+              </div>
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 4 }}>
+                {hourly.map((v, i) => (
+                  <input
+                    key={i} type="number" min="0" value={v}
+                    onChange={e => setHourly(p => p.map((x, idx) => idx === i ? e.target.value : x))}
+                    placeholder={HOURS[i]}
+                    style={{
+                      padding: '4px', borderRadius: 4, border: '1px solid var(--border)',
+                      background: 'var(--bg)', color: 'var(--text)',
+                      fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'center', boxSizing: 'border-box',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* OTP */}
+          <div className="panel">
+            <div className="panel-header">
+              <h3 className="panel-title"><span className="panel-badge">C.2</span> Kinerja Ketepatan Waktu Operasional</h3>
+            </div>
+            <div className="panel-body">
+              <div className="otp-grid">
+                {[
+                  ['airline', 'OTP Airline', 'accent'],
+                  ['dep', 'DEP Punctuality', 'on'],
+                  ['arr', 'ARR Punctuality', 'warn'],
+                ].map(([k, label, color]) => (
+                  <div key={k} className={`otp-card color-${color}`}>
+                    <div className="otp-card-label">{label}</div>
+                    <div className="otp-card-inp-wrap">
+                      <input
+                        type="number" min="0" max="100" placeholder="—"
+                        value={otp[k]}
+                        onChange={e => setOtp(p => ({ ...p, [k]: e.target.value }))}
+                        className="otp-card-inp"
+                      />
+                      <span className="otp-card-percent">%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </>
       )}
 
       {/* ══ D — PERALATAN ══ */}
       {activeSection === 'D' && (
-        <Panel badge="D" title="Laporan Peralatan"
-          glow={dProblems > 0 ? 'var(--status-warn)' : 'var(--status-on)'}
-          action={dProblems > 0
-            ? <span style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--status-alert)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>⚠ {dProblems} tidak normal</span>
-            : <span style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--status-on)', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>✓ Semua Normal</span>
-          }>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {commSystems.map(s => {
-              const d = secD[s.key] || { status: 'Normal', notes: '' };
-              const notOp = d.status !== 'Normal';
-              const dotColor = d.status === 'Normal' ? 'var(--status-on)' : 'var(--status-alert)';
-              const isCustom = s.key.startsWith('custom_');
-              return (
-                <div key={s.key} style={{
-                  display: 'grid', gridTemplateColumns: '230px 1fr 200px 32px', gap: 12, alignItems: 'center',
-                  padding: '12px 14px', borderRadius: 10,
-                  border: `1px solid ${notOp ? 'rgba(245,158,11,0.35)' : 'var(--border)'}`,
-                  background: notOp ? 'rgba(245,158,11,0.04)' : 'rgba(255,255,255,0.01)', transition: 'all .2s',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, boxShadow: `0 0 6px ${dotColor}`, flexShrink: 0 }} />
-                    {isCustom ? (
-                      <SmInp placeholder="Nama peralatan..." value={s.label} style={{ textAlign: 'left', fontWeight: 600, fontSize: 13 }}
-                        onChange={e => renameCommSystem(s.key, e.target.value)} />
-                    ) : (
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>{s.label}</span>
-                    )}
-                  </div>
-                  <StatusToggle value={d.status} onChange={v => updateSecD(s.key, 'status', v)}
-                    options={[['Normal', 'Normal', 'var(--status-on)'], ['Unserviceable', 'U/S', 'var(--status-alert)']]} />
-                  <SmInp placeholder="Keterangan..." value={d.notes} style={{ textAlign: 'left' }} onChange={e => updateSecD(s.key, 'notes', e.target.value)} />
-                  <button type="button" onClick={() => removeCommSystem(s.key)} title="Hapus peralatan" style={{
-                    width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)',
-                    background: 'rgba(239,68,68,0.08)', color: 'var(--status-alert)', fontSize: 14, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .15s',
-                  }}>×</button>
-                </div>
-              );
-            })}
+        <div className="panel">
+          <div className="panel-header">
+            <h3 className="panel-title"><span className="panel-badge">D</span> Laporan Peralatan</h3>
+            {dProblems > 0
+              ? <span className="status-badge" style={{ background: 'var(--status-alert-soft)', color: 'var(--status-alert)' }}>⚠ {dProblems} tidak normal</span>
+              : <span className="status-badge status-on">✓ Semua Normal</span>}
           </div>
-          <button type="button" onClick={addCommSystem} style={{
-            marginTop: 12, padding: '9px 16px', borderRadius: 8, border: '1px dashed var(--border)',
-            background: 'transparent', color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'pointer', width: '100%',
-          }}>+ Tambah Peralatan</button>
-        </Panel>
+          <div className="panel-body">
+            <div className="ops-grid">
+              {commSystems.map(s => {
+                const d = secD[s.key] || { status: 'Normal', notes: '' };
+                const notOp = d.status !== 'Normal';
+                const isCustom = s.key.startsWith('custom_');
+                return (
+                  <div key={s.key} className={`ops-row ${notOp ? 'has-problem' : ''}`}>
+                    <div className="ops-row-head">
+                      <div className="ops-row-label" style={{ flex: 1, minWidth: 0 }}>
+                        {isCustom ? (
+                          <input
+                            className="eq-label-input"
+                            placeholder="Nama peralatan…"
+                            value={s.label}
+                            onChange={e => renameCommSystem(s.key, e.target.value)}
+                          />
+                        ) : (
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label}</span>
+                        )}
+                      </div>
+                      <StatusSegment
+                        value={d.status}
+                        onChange={v => updateSecD(s.key, 'status', v)}
+                        options={[['Normal', 'Normal', 'normal'], ['Unserviceable', 'U/S', 'alert']]}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input
+                        className="ops-row-note"
+                        placeholder={notOp ? 'Jelaskan kondisi & tindak lanjut' : 'Catatan opsional…'}
+                        value={d.notes}
+                        onChange={e => updateSecD(s.key, 'notes', e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="eq-delete"
+                        title="Hapus peralatan"
+                        onClick={() => removeCommSystem(s.key)}
+                      >×</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button type="button" className="add-row-btn" onClick={addCommSystem}>+ Tambah Peralatan</button>
+          </div>
+        </div>
       )}
 
       {/* ══ E — INSIDEN ══ */}
       {activeSection === 'E' && (
-        <Panel badge="E" title="Gangguan, Insiden & Tindak Lanjut"
-          glow={incidents.some(i => i.jenis) ? 'var(--status-alert)' : undefined}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="panel">
+          <div className="panel-header">
+            <h3 className="panel-title"><span className="panel-badge">E</span> Gangguan, Insiden & Tindak Lanjut</h3>
+            <button
+              type="button" className="btn btn-sm btn-primary"
+              onClick={() => setIncidents(p => [...p, emptyIncident()])}
+            >+ Tambah Baris</button>
+          </div>
+          <div className="panel-body">
             {incidents.map((inc, i) => (
-              <div key={i} style={{
-                padding: '14px', borderRadius: 10,
-                border: `1px solid ${inc.jenis ? 'rgba(239,68,68,0.3)' : 'var(--border)'}`,
-                background: inc.jenis ? 'rgba(239,68,68,0.03)' : 'rgba(255,255,255,0.01)', transition: 'all .2s',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <span style={{ background: 'rgba(56,189,248,0.15)', color: 'var(--accent)', fontWeight: 800, fontSize: 11, padding: '2px 8px', borderRadius: 20 }}>{i + 1}</span>
-                  {inc.jenis && <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--status-alert)' }}>{inc.jenis}</span>}
+              <div key={i} className={`inc-card ${inc.jenis ? 'has-content' : ''}`}>
+                <div className="inc-card-head">
+                  <span className="inc-num">{i + 1}</span>
+                  {inc.jenis && <span className="inc-jenis-label">{inc.jenis}</span>}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr 70px', gap: 8, marginBottom: 8 }}>
-                  <Field label="Waktu UTC"><SmInp placeholder="0000" value={inc.waktu} onChange={e => updateInc(i, 'waktu', e.target.value)} /></Field>
-                  <Field label="Jenis Gangguan / Insiden"><SmInp placeholder="..." value={inc.jenis} style={{ textAlign: 'left' }} onChange={e => updateInc(i, 'jenis', e.target.value)} /></Field>
-                  <Field label="Sistem Terdampak"><SmInp placeholder="..." value={inc.sistem} style={{ textAlign: 'left' }} onChange={e => updateInc(i, 'sistem', e.target.value)} /></Field>
-                  <Field label="Durasi (mnt)"><SmInp type="number" min="0" value={inc.durasi} onChange={e => updateInc(i, 'durasi', e.target.value)} /></Field>
+                <div className="inc-grid-1">
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Waktu UTC</label>
+                    <input placeholder="0000" value={inc.waktu} onChange={e => updateInc(i, 'waktu', e.target.value)} />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Jenis Gangguan / Insiden</label>
+                    <input placeholder="…" value={inc.jenis} onChange={e => updateInc(i, 'jenis', e.target.value)} />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Sistem Terdampak</label>
+                    <input placeholder="…" value={inc.sistem} onChange={e => updateInc(i, 'sistem', e.target.value)} />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Durasi (mnt)</label>
+                    <input type="number" min="0" value={inc.durasi} onChange={e => updateInc(i, 'durasi', e.target.value)} />
+                  </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <Field label="Tindak Lanjut"><SmInp placeholder="..." value={inc.tindakLanjut} style={{ textAlign: 'left' }} onChange={e => updateInc(i, 'tindakLanjut', e.target.value)} /></Field>
-                  <Field label="Keterangan"><SmInp placeholder="..." value={inc.keterangan} style={{ textAlign: 'left' }} onChange={e => updateInc(i, 'keterangan', e.target.value)} /></Field>
+                <div className="inc-grid-2">
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Tindak Lanjut</label>
+                    <input placeholder="…" value={inc.tindakLanjut} onChange={e => updateInc(i, 'tindakLanjut', e.target.value)} />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label>Keterangan</label>
+                    <input placeholder="…" value={inc.keterangan} onChange={e => updateInc(i, 'keterangan', e.target.value)} />
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-          <button type="button" onClick={() => setIncidents(p => [...p, emptyIncident()])} style={{
-            marginTop: 12, padding: '7px 16px', borderRadius: 8, border: '1px dashed var(--border)',
-            background: 'transparent', color: 'var(--fg-muted)', fontSize: 12, cursor: 'pointer', width: '100%',
-          }}>+ Tambah Baris Insiden</button>
-        </Panel>
+        </div>
       )}
 
       {/* ══ F — CATATAN ══ */}
       {activeSection === 'F' && (
         <>
-          <Panel badge="F" title="Catatan Operasional & Hal Penting Lainnya" glow='var(--purple)'>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={8}
-              placeholder="Tuliskan catatan operasional, koordinasi khusus, atau hal penting lain yang perlu dilaporkan kepada INMC..."
-              style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)', fontSize: 13, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6, minHeight: 160, outline: 'none' }}
-              onFocus={e => e.target.style.borderColor = 'var(--accent)'} onBlur={e => e.target.style.borderColor = 'var(--border)'} />
-          </Panel>
-          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '20px', marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 14 }}>✍️ Dibuat Oleh</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
-              {[['Nama', secA.managerName || '—'], ['Jabatan', 'Manager Operasi'], ['Tanggal', reportDate], ['Unit', secA.unitName || '—']].map(([k, v]) => (
-                <div key={k} style={{ textAlign: 'center', padding: '12px', background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 10, color: 'var(--fg-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 6 }}>{k}</div>
-                  <div style={{ fontWeight: 700, fontSize: 13, borderTop: '2px solid var(--fg)', paddingTop: 6 }}>{v}</div>
+          <div className="panel">
+            <div className="panel-header">
+              <h3 className="panel-title"><span className="panel-badge">F</span> Catatan Operasional & Hal Penting Lainnya</h3>
+            </div>
+            <div className="panel-body">
+              <textarea
+                className="notes-textarea"
+                rows={8}
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Tuliskan catatan operasional, koordinasi khusus, atau hal penting lain yang perlu dilaporkan kepada INMC…"
+              />
+            </div>
+          </div>
+          <div className="signoff-card">
+            <div className="signoff-title">✍️ Dibuat Oleh</div>
+            <div className="signoff-grid">
+              {[
+                ['Nama', secA.managerName || '—'],
+                ['Jabatan', 'Manager Operasi'],
+                ['Tanggal', reportDate],
+                ['Unit', secA.unitName || '—'],
+              ].map(([k, v]) => (
+                <div key={k} className="signoff-cell">
+                  <div className="signoff-cell-label">{k}</div>
+                  <div className="signoff-cell-val">{v}</div>
                 </div>
               ))}
             </div>
@@ -694,32 +758,32 @@ export default function DailyReport() {
         </>
       )}
 
-      {/* ── Bottom Action Bar ── */}
-      <div style={{
-        position: 'sticky', bottom: 0, background: 'var(--card)', border: '1px solid var(--border)',
-        borderRadius: 12, padding: '12px 18px', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', boxShadow: '0 -8px 32px rgba(0,0,0,0.35)',
-      }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={goPrev} disabled={sIdx === 0} style={{
-            padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent',
-            color: sIdx === 0 ? 'var(--fg-muted)' : 'var(--fg)', fontWeight: 600, fontSize: 12,
-            cursor: sIdx === 0 ? 'not-allowed' : 'pointer', opacity: sIdx === 0 ? 0.4 : 1,
-          }}>← Sebelumnya</button>
-          <button type="button" onClick={goNext} disabled={sIdx === SECTIONS.length - 1} style={{
-            padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent',
-            color: sIdx === SECTIONS.length - 1 ? 'var(--fg-muted)' : 'var(--fg)', fontWeight: 600, fontSize: 12,
-            cursor: sIdx === SECTIONS.length - 1 ? 'not-allowed' : 'pointer', opacity: sIdx === SECTIONS.length - 1 ? 0.4 : 1,
-          }}>Berikutnya →</button>
+      {/* ─── Sticky Save Bar ─── */}
+      <div className="r-save-bar">
+        <div className="r-save-nav">
+          <button
+            type="button" className="btn"
+            onClick={goPrev} disabled={sIdx === 0}
+            style={sIdx === 0 ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+          >← Sebelumnya</button>
+          <button
+            type="button" className="btn"
+            onClick={goNext} disabled={sIdx === SECTIONS.length - 1}
+            style={sIdx === SECTIONS.length - 1 ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+          >Berikutnya →</button>
         </div>
-        <span style={{ fontSize: 11, color: 'var(--fg-muted)', fontWeight: 600 }}>
+        <span className="r-save-step">
           Step {sIdx + 1} / {SECTIONS.length} — {SECTIONS[sIdx].icon} {SECTIONS[sIdx].label}
         </span>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" onClick={() => handleSave('submitted')} disabled={saving} style={{
-            padding: '9px 26px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-            color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 0 16px rgba(37,99,235,0.4)',
-          }}>📤 {saving ? 'Mengirim...' : 'Submit Laporan'}</button>
+        <div className="row">
+          <button
+            type="button" className="btn"
+            onClick={() => handleSave('draft')} disabled={saving}
+          >💾 {saving ? 'Menyimpan…' : 'Save Draft'}</button>
+          <button
+            type="button" className="btn-submit-report"
+            onClick={() => handleSave('submitted')} disabled={saving}
+          >📤 {saving ? 'Mengirim…' : 'Submit Laporan'}</button>
         </div>
       </div>
     </div>

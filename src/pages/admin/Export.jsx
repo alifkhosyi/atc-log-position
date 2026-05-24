@@ -722,7 +722,12 @@ export const AdminExport = () => {
 
   return (
     <div className="page-content">
-      <Header title="Export Laporan" sub="Download Excel atau PDF"/>
+      <div className="topbar">
+        <div>
+          <h1 className="topbar-title">Export Laporan</h1>
+          <p className="topbar-sub">Download Excel atau PDF</p>
+        </div>
+      </div>
 
       {/* Report Type Selection */}
       <div className="panel">

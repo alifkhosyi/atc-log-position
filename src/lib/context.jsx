@@ -28,6 +28,18 @@ export const AppProvider = ({ children }) => {
   const [col, setCol]             = useState(false)
   const [navBranch, setNavBranch] = useState(null) // dashboard → mon_log handoff
 
+  // ── REDESIGN: persistent branch filter (admin) ──
+  // Survives page refresh via localStorage. Default "ALL" = show all branches.
+  const [globalBranch, setGlobalBranchState] = useState(() => {
+    try { return localStorage.getItem("atc-global-branch") || "ALL" }
+    catch { return "ALL" }
+  })
+  const setGlobalBranch = useCallback((code) => {
+    setGlobalBranchState(code || "ALL")
+    try { localStorage.setItem("atc-global-branch", code || "ALL") }
+    catch { /* localStorage unavailable — ignore */ }
+  }, [])
+
   // ── Static data ──
   const [branches, setBranches]               = useState([])
   const [sectors, setSectors]                 = useState([])
@@ -144,6 +156,7 @@ export const AppProvider = ({ children }) => {
     session, user, loading, handleLogin, handleLogout,
     // ui
     page, goPage: setPage, col, setCol, navBranch, setNavBranch,
+    globalBranch, setGlobalBranch,
     // data
     branches, sectors, personnel, moBranchCodes,
     logs, handovers, handoverChecklists,

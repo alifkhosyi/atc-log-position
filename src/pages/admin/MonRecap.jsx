@@ -6,11 +6,13 @@ import { useApp } from "../../lib/context.jsx"
 import { fmtT, fmtD } from "../../lib/utils.js"
 import { I } from "../../components/Icons.jsx"
 import { Header } from "../../components/Header.jsx"
+import { BranchPicker, BranchFilterBadge } from "../../components/BranchPicker.jsx"
 import { Stat } from "../../components/Stat.jsx"
 
 export const AdminMonRecap = () => {
   const ctx = useApp()
-  const [br, setBr] = useState("ALL")
+  const br = ctx.globalBranch || "ALL"
+  const setBr = (v) => ctx.setGlobalBranch(v)
   const [period, setPeriod] = useState("today")
   const [expandBr, setExpandBr] = useState(null)
 
@@ -193,20 +195,33 @@ export const AdminMonRecap = () => {
     )
   }
 
+
+  // brAct map for BranchPicker live indicator
+  const brAct = {}
+  ctx.logs.filter(l => !l.off_time).forEach(l => { brAct[l.branch_code] = (brAct[l.branch_code] || 0) + 1 })
+  const allBr = ctx.branches.filter(b => b.region)
+
   return (
     <div className="page-content">
-      <Header title="Monitoring Rekap Traffic" sub="Detail traffic seluruh cabang"/>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, flexWrap:"wrap" }}>
-        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
-        <select className="br-select" value={br} onChange={e => { setBr(e.target.value); setExpandBr(null) }}>
-          <option value="ALL">Semua Cabang</option>
-          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
-        </select>
-        <div className="filter-bar" style={{ margin:0 }}>
+      <div className="topbar">
+        <div>
+          <h1 className="topbar-title">Monitoring Rekap Traffic</h1>
+          <p className="topbar-sub">Detail traffic seluruh cabang{br === "ALL" ? "" : " · " + br}</p>
+        </div>
+      </div>
+      <div className="inmc-topbar">
+        <div className="inmc-topbar-l">
+          <BranchPicker value={br} onChange={setBr} branches={allBr} brAct={brAct}/>
+          <BranchFilterBadge value={br} onClear={() => setBr("ALL")}/>
+          <div className="filter-bar" style={{ margin:0 }}>
           {[["today","Hari Ini"],["week","Minggu"],["month","Bulan"]].map(([k, v]) => (
             <button key={k} className={"filter-btn" + (period === k ? " filter-btn-active" : "")}
                     onClick={() => setPeriod(k)}>{v}</button>
           ))}
+        </div>
+        </div>
+        <div className="inmc-topbar-l">
+          <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
         </div>
       </div>
 

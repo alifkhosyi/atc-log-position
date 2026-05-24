@@ -7,11 +7,13 @@ import { useApp } from "../../lib/context.jsx"
 import { MO_TABS } from "../../lib/constants.js"
 import { I } from "../../components/Icons.jsx"
 import { Header } from "../../components/Header.jsx"
+import { BranchPicker, BranchFilterBadge } from "../../components/BranchPicker.jsx"
 import { Stat } from "../../components/Stat.jsx"
 
 export const AdminMonHoToMo = () => {
   const ctx = useApp()
-  const [br, setBr] = useState("ALL")
+  const br = ctx.globalBranch || "ALL"
+  const setBr = (v) => ctx.setGlobalBranch(v)
   const [filterDate, setFilterDate] = useState("")
   const [activeTab, setActiveTab] = useState("pre_shift")
   const [data, setData] = useState([])
@@ -44,18 +46,31 @@ export const AdminMonHoToMo = () => {
   const totalUnchecked = data.reduce((a, c) => a + (c.items||[]).filter(i => i.checked === false).length, 0)
   const branchesWithData = [...new Set(data.map(d => d.branch_code))].length
 
+
+  // brAct map for BranchPicker live indicator
+  const brAct = {}
+  ctx.logs.filter(l => !l.off_time).forEach(l => { brAct[l.branch_code] = (brAct[l.branch_code] || 0) + 1 })
+  const allBr = ctx.branches.filter(b => b.region)
+
   return (
     <div className="page-content">
-      <Header title="Monitoring HO/TO MO" sub="Checklist PRKP Manager Operasi dari seluruh cabang"/>
+      <div className="topbar">
+        <div>
+          <h1 className="topbar-title">Monitoring HO/TO MO</h1>
+          <p className="topbar-sub">Checklist PRKP Manager Operasi dari seluruh cabang{br === "ALL" ? "" : " · " + br}</p>
+        </div>
+      </div>
 
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, flexWrap:"wrap" }}>
-        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
-        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
-          <option value="ALL">Semua Cabang</option>
-          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
-        </select>
-        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="br-select"/>
+      <div className="inmc-topbar">
+        <div className="inmc-topbar-l">
+          <BranchPicker value={br} onChange={setBr} branches={allBr} brAct={brAct}/>
+          <BranchFilterBadge value={br} onClear={() => setBr("ALL")}/>
+          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="br-select"/>
         {filterDate && <button className="btn btn-ghost btn-sm" onClick={() => setFilterDate("")}>✕ Reset</button>}
+        </div>
+        <div className="inmc-topbar-l">
+          <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        </div>
       </div>
 
       <div style={{ display:"flex", gap:6, marginBottom:20 }}>

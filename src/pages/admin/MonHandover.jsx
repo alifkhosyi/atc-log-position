@@ -7,6 +7,7 @@ import { fmtD, fmtDT } from "../../lib/utils.js"
 import { CHECKLIST_ITEMS } from "../../lib/constants.js"
 import { I } from "../../components/Icons.jsx"
 import { Header } from "../../components/Header.jsx"
+import { BranchPicker, BranchFilterBadge } from "../../components/BranchPicker.jsx"
 import { Stat } from "../../components/Stat.jsx"
 
 // Status colors — semantic tokens (was light-theme hex in original)
@@ -18,7 +19,8 @@ const STATUS_CLR = {
 
 export const AdminMonHandover = () => {
   const ctx = useApp()
-  const [br, setBr] = useState("ALL")
+  const br = ctx.globalBranch || "ALL"
+  const setBr = (v) => ctx.setGlobalBranch(v)
   const [filterDate, setFilterDate] = useState("")
   const [expandedId, setExpandedId] = useState(null)
 
@@ -35,17 +37,30 @@ export const AdminMonHandover = () => {
     return found ? found.code + " — " + found.city : bid?.slice(0, 8) + "..."
   }
 
+
+  // brAct map for BranchPicker live indicator
+  const brAct = {}
+  ctx.logs.filter(l => !l.off_time).forEach(l => { brAct[l.branch_code] = (brAct[l.branch_code] || 0) + 1 })
+  const allBr = ctx.branches.filter(b => b.region)
+
   return (
     <div className="page-content">
-      <Header title="Monitoring Handover/Takeover" sub="Checklist & catatan dari seluruh cabang"/>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, flexWrap:"wrap" }}>
-        <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
-        <select className="br-select" value={br} onChange={e => setBr(e.target.value)}>
-          <option value="ALL">Semua Cabang</option>
-          {ctx.branches.map(a => <option key={a.code} value={a.code}>{a.code} — {a.city}</option>)}
-        </select>
-        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="br-select"/>
+      <div className="topbar">
+        <div>
+          <h1 className="topbar-title">Monitoring Handover/Takeover</h1>
+          <p className="topbar-sub">Checklist & catatan dari seluruh cabang{br === "ALL" ? "" : " · " + br}</p>
+        </div>
+      </div>
+      <div className="inmc-topbar">
+        <div className="inmc-topbar-l">
+          <BranchPicker value={br} onChange={setBr} branches={allBr} brAct={brAct}/>
+          <BranchFilterBadge value={br} onClear={() => setBr("ALL")}/>
+          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="br-select"/>
         {filterDate && <button className="btn btn-ghost btn-sm" onClick={() => setFilterDate("")}>✕ Reset</button>}
+        </div>
+        <div className="inmc-topbar-l">
+          <span className="monitor-label"><I n="eye" s={12}/> MONITORING</span>
+        </div>
       </div>
 
       <div className="stats-grid">
