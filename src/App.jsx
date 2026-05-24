@@ -3,6 +3,8 @@ import { supabase } from "./supabase.js"
 import Reports from './Reports'
 import DailyReport from './DailyReport'
 import AdminReportMonitoring from './AdminReportMonitoring'
+import { ConfirmProvider, useConfirm } from './ConfirmDialog'
+import { ToastProvider, useToast } from './Toast'
 
 // ============================================================
 // CONTEXT
@@ -165,7 +167,7 @@ const Login = ({onLogin}) => {
 // ============================================================
 // SIDEBAR
 // ============================================================
-const Sidebar = ({page,go,user,logout,col,toggle}) => {
+const Sidebar = ({page,go,user,logout,col,toggle,theme,setTheme}) => {
   const items = user.role === "admin" ? [
     {id:"dashboard",label:"Dashboard",icon:"dashboard"},
     {id:"mon_log",label:"Monitoring Log Position",icon:"monitor"},
@@ -197,7 +199,10 @@ const Sidebar = ({page,go,user,logout,col,toggle}) => {
       </nav>
       <div className="sidebar-footer">
         <div className="sidebar-user"><div className="sidebar-avatar">{(user.display_name||"U")[0].toUpperCase()}</div>{!col && <div className="sidebar-user-info"><div className="sidebar-user-name">{user.display_name}</div><div className="sidebar-user-role">{user.role==="admin"?"Admin Pusat":"Cabang "+user.branch_code}</div></div>}</div>
-        <button className="sidebar-logout" onClick={logout}><I n="logout" s={16}/>{!col && " Keluar"}</button>
+        <div style={{display:"flex",gap:6}}>
+          <button className="theme-toggle" onClick={() => setTheme(theme==="dark"?"light":"dark")} title={theme==="dark"?"Light Mode":"Dark Mode"}>{theme==="dark"?"☀️":"🌙"}</button>
+          <button className="sidebar-logout" style={{flex:1}} onClick={logout}><I n="logout" s={16}/>{!col && " Keluar"}</button>
+        </div>
       </div>
     </aside>
   )
@@ -3198,6 +3203,13 @@ export default function App() {
   const [user,setUser] = useState(null)
   const [page,setPage] = useState("dashboard")
   const [col,setCol] = useState(false)
+  const [theme,setTheme] = useState(() => localStorage.getItem("atc-theme") || "dark")
+  
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme)
+    localStorage.setItem("atc-theme", theme)
+  }, [theme])
   const [loading,setLoading] = useState(true)
   const [navBranch,setNavBranch] = useState(null) // for dashboard→mon_log navigation
 
@@ -3321,11 +3333,15 @@ export default function App() {
   const CurrentPage = pageMap[page] || pageMap.dashboard
 
   return (
+    <ConfirmProvider>
+    <ToastProvider>
     <AppContext.Provider value={{user,branches,sectors,logs,handovers,handoverChecklists,personnel,moBranchCodes,navBranch,setNavBranch,goPage:setPage,reload:loadData}}>
       <div className="app-layout">
-        <Sidebar page={page} go={setPage} user={user} logout={handleLogout} col={col} toggle={() => setCol(!col)}/>
+        <Sidebar page={page} go={setPage} user={user} logout={handleLogout} col={col} toggle={() => setCol(!col)} theme={theme} setTheme={setTheme}/>
         <main className="main-area"><CurrentPage/></main>
       </div>
     </AppContext.Provider>
+    </ToastProvider>
+    </ConfirmProvider>
   )
 }
