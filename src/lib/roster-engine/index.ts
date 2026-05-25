@@ -8,3 +8,6 @@
 export * from './types';
 export * from './date-utils';
 export * from './airport-config-loader';
+export * from './templates';
+export * from './greedy';
+export * from './generator';
