@@ -1,15 +1,10 @@
 // ============================================================
-// src/pages/admin/Dashboard.jsx — INMC Dashboard (REDESIGN sesi 5)
+// src/pages/admin/Dashboard.jsx — INMC Dashboard (REDESIGN sesi 5 + audit Phase 4)
 // ──────────────────────────────────────────────────────────
-// Visual: INMC_Dashboard_Redesign.html mockup
-// Features:
-//   - Persistent global branch filter (ctx.globalBranch, localStorage)
-//   - Connection status indicator (live/stale/error based on last sync age)
-//   - Region comparison cards (West vs East: active/onMic/traffic bars)
-//   - Branch grid with severity-coded cards (live/warn/crit)
-//   - Alert feed aggregated from logs + handovers + reports staleness
-//   - Side panel drill-down with ESC + click backdrop + X close
-// Backend: read-only, uses ctx data already loaded by AppProvider.
+// Phase 4 audit fix:
+//   - C-02 full: REGION_COLOR hex → CSS tokens var(--region-*)
+//                (East tidak lagi pakai --status-alert merah)
+//   - N-02 partial: emoji 📋🤝📊 di Quick Actions → <I n="..."/>
 // ============================================================
 import React, { useState, useEffect, useMemo, useCallback } from "react"
 import { useApp } from "../../lib/context.jsx"
@@ -17,9 +12,15 @@ import { isStaleSince, getShift } from "../../lib/utils.js"
 import { I } from "../../components/Icons.jsx"
 import { Pulse } from "../../components/Pulse.jsx"
 import { BranchPicker, BranchFilterBadge } from "../../components/BranchPicker.jsx"
+// Phase 3+4 fix: CSS tokens untuk shift colors + region colors
+import "../../styles/roster-tokens.css"
 
 // ─── Helpers ───
-const REGION_COLOR = { west: "#3b82f6", east: "#dc2626" }
+// Phase 4 fix C-02: pakai CSS tokens, BUKAN hex inline yang collide dengan --status-alert
+const REGION_COLOR = {
+  west: "var(--region-west, #2563eb)",
+  east: "var(--region-east, #0891b2)",
+}
 
 // ─── Alert Feed (aggregated from ctx data) ───
 const useAlerts = (ctx) => useMemo(() => {
@@ -34,7 +35,6 @@ const useAlerts = (ctx) => useMemo(() => {
     const items = ["traffic_situation", "conflict_solution", "weather", "facilities", "coordination", "others"]
     const notOks = items.filter(it => cl[it + "_status"] === "Not OK")
     if (notOks.length === 0) return
-    // Find branch code — checklist may use branch_id=user.id OR branch_code
     const bc = cl.branch_code || ctx.branches.find(b => b.code === cl.branch_code)?.code
     if (!bc) return
     alerts.push({
@@ -50,7 +50,6 @@ const useAlerts = (ctx) => useMemo(() => {
   const onMicBranches = new Set(ctx.logs.filter(l => !l.off_time).map(l => l.branch_code))
   ctx.branches.filter(b => b.region).forEach(b => {
     if (onMicBranches.has(b.code)) return
-    // Last activity
     const lastLog = ctx.logs
       .filter(l => l.branch_code === b.code)
       .sort((a, z) => new Date(z.on_time) - new Date(a.on_time))[0]
@@ -68,7 +67,6 @@ const useAlerts = (ctx) => useMemo(() => {
     }
   })
 
-  // Sort: crit first, then warn, then info
   const sevOrder = { crit: 0, warn: 1, info: 2 }
   return alerts.sort((a, b) => {
     const s = sevOrder[a.sev] - sevOrder[b.sev]
@@ -317,7 +315,9 @@ const SidePanel = ({ branchCode, ctx, brAct, brTraffic, personnelCount, alertsBy
 
               {branchAlerts.length > 0 && (
                 <div className="sp-section">
-                  <div className="sp-section-h">⚠ Alerts aktif</div>
+                  <div className="sp-section-h" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <I n="alert" s={13}/> Alerts aktif
+                  </div>
                   {branchAlerts.map(a => (
                     <div key={a.id} className="alert-item" style={{ marginBottom: 6, cursor: "default" }}>
                       <div className="alert-item-head">
@@ -335,9 +335,15 @@ const SidePanel = ({ branchCode, ctx, brAct, brTraffic, personnelCount, alertsBy
               <div className="sp-section">
                 <div className="sp-section-h">Quick Actions</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button className="btn btn-sm" onClick={handleOpenLog}>📋 Log Position</button>
-                  <button className="btn btn-sm" onClick={handleOpenHandover}>🤝 Handover</button>
-                  <button className="btn btn-sm" onClick={handleOpenReports}>📊 Reports</button>
+                  <button className="btn btn-sm" onClick={handleOpenLog}>
+                    <I n="mic" s={13}/> Log Position
+                  </button>
+                  <button className="btn btn-sm" onClick={handleOpenHandover}>
+                    <I n="checklist" s={13}/> Handover
+                  </button>
+                  <button className="btn btn-sm" onClick={handleOpenReports}>
+                    <I n="chart" s={13}/> Reports
+                  </button>
                 </div>
               </div>
             </>
@@ -416,7 +422,6 @@ export const AdminDash = () => {
   const [lastUpdated, setLastUpdated] = useState(new Date())
   const [now, setNow] = useState(() => Date.now())
 
-  // Ticker for "X seconds ago" display
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(interval)
@@ -424,7 +429,6 @@ export const AdminDash = () => {
 
   const handleRefresh = useCallback(() => {
     setLastUpdated(new Date())
-    // ctx.reload() if available — otherwise visual-only refresh
   }, [])
 
   // ─── Aggregate stats ───
@@ -466,6 +470,7 @@ export const AdminDash = () => {
     })
     return map
   }, [alerts])
+
   const critCount = alerts.filter(a => a.sev === "crit").length
   const totalAlerts = alerts.length
 
@@ -478,7 +483,6 @@ export const AdminDash = () => {
     .sort((a, z) => (brAct[z.code] || 0) - (brAct[a.code] || 0))
   const eastMoChildren = allBr.filter(b => b.region === "east" && b.parent_code && moCodeSet.has(b.code))
     .sort((a, z) => (brAct[z.code] || 0) - (brAct[a.code] || 0))
-
   const allWestFlat = allBr.filter(b => b.region === "west")
   const allEastFlat = allBr.filter(b => b.region === "east")
 
@@ -486,20 +490,18 @@ export const AdminDash = () => {
   const filter = ctx.globalBranch || "ALL"
   const filterApplied = filter !== "ALL"
 
-  // Filter top-level: include if matches OR has matching descendant
   const matchesFilter = (b) => {
     if (!filterApplied) return true
     if (b.code === filter) return true
     const allDesc = getAllDescendants(b.code)
     return allDesc.some(d => d.code === filter)
   }
-
   const filterWestTop = westTop.filter(matchesFilter)
   const filterEastTop = eastTop.filter(matchesFilter)
   const filterWestMo = westMoChildren.filter(matchesFilter)
   const filterEastMo = eastMoChildren.filter(matchesFilter)
 
-  // ─── Connection status (based on last log activity vs lastUpdated) ───
+  // ─── Connection status ───
   const secondsAgo = Math.floor((now - lastUpdated.getTime()) / 1000)
   const connStatus = secondsAgo < 30 ? "live" : secondsAgo < 300 ? "stale" : "error"
   const connText = secondsAgo < 60 ? `${secondsAgo}s lalu`
@@ -510,7 +512,6 @@ export const AdminDash = () => {
 
   return (
     <div className="page-content">
-      {/* TOPBAR */}
       <div className="topbar">
         <div>
           <h1 className="topbar-title">Dashboard INMC</h1>
@@ -518,7 +519,6 @@ export const AdminDash = () => {
         </div>
       </div>
 
-      {/* PERSISTENT TOOLBAR — Branch filter + connection + refresh */}
       <div className="inmc-topbar">
         <div className="inmc-topbar-l">
           <BranchPicker value={filter} onChange={ctx.setGlobalBranch} branches={allBr} brAct={brAct}/>
@@ -534,7 +534,6 @@ export const AdminDash = () => {
         </div>
       </div>
 
-      {/* OVERVIEW STATS */}
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-ic" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}>
@@ -582,16 +581,13 @@ export const AdminDash = () => {
         </div>
       </div>
 
-      {/* REGION COMPARISON */}
       <div className="regions-row">
         <RegionCard region="west" branches={allWestFlat} brAct={brAct} brTraffic={brTraffic} personnelCount={personnelCount}/>
         <RegionCard region="east" branches={allEastFlat} brAct={brAct} brTraffic={brTraffic} personnelCount={personnelCount}/>
       </div>
 
-      {/* MAIN: branch grid + alert feed */}
       <div className="layout-main">
         <div>
-          {/* WEST */}
           <div className="branch-region-block">
             <div className="branch-region-head">
               <div className="branch-region-title west">
@@ -612,6 +608,7 @@ export const AdminDash = () => {
                             onClick={handleBranchClick}/>
               ))}
             </div>
+
             {filterWestMo.length > 0 && (
               <>
                 <div className="branch-region-head" style={{ marginTop: 14 }}>
@@ -635,7 +632,6 @@ export const AdminDash = () => {
             )}
           </div>
 
-          {/* EAST */}
           <div className="branch-region-block">
             <div className="branch-region-head">
               <div className="branch-region-title east">
@@ -656,6 +652,7 @@ export const AdminDash = () => {
                             onClick={handleBranchClick}/>
               ))}
             </div>
+
             {filterEastMo.length > 0 && (
               <>
                 <div className="branch-region-head" style={{ marginTop: 14 }}>

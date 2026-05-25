@@ -5,11 +5,68 @@
 //   const toast = useToast();
 //   toast.success("Berhasil disimpan");
 //   toast.error("Gagal menghapus", "ATC sedang on mic");
+//
+// Phase 4 audit fix C-07: error.message dari Supabase di-translate
+// ke pesan friendly bahasa Indonesia. Raw message tetap di-log ke
+// console untuk debug.
 // ============================================================
 import React, { createContext, useContext, useState, useCallback } from "react"
 
 const ToastCtx = createContext(null)
 export const useToast = () => useContext(ToastCtx)
+
+// ─── Error message translator (C-07 fix) ───
+// Mapping common Supabase / Postgres / network errors → bahasa Indonesia.
+// Selalu return string. Kalau ga match, kembalikan apa adanya.
+function translateError(raw) {
+  if (!raw) return raw
+  if (typeof raw !== "string") raw = String(raw)
+  const lc = raw.toLowerCase()
+
+  // Auth
+  if (lc.includes("invalid login credentials")) return "Email atau password salah"
+  if (lc.includes("email not confirmed")) return "Email belum dikonfirmasi"
+  if (lc.includes("jwt") || lc.includes("token expired") || lc.includes("invalid token"))
+    return "Sesi habis, silakan login ulang"
+  if (lc.includes("user not found")) return "Akun tidak ditemukan"
+
+  // Postgres / DB
+  if (lc.includes("duplicate key") || lc.includes("unique constraint") || lc.includes("already exists"))
+    return "Data sudah ada (duplikasi)"
+  if (lc.includes("violates foreign key"))
+    return "Data masih terhubung dengan record lain, tidak bisa dihapus"
+  if (lc.includes("not null") || lc.includes("required"))
+    return "Ada kolom wajib yang belum diisi"
+  if (lc.includes("invalid input") || lc.includes("invalid syntax") || lc.includes("invalid uuid"))
+    return "Format input tidak valid"
+  if (lc.includes("does not exist") || lc.includes("not found"))
+    return "Data tidak ditemukan"
+  if (lc.includes("check constraint"))
+    return "Nilai input di luar yang diperbolehkan"
+
+  // RLS / permissions
+  if (lc.includes("permission denied") || lc.includes("not authorized") ||
+      lc.includes("row-level security") || lc.includes("rls"))
+    return "Tidak punya izin untuk operasi ini"
+
+  // Network
+  if (lc.includes("network") || lc.includes("fetch failed") ||
+      lc.includes("failed to fetch") || lc.includes("connection"))
+    return "Koneksi terputus, coba lagi"
+  if (lc.includes("timeout") || lc.includes("timed out"))
+    return "Permintaan terlalu lama, coba lagi"
+  if (lc.includes("rate limit") || lc.includes("too many requests"))
+    return "Terlalu banyak permintaan, tunggu sebentar"
+
+  // Server
+  if (lc.includes("internal server") || lc.includes("500"))
+    return "Server bermasalah sementara, coba lagi nanti"
+  if (lc.includes("503") || lc.includes("service unavailable"))
+    return "Layanan tidak tersedia sementara"
+
+  // Default: return original (mungkin sudah friendly atau aplikasi-spesifik)
+  return raw
+}
 
 const Icon = ({ kind }) => {
   const s = { width:20, height:20, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor",
@@ -22,7 +79,6 @@ const Icon = ({ kind }) => {
 }
 
 let __id = 0
-
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([])
 
@@ -32,8 +88,20 @@ export const ToastProvider = ({ children }) => {
   }, [])
 
   const push = useCallback((kind, title, msg, duration = 4000) => {
+    // C-07 fix: untuk error toast, translate raw Supabase message
+    let displayMsg = msg
+    if (kind === "error" && msg) {
+      const translated = translateError(msg)
+      if (translated !== msg) {
+        // Log raw ke console supaya developer bisa debug
+        if (typeof console !== "undefined") {
+          console.warn(`[toast] raw error (translated to "${translated}"):`, msg)
+        }
+        displayMsg = translated
+      }
+    }
     const id = ++__id
-    setToasts(t => [...t, { id, kind, title, msg }])
+    setToasts(t => [...t, { id, kind, title, msg: displayMsg }])
     if (duration > 0) setTimeout(() => dismiss(id), duration)
     return id
   }, [dismiss])

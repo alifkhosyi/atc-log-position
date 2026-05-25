@@ -1,0 +1,46 @@
+/* ============================================================
+   login-clean.css — Phase 4 audit fix C-06
+   ============================================================
+   Override styling .login-title & .login-btn dari index.css supaya
+   match visual register sisa app (calm, operational).
+
+   Sebelumnya:
+     .login-title letter-spacing 3px → terlalu "marketing"
+     .login-btn   gradient → glossy, ga match flat design app
+
+   File ini di-import oleh Login.jsx, jadi otomatis aktif.
+   ============================================================ */
+
+/* Title: tighter letter-spacing, more readable */
+.login-title {
+  letter-spacing: 0.5px !important;
+  font-weight: 700;
+}
+
+.login-subtitle {
+  letter-spacing: 0.3px !important;
+}
+
+/* Button: flat solid, no gradient */
+.login-btn {
+  background: var(--accent, #2563eb) !important;
+  background-image: none !important;
+  border: none;
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+.login-btn:hover:not(:disabled) {
+  background: var(--accent-hover, #1d4ed8) !important;
+  filter: brightness(1.05);
+}
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Focus visible (works with global a11y-focus.css) */
+.login-btn:focus-visible,
+.login-card input:focus-visible {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 2px;
+}
