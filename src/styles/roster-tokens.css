@@ -34,6 +34,16 @@
 
   /* TNI cell background */
   --tni-soft: rgba(245, 158, 11, 0.25);
+
+  /* Region tokens — Phase 4 fix C-02
+     Sebelumnya East pakai #dc2626 (= --status-alert merah), collide
+     dengan warning/error UI. Sekarang pakai warna distinct:
+     - East = teal (terkait timur, accent berbeda dari alert red)
+     - West = blue (sama dengan accent app)                              */
+  --region-east:      #0891b2;
+  --region-east-soft: rgba(8, 145, 178, 0.15);
+  --region-west:      #2563eb;
+  --region-west-soft: rgba(37, 99, 235, 0.15);
 }
 
 /* Optional: utility classes biar bisa pakai langsung di JSX */

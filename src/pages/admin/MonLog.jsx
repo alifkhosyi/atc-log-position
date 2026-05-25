@@ -69,7 +69,13 @@ const SidePanel = ({ log, branches, onClose }) => {
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
               <span style={{
                 fontFamily: "var(--font-mono)", fontSize: 10,
-                color: branch?.region === "west" ? "#3b82f6" : "#dc2626",
+                // Phase 4 fix C-02: East tidak lagi pakai red (--status-alert),
+                // pakai region-specific token
+                color: branch?.region === "west"
+                  ? "var(--region-west, #2563eb)"
+                  : branch?.region === "east"
+                    ? "var(--region-east, #0891b2)"
+                    : "var(--text-muted)",
                 fontWeight: 700, letterSpacing: 1, textTransform: "uppercase",
               }}>
                 {branch?.region === "west" ? "West Region" : branch?.region === "east" ? "East Region" : "—"}

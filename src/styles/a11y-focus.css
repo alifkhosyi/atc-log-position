@@ -1,0 +1,69 @@
+/* ============================================================
+   Global :focus-visible — Phase 4 fix C-05
+   ============================================================
+   Browser default focus ring sering di-disable (outline: none) untuk
+   alasan estetika. Itu break keyboard navigation untuk user yang
+   pakai Tab/Shift+Tab.
+
+   :focus-visible adalah opt-in: hanya muncul saat fokus berasal dari
+   keyboard, BUKAN dari mouse click. Jadi visual tetap calm untuk
+   mouse user, tapi keyboard user dapat indicator yang jelas.
+
+   Import ini sekali di src/main.jsx (atau src/App.jsx):
+     import "./styles/a11y-focus.css"
+   ============================================================ */
+
+/* Default focus ring untuk semua interactive elements */
+:focus {
+  /* Browser default fallback — jangan disable */
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 2px;
+}
+
+/* Modern: hanya tampilkan focus ring untuk keyboard navigation */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Specifically untuk button/input/select/a/textarea — tighter offset */
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 2px;
+}
+
+/* Untuk combobox dropdown option — inset outline supaya ga overflow container */
+[role="option"]:focus-visible,
+[role="option"][aria-selected="true"] {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: -2px;
+}
+
+/* Hover state untuk combobox options */
+[role="option"]:hover {
+  background: var(--accent-soft, rgba(59, 130, 246, 0.1));
+}
+
+/* Skip-to-content link (kalau dipakai nanti) */
+.skip-to-content:focus-visible {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 9999;
+  padding: 8px 14px;
+  background: var(--accent, #3b82f6);
+  color: white;
+  border-radius: 6px;
+  font-weight: 600;
+}
