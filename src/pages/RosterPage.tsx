@@ -52,6 +52,20 @@ function cellBg(status: string): string {
     return 'var(--surface-2, #f5f5f5)';
 }
 
+// Helper: detect UUID-like string supaya tidak tampil sebagai initial
+function isUuidLike(s: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
+
+// Helper: derive short display initial dari nama lengkap
+function deriveDisplayInitial(name: string | undefined, fallback: string = 'P'): string {
+    if (!name || typeof name !== 'string') return fallback;
+    const words = name.trim().split(/\s+/).filter(w => w.length > 0);
+    if (words.length === 0) return fallback;
+    if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
+    return words.map(w => w[0]).join('').slice(0, 4).toUpperCase();
+}
+
 const MONTHS = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
@@ -197,15 +211,22 @@ export default function RosterPage() {
             if (cancelled) return;
 
             if (filtered.length > 0) {
-                setDbPersonnel(filtered.map((p: any, i: number) => ({
-                    id: p.id,
-                    initial: p.initial || p.name || `P${i + 1}`,
-                    full_name: p.name || p.full_name,
-                    airport_code: airportCode,
-                    unit,
-                    is_active: p.is_active !== false,
-                    priority_order: p.priority_order ?? i,
-                })));
+                setDbPersonnel(filtered.map((p: any, i: number) => {
+                    const name = p.name || p.full_name || '';
+                    // Initial display: kalau p.initial valid (bukan UUID), pakai itu.
+                    // Otherwise derive dari nama (AGUS LESTARIONO → "AL")
+                    const rawInit = p.initial && !isUuidLike(p.initial) ? p.initial : null;
+                    const initial = rawInit || deriveDisplayInitial(name, `P${i + 1}`);
+                    return {
+                        id: p.id,
+                        initial,
+                        full_name: name,
+                        airport_code: airportCode,
+                        unit,
+                        is_active: p.is_active !== false,
+                        priority_order: p.priority_order ?? i,
+                    };
+                }));
                 return;
             }
 

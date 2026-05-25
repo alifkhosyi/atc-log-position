@@ -41,6 +41,21 @@ const LEAVE_LABELS = {
   OTHERS: { label: "Off",    color: "var(--leave-others)" },
 }
 
+// Detect UUID-like string (36 chars dengan dashes di posisi 8/13/18/23)
+function isUuidLike(s) {
+  return typeof s === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+}
+
+// Derive display initial dari nama lengkap (kalau initial DB UUID atau kosong)
+// "AGUS LESTARIONO" → "AL", "AFRIANIN CANDRA MUSTIKAWATI" → "ACM"
+function deriveDisplayInitial(name, fallback) {
+  if (!name || typeof name !== "string") return fallback || "P"
+  const words = name.trim().split(/\s+/).filter(w => w.length > 0)
+  if (words.length === 0) return fallback || "P"
+  if (words.length === 1) return words[0].slice(0, 4).toUpperCase()
+  return words.map(w => w[0]).join("").slice(0, 4).toUpperCase()
+}
+
 // Phase 3 fix N-04: helper untuk match personnel cell-by-cell dengan UUID FK warning
 // Saat ini kita fallback by name/initial supaya backward-compat. Setelah migrate
 // data biar consistent UUID, hapus fallback ini.
@@ -245,14 +260,20 @@ const RosterPersonCard = ({ entry, isOnMic, onQuickOnMic, saving, sectorOptions,
           {meta?.label || entry.shift_status}
         </span>
       </div>
-      <div style={{ fontWeight: 600, fontSize: 14 }}>
-        {entry.name || entry.initial}
+      <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>
+        {entry.name || entry.displayInitial || entry.initial}
       </div>
-      {entry.initial && entry.initial !== entry.name && (
-        <div style={{ fontSize: 11, color: "var(--text-faint, #9ca3af)" }}>
-          {entry.initial} · {entry.unit}
-        </div>
-      )}
+      {/* Subtitle: short initial + unit. JANGAN tampilkan UUID. */}
+      {(() => {
+        const displayInit = !isUuidLike(entry.initial) ? entry.initial : entry.displayInitial
+        const showInit = displayInit && displayInit !== entry.name
+        return (
+          <div style={{ fontSize: 11, color: "var(--text-faint, #9ca3af)" }}>
+            {showInit && <span>{displayInit} · </span>}
+            {entry.unit}
+          </div>
+        )
+      })()}
 
       {/* IDLE: tombol On Mic muncul */}
       {isWorking && !isOnMic && mode === "idle" && (
@@ -402,12 +423,20 @@ export const CabangLog = () => {
         for (const c of cells) {
           // Phase 3 N-04: match by UUID; fallback by name/initial dengan console.warn
           const p = matchPersonnelByCellId(myPersonnel, c.personnel_id)
+          const personName = p?.name || c.personnel_id
+          // Display initial: kalau p.initial valid (bukan UUID), pakai itu.
+          // Otherwise generate dari nama (AGUS LESTARIONO → AL).
+          const rawInit = p?.initial && !isUuidLike(p.initial) ? p.initial : null
+          const dispInit = rawInit || deriveDisplayInitial(personName)
           collected.push({
             personnel_id: c.personnel_id,
             shift_status: c.status,
             unit: u,
-            name: p?.name || c.personnel_id,
-            initial: p?.initial || c.personnel_id,
+            name: personName,
+            // initial: keep original (mungkin UUID) untuk debugging
+            initial: rawInit,
+            // displayInitial: clean short label untuk UI
+            displayInitial: dispInit,
             matched_personnel: p,
           })
         }
