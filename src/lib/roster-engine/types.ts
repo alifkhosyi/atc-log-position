@@ -128,7 +128,8 @@ export interface GenerateResult {
 // FRMS ISSUE (untuk validator output di Section 3)
 // ============================================================
 
-export type FrmsSeverity = 'ERROR' | 'WARNING' | 'INFO';
+/** Severity values match Python lowercase strings untuk parity. */
+export type FrmsSeverity = 'error' | 'warning';
 
 export interface FrmsIssue {
     rule: string;
@@ -136,6 +137,7 @@ export interface FrmsIssue {
     message: string;
     personnel?: string;
     day?: number;
+    context?: Record<string, unknown>;
 }
 
 // ============================================================
