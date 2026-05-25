@@ -372,12 +372,18 @@ export const AdminMonLog = () => {
                     const fullMatch = g.lateCount === 0 && g.unscheduledCount === 0 && g.scheduledCount > 0
                     return (
                       <tr key={g.code} style={{
-                        background: fullMatch ? "rgba(34, 197, 94, 0.05)" : undefined,
+                        background: fullMatch ? "var(--status-on-soft, rgba(34, 197, 94, 0.05))" : undefined,
                       }}>
                         <td>
                           <span className="unit-tag">{g.code}</span>
                           {fullMatch && (
-                            <span style={{ marginLeft: 6, fontSize: 13 }}>✅</span>
+                            <span style={{
+                              marginLeft: 6,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: "var(--status-on, #22c55e)",
+                              letterSpacing: 0.4,
+                            }}>OK</span>
                           )}
                         </td>
                         <td style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontWeight: 600 }}>

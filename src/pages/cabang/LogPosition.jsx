@@ -181,13 +181,28 @@ const ActivePositionCard = ({ log, onOffMic, saving }) => {
 
 
 // ============================================================
-// ROSTER CARD — quick on-mic dari roster hari ini
+// ROSTER CARD — quick on-mic dari roster hari ini (with sector picker)
 // ============================================================
-const RosterPersonCard = ({ entry, isOnMic, onQuickOnMic, saving }) => {
+// N-05 fix: replace auto-pick first sector dengan inline picker form
+// (pattern sama dengan ActivePositionCard idle → confirming)
+const RosterPersonCard = ({ entry, isOnMic, onQuickOnMic, saving, sectorOptions, cwpOptionsBySector }) => {
   // Cuti / sakit / off → display only, no button
   const isLeave = !!LEAVE_LABELS[entry.shift_status]
   const isWorking = !!SHIFT_LABELS[entry.shift_status]
   const meta = SHIFT_LABELS[entry.shift_status] || LEAVE_LABELS[entry.shift_status]
+
+  // Inline picker state
+  const [mode, setMode] = useState("idle")  // idle | picking
+  const [si, setSi] = useState(0)            // sector index
+  const [ci, setCi] = useState(0)            // CWP index
+  const cwpOpts = cwpOptionsBySector?.[si] || ["Controller", "Assistant"]
+
+  const submitPick = () => {
+    const sectorName = sectorOptions?.[si]?.name || "Sector 1"
+    const cwpName = cwpOpts[ci] || "Controller"
+    onQuickOnMic(entry, sectorName, cwpName)
+    // parent ctx.reload akan unmount card
+  }
 
   return (
     <div className="roster-card" style={{
@@ -195,19 +210,36 @@ const RosterPersonCard = ({ entry, isOnMic, onQuickOnMic, saving }) => {
       borderRadius: 8,
       padding: 10,
       display: "flex", flexDirection: "column", gap: 6,
-      background: isOnMic ? "rgba(34, 197, 94, 0.06)" : "var(--bg-card, white)",
-      minWidth: 200,
+      background: isOnMic ? "var(--status-on-soft, rgba(34,197,94,0.06))" : "var(--surface, white)",
+      minWidth: 220,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         {isOnMic ? (
-          <span style={{ fontSize: 16 }}>✅</span>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: 11, fontWeight: 600,
+            color: "var(--status-on, #22c55e)",
+          }}>
+            <Pulse on/> On Mic
+          </span>
         ) : isLeave ? (
-          <span style={{ fontSize: 16 }}>✖</span>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: 11, color: "var(--text-faint, #9ca3af)",
+          }}>
+            <I n="micOff" s={12}/> Off-roster
+          </span>
         ) : (
-          <span style={{ fontSize: 16 }}>⏰</span>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            fontSize: 11, color: "var(--accent, #3b82f6)",
+          }}>
+            <I n="checklist" s={12}/> Belum on mic
+          </span>
         )}
         <span style={{
-          fontSize: 11, fontWeight: 700,
+          marginLeft: "auto",
+          fontSize: 10, fontWeight: 700,
           background: meta?.color || "#9ca3af", color: "white",
           padding: "2px 6px", borderRadius: 4,
         }}>
@@ -219,27 +251,69 @@ const RosterPersonCard = ({ entry, isOnMic, onQuickOnMic, saving }) => {
       </div>
       {entry.initial && entry.initial !== entry.name && (
         <div style={{ fontSize: 11, color: "var(--text-faint, #9ca3af)" }}>
-          {entry.initial}
+          {entry.initial} · {entry.unit}
         </div>
       )}
-      {isWorking && !isOnMic && (
+
+      {/* IDLE: tombol On Mic muncul */}
+      {isWorking && !isOnMic && mode === "idle" && (
         <button
           className="btn btn-sm btn-primary"
           style={{ marginTop: 4, justifyContent: "center" }}
-          onClick={() => onQuickOnMic(entry)}
+          onClick={() => setMode("picking")}
           disabled={saving}
         >
           <I n="mic" s={12}/> On Mic
         </button>
       )}
-      {isOnMic && (
-        <div style={{ fontSize: 11, color: "var(--status-on, #22c55e)" }}>
-          ● Sedang On Mic
+
+      {/* PICKING: pilih sector + CWP, lalu konfirmasi */}
+      {isWorking && !isOnMic && mode === "picking" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+          {sectorOptions && sectorOptions.length > 1 && (
+            <div className="field" style={{ margin: 0 }}>
+              <label style={{ fontSize: 10 }}>Sektor</label>
+              <select value={si}
+                      onChange={e => { setSi(+e.target.value); setCi(0) }}
+                      style={{ fontSize: 12, padding: "4px 6px" }}>
+                {sectorOptions.map((s, i) => <option key={i} value={i}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
+          {cwpOpts.length > 1 && (
+            <div className="field" style={{ margin: 0 }}>
+              <label style={{ fontSize: 10 }}>CWP</label>
+              <select value={ci}
+                      onChange={e => setCi(+e.target.value)}
+                      style={{ fontSize: 12, padding: "4px 6px" }}>
+                {cwpOpts.map((c, i) => <option key={i} value={i}>{c}</option>)}
+              </select>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 4 }}>
+            <button
+              className="btn btn-sm btn-ghost"
+              style={{ flex: 1, justifyContent: "center" }}
+              onClick={() => setMode("idle")}
+              disabled={saving}
+            >
+              Batal
+            </button>
+            <button
+              className="btn btn-sm btn-primary"
+              style={{ flex: 1, justifyContent: "center" }}
+              onClick={submitPick}
+              disabled={saving}
+            >
+              <I n="mic" s={12}/> {saving ? "..." : "Konfirmasi"}
+            </button>
+          </div>
         </div>
       )}
+
       {isLeave && (
         <div style={{ fontSize: 11, color: "var(--text-faint, #9ca3af)" }}>
-          Off-roster hari ini
+          Tidak dijadwal hari ini
         </div>
       )}
     </div>
@@ -370,25 +444,23 @@ export const CabangLog = () => {
     return active.some(l => candidates.includes((l.atc_name || "").toLowerCase()))
   }
 
-  // ── Quick On Mic dari roster card ──
-  const onQuickOnMic = async (entry) => {
+  // ── Quick On Mic dari roster card (sector & CWP dipilih di card) ──
+  // N-05 fix: sector & cwpName sekarang dipilih eksplisit di RosterPersonCard,
+  // bukan auto-pick "first" (yang silently misroute di station multi-sector)
+  const onQuickOnMic = async (entry, sectorName, cwpName) => {
     if (!entry.name || saving) return
     if (active.some(l => l.atc_name === entry.name)) {
       toast.error("ATC sudah on mic", `${entry.name} masih aktif`)
       return
     }
     setSaving(true)
-    // Default unit dari entry.unit (dari roster), sector pertama, CWP pertama
-    const entryUnitSectors = mySectors.filter(s => s.unit === entry.unit)
-    const sectorName = entryUnitSectors[0]?.name || "Sector 1"
-    const cwpName = entryUnitSectors[0]?.cwps?.[0] || "Controller"
 
     const { error } = await supabase.from("position_logs").insert({
       branch_code: ctx.user.branch_code,
       atc_name: entry.name,
       unit: entry.unit,
-      sector: sectorName,
-      cwp: cwpName,
+      sector: sectorName || "Sector 1",
+      cwp: cwpName || "Controller",
       shift: getShift(),
       on_time: new Date().toISOString(),
       logged_by: ctx.user.id,
@@ -541,15 +613,24 @@ export const CabangLog = () => {
               gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
               gap: 10,
             }}>
-              {rosterToday.map((entry, i) => (
-                <RosterPersonCard
-                  key={`${entry.personnel_id}-${entry.unit}-${i}`}
-                  entry={entry}
-                  isOnMic={isPersonOnMic(entry)}
-                  onQuickOnMic={onQuickOnMic}
-                  saving={saving}
-                />
-              ))}
+              {rosterToday.map((entry, i) => {
+                // Sector & CWP options untuk unit personel ini
+                const entryUnitSectors = mySectors.filter(s => s.unit === entry.unit)
+                const cwpOptionsBySector = entryUnitSectors.map(s =>
+                  s.cwps && s.cwps.length > 0 ? s.cwps : ["Controller", "Assistant"]
+                )
+                return (
+                  <RosterPersonCard
+                    key={`${entry.personnel_id}-${entry.unit}-${i}`}
+                    entry={entry}
+                    isOnMic={isPersonOnMic(entry)}
+                    onQuickOnMic={onQuickOnMic}
+                    saving={saving}
+                    sectorOptions={entryUnitSectors}
+                    cwpOptionsBySector={cwpOptionsBySector}
+                  />
+                )
+              })}
             </div>
           )}
         </div>
