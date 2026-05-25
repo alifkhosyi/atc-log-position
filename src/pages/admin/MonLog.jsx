@@ -1,29 +1,21 @@
 // ============================================================
-// src/pages/admin/MonLog.jsx — INMC Monitoring Log Position (REDESIGN — Mockup-driven)
+// src/pages/admin/MonLog.jsx — INMC Monitoring Log Position (REDESIGN + ROSTER GAP)
 // ──────────────────────────────────────────────────────────
-// Visual: Admin_MonLog_Redesign.html mockup
-//
-// Logic preserved:
-//   - br state from ctx.globalBranch (sync via setBr → ctx.setGlobalBranch)
-//   - ctx.navBranch one-shot from Dashboard drill-down
-//   - ctx.logs filter (active = no off_time, today = today's logs)
-//   - Real-time data via ctx.logs (channel subscription)
-// New affordances from mockup:
-//   - Topbar + INMC sticky toolbar (BranchPicker + LIVE indicator + Refresh)
-//   - Filter pill with × clear button
-//   - Stats grid (2 cards) — On Mic + Log Hari Ini
-//   - Panel ATC On Mic with .position-grid-big and rich .pos-card
-//   - Panel Log Hari Ini with sort dropdown + table dengan .unit-tag chip
-//   - SidePanel drill-down with timeline + traffic breakdown + detail table
-//   - ESC/click/× close pattern
+// v2 (roster-linked):
+//   - Panel BARU "Roster vs Actual" — gap per cabang antara
+//     jadwal shift hari ini vs personel yang actually on-mic
+//   - Sisanya sama dengan versi sebelumnya
 // ============================================================
 import React, { useState, useEffect, useMemo } from "react"
+import { supabase } from "../../supabase.js"
 import { useApp } from "../../lib/context.jsx"
 import { fmtT, durMin } from "../../lib/utils.js"
 import { I } from "../../components/Icons.jsx"
 import { Pulse } from "../../components/Pulse.jsx"
 import { BranchPicker } from "../../components/BranchPicker.jsx"
 import { useToast } from "../../components/Toast.jsx"
+
+const SHIFT_TOKENS = ["I", "II", "III", "IV", "V"]
 
 // ── Side panel drill-down ──
 const SidePanel = ({ log, branches, onClose }) => {
@@ -182,6 +174,99 @@ export const AdminMonLog = () => {
 
   const allBr = useMemo(() => ctx.branches.filter(b => b.region), [ctx.branches])
 
+  // ============================================================
+  // ROSTER GAP ANALYSIS — load all rosters for today, compare with logs
+  // ============================================================
+  const [rosterMap, setRosterMap] = useState(null)  // {airport_code: Set<personnel_name>}
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadRosterToday() {
+      const today = new Date()
+      const year = today.getFullYear()
+      const month = today.getMonth() + 1
+      const day = today.getDate()
+
+      // 1. Get all rosters for this month
+      const { data: rosters, error: rErr } = await supabase
+        .from('atc_rosters')
+        .select('id, airport_code, unit')
+        .eq('year', year)
+        .eq('month', month)
+      if (rErr || !rosters || rosters.length === 0) {
+        if (!cancelled) setRosterMap({})
+        return
+      }
+      const rosterIds = rosters.map(r => r.id)
+      const idToBranch = {}
+      for (const r of rosters) idToBranch[r.id] = r.airport_code
+
+      // 2. Get cells for today across all rosters
+      const { data: cells } = await supabase
+        .from('atc_roster_cells')
+        .select('roster_id, personnel_id, status')
+        .in('roster_id', rosterIds)
+        .eq('day', day)
+      if (cancelled) return
+
+      // 3. Group scheduled personnel names per branch
+      const map = {}
+      for (const c of cells || []) {
+        if (!SHIFT_TOKENS.includes(c.status)) continue
+        const ac = idToBranch[c.roster_id]
+        if (!ac) continue
+        // Resolve personnel_id → name via ctx.personnel
+        const p = ctx.personnel.find(pp => pp.id === c.personnel_id) ||
+                  ctx.personnel.find(pp => pp.name === c.personnel_id) ||
+                  ctx.personnel.find(pp =>
+                    (pp.initial || "").toLowerCase() === (c.personnel_id || "").toLowerCase()
+                  )
+        const name = p?.name || c.personnel_id
+        if (!map[ac]) map[ac] = new Set()
+        map[ac].add(name.toLowerCase())
+      }
+      setRosterMap(map)
+    }
+    loadRosterToday()
+    return () => { cancelled = true }
+  }, [ctx.personnel.length])
+
+  // Compute gap per branch
+  const gapAnalysis = useMemo(() => {
+    if (!rosterMap) return null
+    const branchCodes = br === "ALL"
+      ? Object.keys(rosterMap)
+      : (rosterMap[br] ? [br] : [])
+
+    const result = branchCodes.map(code => {
+      const scheduledNames = rosterMap[code] || new Set()
+      const branchActive = allActive.filter(l => l.branch_code === code)
+      const activeNames = new Set(branchActive.map(l => (l.atc_name || "").toLowerCase()))
+
+      const onMicScheduled = [...activeNames].filter(n => scheduledNames.has(n))
+      const late = [...scheduledNames].filter(n => !activeNames.has(n))
+      const unscheduled = branchActive.filter(l => !scheduledNames.has((l.atc_name || "").toLowerCase()))
+
+      return {
+        code,
+        scheduledCount: scheduledNames.size,
+        onMicScheduledCount: onMicScheduled.length,
+        lateCount: late.length,
+        unscheduledCount: unscheduled.length,
+        late,
+        unscheduledNames: unscheduled.map(l => l.atc_name),
+      }
+    })
+
+    // Sort: cabang dengan gap terbesar (late + unscheduled) di atas
+    return result.sort((a, b) => {
+      const aGap = a.lateCount + a.unscheduledCount
+      const bGap = b.lateCount + b.unscheduledCount
+      if (aGap !== bGap) return bGap - aGap
+      return (a.code || "").localeCompare(b.code || "")
+    })
+  }, [rosterMap, br, allActive])
+
   const secondsAgo = Math.floor((new Date() - lastUpdated) / 1000)
   const connText = secondsAgo < 60 ? `${secondsAgo}s lalu`
     : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m lalu`
@@ -244,6 +329,98 @@ export const AdminMonLog = () => {
             <div className="stat-v">{ft.length}</div>
             <div className="stat-sub">total sesi (active + completed)</div>
           </div>
+        </div>
+      </div>
+
+      {/* PANEL — ROSTER vs ACTUAL (BARU) */}
+      <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title">
+            <I n="checklist" s={16}/> Roster vs Actual
+          </h2>
+          <span className="panel-counter">
+            {rosterMap === null ? "Loading…" :
+              gapAnalysis?.length > 0 ? `${gapAnalysis.length} cabang` : "—"}
+          </span>
+        </div>
+        <div className="panel-body" style={{ paddingTop: 0 }}>
+          {rosterMap === null ? (
+            <div className="empty-state"><p className="faint">Memuat roster...</p></div>
+          ) : !gapAnalysis || gapAnalysis.length === 0 ? (
+            <div className="empty-state">
+              <p>{br !== "ALL"
+                ? `Cabang ${br} belum punya roster untuk bulan ini.`
+                : "Belum ada cabang yang generate roster untuk bulan ini."}
+              </p>
+              <p className="faint text-sm">MO cabang bisa generate dari menu Roster ATC.</p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Cabang</th>
+                    <th style={{ textAlign: "center" }}>Jadwal Shift</th>
+                    <th style={{ textAlign: "center" }}>Sudah On-Mic</th>
+                    <th style={{ textAlign: "center" }}>Telat / Belum</th>
+                    <th style={{ textAlign: "center" }}>Lembur / Override</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gapAnalysis.map(g => {
+                    const fullMatch = g.lateCount === 0 && g.unscheduledCount === 0 && g.scheduledCount > 0
+                    return (
+                      <tr key={g.code} style={{
+                        background: fullMatch ? "rgba(34, 197, 94, 0.05)" : undefined,
+                      }}>
+                        <td>
+                          <span className="unit-tag">{g.code}</span>
+                          {fullMatch && (
+                            <span style={{ marginLeft: 6, fontSize: 13 }}>✅</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+                          {g.scheduledCount}
+                        </td>
+                        <td style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--status-on)" }}>
+                          {g.onMicScheduledCount}
+                        </td>
+                        <td style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontWeight: 600,
+                                     color: g.lateCount > 0 ? "var(--status-warn, #f59e0b)" : "var(--text-faint)" }}>
+                          {g.lateCount || "—"}
+                        </td>
+                        <td style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontWeight: 600,
+                                     color: g.unscheduledCount > 0 ? "var(--status-off, #ef4444)" : "var(--text-faint)" }}>
+                          {g.unscheduledCount || "—"}
+                        </td>
+                        <td style={{ fontSize: 11 }}>
+                          {g.lateCount === 0 && g.unscheduledCount === 0 ? (
+                            <span className="faint">—</span>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              {g.lateCount > 0 && (
+                                <span style={{ color: "var(--status-warn, #f59e0b)" }}>
+                                  Telat: {g.late.slice(0, 3).join(", ")}
+                                  {g.lateCount > 3 && ` +${g.lateCount - 3}`}
+                                </span>
+                              )}
+                              {g.unscheduledCount > 0 && (
+                                <span style={{ color: "var(--status-off, #ef4444)" }}>
+                                  Lembur: {g.unscheduledNames.slice(0, 3).join(", ")}
+                                  {g.unscheduledCount > 3 && ` +${g.unscheduledCount - 3}`}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
