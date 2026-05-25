@@ -112,31 +112,65 @@ interface RosterRow {
 
 export default function RosterPage() {
     // ---- User context (untuk lock airport per role) ----
-    const ctx = useApp();
+    const ctx: any = useApp();
     const user = ctx?.user;
     const isAdmin = user?.role === 'admin';
-    // Branch code MO cabang — format diasumsikan UPPER, match airport_code engine
     const userBranchCode = (user?.branch_code || '').toUpperCase();
 
     // ---- Setup state ----
     const allAirports = useMemo(() => listAirports(), []);
-    // Default airport: kalau MO cabang, lock ke branch_code. Kalau admin, default AMBON.
+
+    // ---- Resolve airport_code dari user.branch_code ----
+    // App pakai ICAO 4-letter (WARR, WIII, WAAA, dst).
+    // Engine pakai nama UPPER (SURABAYA, JAKARTA, MAKASSAR, dst).
+    // Strategy: lookup branch → name → engine airport name.
+    const resolvedFromBranch = useMemo(() => {
+        if (!userBranchCode) return null;
+        // 1. Coba langsung — kalau engine punya code itu
+        const direct = getAirport(userBranchCode);
+        if (direct) return direct.airport_code;
+        // 2. Lookup ctx.branches → name
+        const branchObj = ctx?.branches?.find((b: any) => b.code === userBranchCode);
+        if (!branchObj) return null;
+        const branchName = (branchObj.name || '').toLowerCase();
+        if (!branchName) return null;
+        // 3. Match engine airport by name (case-insensitive, contains either way)
+        for (const a of allAirports) {
+            const engName = a.airport_name.toLowerCase();
+            if (engName === branchName) return a.airport_code;
+            if (branchName.includes(engName)) return a.airport_code;
+            if (engName.includes(branchName)) return a.airport_code;
+        }
+        return null;
+    }, [userBranchCode, ctx?.branches, allAirports]);
+
+    // Default airport
     const [airportCode, setAirportCode] = useState(
-        isAdmin ? 'AMBON' : (userBranchCode || 'AMBON')
+        isAdmin ? 'AMBON' : (resolvedFromBranch || userBranchCode || 'AMBON')
     );
     const [unit, setUnit] = useState('TWR');
     const [year, setYear] = useState(new Date().getFullYear());
     const [month, setMonth] = useState(new Date().getMonth() + 1);
 
-    // ---- Tab navigation: 'roster' atau 'ca' (Control Allowance) ----
+    // ---- Tab navigation ----
     const [activeTab, setActiveTab] = useState<'roster' | 'ca'>('roster');
 
     // ---- Lock airport ke branch_code kalau bukan admin ----
     useEffect(() => {
-        if (!isAdmin && userBranchCode && userBranchCode !== airportCode) {
-            setAirportCode(userBranchCode);
+        if (!isAdmin && resolvedFromBranch && resolvedFromBranch !== airportCode) {
+            setAirportCode(resolvedFromBranch);
         }
-    }, [isAdmin, userBranchCode]);
+    }, [isAdmin, resolvedFromBranch]);
+
+    // Display name untuk header (kalau MO cabang)
+    const branchDisplayName = useMemo(() => {
+        if (isAdmin) return null;
+        const branchObj = ctx?.branches?.find((b: any) => b.code === userBranchCode);
+        const engCfg = getAirport(airportCode);
+        if (branchObj?.name) return branchObj.name;
+        if (engCfg) return engCfg.airport_name;
+        return userBranchCode;
+    }, [isAdmin, userBranchCode, ctx?.branches, airportCode]);
 
     // ---- Data state ----
     const [dbPersonnel, setDbPersonnel] = useState<DBPersonnel[]>([]);
@@ -179,46 +213,55 @@ export default function RosterPage() {
         let cancelled = false;
 
         async function loadPersonnel() {
-            // TODO: adjust query personnel — sesuaikan nama tabel & kolom dengan
-            // struktur Supabase log-position kamu.
-            const { data, error: err } = await supabase
-                .from('personnel')
-                .select('id, initial, full_name, airport_code, unit, is_active, priority_order')
-                .eq('airport_code', airportCode)
-                .eq('unit', unit)
-                .order('priority_order', { ascending: true, nullsFirst: false });
+            // Strategy 1: pakai ctx.personnel (sudah ada di app, sudah proven jalan)
+            // Filter by branch_code = user's branch (untuk MO cabang) atau airportCode resolved.
+            // Tapi engine perlu cocok dengan airport_code yang dipilih → kita ambil semua
+            // personel cabang ini, lalu mapping ke shape engine.
+            const ctxPersonnel: any[] = ctx?.personnel || [];
+            // Filter: ambil personel di branch_code yang match dengan airport saat ini
+            // (untuk MO cabang: branch_code === userBranchCode)
+            const branchFilter = isAdmin
+                ? null  // admin bisa pilih cabang manapun — match dari engine code
+                : userBranchCode;
+            let filtered = ctxPersonnel.filter((p: any) => {
+                // Match by branch_code (kalau MO cabang)
+                if (branchFilter && p.branch_code !== branchFilter) return false;
+                // Unit filter (kalau kolom 'unit' ada di personnel)
+                if (p.unit && p.unit !== unit) return false;
+                return p.is_active !== false;
+            });
 
             if (cancelled) return;
-            if (err) {
-                // Fallback: kalau tabel personnel belum ada, pakai initials dari config
-                // (engine punya 73 airports + initials)
-                const cfg = unitConfig;
-                if (cfg?.initials && cfg.initials.length > 0) {
-                    setDbPersonnel(cfg.initials.map((ini, i) => ({
-                        id: ini, initial: ini,
-                        full_name: cfg.names?.[i],
-                        airport_code: airportCode, unit,
-                        is_active: true,
-                        priority_order: i,
-                    })));
-                } else {
-                    setError(`Tabel personnel tidak terbaca: ${err.message}`);
-                }
+
+            if (filtered.length > 0) {
+                setDbPersonnel(filtered.map((p: any, i: number) => ({
+                    id: p.id,
+                    initial: p.initial || p.name || `P${i + 1}`,
+                    full_name: p.name || p.full_name,
+                    airport_code: airportCode,
+                    unit,
+                    is_active: p.is_active !== false,
+                    priority_order: p.priority_order ?? i,
+                })));
                 return;
             }
-            if (data && data.length > 0) {
-                setDbPersonnel(data as DBPersonnel[]);
-            } else if (unitConfig?.initials && unitConfig.initials.length > 0) {
-                // Tabel kosong → fallback ke config
-                setDbPersonnel(unitConfig.initials.map((ini, i) => ({
+
+            // Strategy 2: Fallback ke engine config (initials dari airport_configs.json)
+            const cfg = unitConfig;
+            if (cfg?.initials && cfg.initials.length > 0) {
+                setDbPersonnel(cfg.initials.map((ini, i) => ({
                     id: ini, initial: ini,
-                    full_name: unitConfig.names?.[i],
+                    full_name: cfg.names?.[i],
                     airport_code: airportCode, unit,
                     is_active: true,
                     priority_order: i,
                 })));
             } else {
                 setDbPersonnel([]);
+                setError(
+                    `Tidak ada personel untuk cabang ${airportCode}/${unit}. ` +
+                    `Pastikan personel sudah di-input di app, atau cabang ini belum ada di config engine.`
+                );
             }
         }
 
@@ -240,7 +283,7 @@ export default function RosterPage() {
         loadPersonnel();
         loadLeaves();
         return () => { cancelled = true; };
-    }, [airportCode, unit, year, month, unitConfig]);
+    }, [airportCode, unit, year, month, unitConfig, ctx?.personnel?.length, isAdmin, userBranchCode]);
 
     // ============================================================
     // 2. LOAD existing roster (kalau ada)
@@ -647,21 +690,27 @@ export default function RosterPage() {
 
             {/* Toolbar (shared antara tab Roster & CA) */}
             <div className="flex flex-wrap gap-3 items-end p-3 bg-gray-50 rounded">
-                <label className="flex flex-col">
-                    <span className="text-xs font-semibold text-gray-600 mb-1">
-                        Cabang {!isAdmin && '(terkunci)'}
-                    </span>
-                    <select className="border rounded px-2 py-1 min-w-[160px] disabled:bg-gray-100 disabled:cursor-not-allowed"
-                            value={airportCode}
-                            disabled={!isAdmin}
-                            onChange={e => { setAirportCode(e.target.value); setUnit('TWR'); }}>
-                        {selectableAirports.map(a => (
-                            <option key={a.airport_code} value={a.airport_code}>
-                                {a.airport_name}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                {isAdmin ? (
+                    <label className="flex flex-col">
+                        <span className="text-xs font-semibold text-gray-600 mb-1">Cabang</span>
+                        <select className="border rounded px-2 py-1 min-w-[160px]"
+                                value={airportCode}
+                                onChange={e => { setAirportCode(e.target.value); setUnit('TWR'); }}>
+                            {selectableAirports.map(a => (
+                                <option key={a.airport_code} value={a.airport_code}>
+                                    {a.airport_name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                ) : (
+                    <div className="flex flex-col">
+                        <span className="text-xs font-semibold text-gray-600 mb-1">Cabang</span>
+                        <div className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded font-semibold text-sm">
+                            {branchDisplayName || airportCode}
+                        </div>
+                    </div>
+                )}
                 <label className="flex flex-col">
                     <span className="text-xs font-semibold text-gray-600 mb-1">Unit</span>
                     <select className="border rounded px-2 py-1"
