@@ -21,6 +21,12 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
       ],
     },
     {
+      section: "Penjadwalan",
+      items: [
+        { id:"roster", label:"Roster ATC", icon:"checklist" },   // ← BARU
+      ],
+    },
+    {
       section: "Reports",
       items: [
         { id:"mon_reports", label:"Daily Reports", icon:"note" },
@@ -43,6 +49,12 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
         { id:"ho_to_mo",        label:"HO/TO MO",          icon:"shield" },
         { id:"rekap_personnel", label:"Rekap Personnel",   icon:"users" },
         { id:"rekap",           label:"Rekap Traffic",     icon:"chart" },
+      ],
+    },
+    {
+      section: "Penjadwalan",
+      items: [
+        { id:"roster", label:"Roster ATC", icon:"checklist" },   // ← BARU
       ],
     },
     {
