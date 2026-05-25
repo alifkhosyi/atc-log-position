@@ -256,41 +256,80 @@ export const CabangRekap = () => {
                 <span className="panel-counter">{dates.length} hari</span>
               </div>
               <div className="panel-body">
-                <div className="trend-chart-wrap">
-                  <svg viewBox={`0 0 ${dates.length * 28 + 60} 200`} width="100%" style={{ display: "block", minWidth: dates.length * 28 }}>
-                    {[0, .25, .5, .75, 1].map(f => {
-                      const y = 10 + (1 - f) * 150
-                      const v = Math.round(chartMax * f)
-                      return (
-                        <g key={f}>
-                          <line x1="40" y1={y} x2={dates.length * 28 + 40} y2={y} stroke="var(--border-subtle)" strokeWidth="1"/>
-                          <text x="36" y={y + 3} textAnchor="end" fontSize="9" fill="var(--text-faint)" fontFamily="var(--font-mono)">{v}</text>
-                        </g>
-                      )
-                    })}
-                    {dates.map((d, i) => {
-                      const total = byDate[d].dep + byDate[d].arr + byDate[d].ovf
-                      if (total === 0) return null
-                      const barH = (total / chartMax) * 150
-                      const x = 50 + i * 28
-                      const depH = (byDate[d].dep / total) * barH
-                      const arrH = (byDate[d].arr / total) * barH
-                      const ovfH = (byDate[d].ovf / total) * barH
-                      const isToday = d === now.toISOString().slice(0, 10)
-                      return (
-                        <g key={i}>
-                          <rect x={x} y={160 - barH} width={20} height={depH} fill="var(--traffic-dep)" rx="1"/>
-                          <rect x={x} y={160 - barH + depH} width={20} height={arrH} fill="var(--traffic-arr)"/>
-                          <rect x={x} y={160 - barH + depH + arrH} width={20} height={ovfH} fill="var(--traffic-ovf)"/>
-                          {isToday && <rect x={x - 1} y={160 - barH - 1} width={22} height={barH + 2} fill="none" stroke="var(--accent)" strokeWidth="1.5" rx="2"/>}
-                          <text x={x + 10} y={160 - barH - 4} textAnchor="middle" fontSize="9" fontWeight="600" fill={isToday ? "var(--accent)" : "var(--text-faint)"} fontFamily="var(--font-mono)">{total}</text>
-                          {(i % 3 === 0 || i === dates.length - 1) && (
-                            <text x={x + 10} y={178} textAnchor="middle" fontSize="9" fill="var(--text-faint)" fontFamily="var(--font-mono)">{d.slice(5)}</text>
-                          )}
-                        </g>
-                      )
-                    })}
-                  </svg>
+                {/* Fix sizing: pakai natural pixel width, BUKAN width="100%".
+                    Sebelumnya viewBox kecil + width="100%" = scaling 10x untuk
+                    data sedikit → text & bars jadi gigantik.
+                    Sekarang: lebar SVG = (dates × 40px) + padding, dengan
+                    minimum 320px supaya tampil oke walau 1 hari data.
+                    Horizontal scroll kalau data banyak. */}
+                <div className="trend-chart-wrap" style={{ overflowX: "auto", overflowY: "hidden" }}>
+                  {(() => {
+                    const PER_DAY = 40
+                    const PAD_L = 50
+                    const PAD_R = 16
+                    const CHART_H = 220
+                    const PLOT_H = 160
+                    const BAR_W = 24
+                    const TOP = 16
+                    const svgW = Math.max(dates.length * PER_DAY + PAD_L + PAD_R, 320)
+                    const baseY = TOP + PLOT_H
+                    return (
+                      <svg
+                        viewBox={`0 0 ${svgW} ${CHART_H}`}
+                        width={svgW}
+                        height={CHART_H}
+                        style={{ display: "block" }}
+                      >
+                        {[0, .25, .5, .75, 1].map(f => {
+                          const y = TOP + (1 - f) * PLOT_H
+                          const v = Math.round(chartMax * f)
+                          return (
+                            <g key={f}>
+                              <line x1={PAD_L - 8} y1={y} x2={svgW - PAD_R} y2={y}
+                                    stroke="var(--border-subtle, var(--border, #2a2f3a))" strokeWidth="1"/>
+                              <text x={PAD_L - 12} y={y + 3} textAnchor="end"
+                                    fontSize="10" fill="var(--text-faint)"
+                                    fontFamily="var(--font-mono)">{v}</text>
+                            </g>
+                          )
+                        })}
+                        {dates.map((d, i) => {
+                          const total = byDate[d].dep + byDate[d].arr + byDate[d].ovf
+                          if (total === 0) return null
+                          const barH = (total / chartMax) * PLOT_H
+                          const x = PAD_L + i * PER_DAY + (PER_DAY - BAR_W) / 2
+                          const depH = (byDate[d].dep / total) * barH
+                          const arrH = (byDate[d].arr / total) * barH
+                          const ovfH = (byDate[d].ovf / total) * barH
+                          const isToday = d === now.toISOString().slice(0, 10)
+                          return (
+                            <g key={i}>
+                              <rect x={x} y={baseY - barH} width={BAR_W} height={depH}
+                                    fill="var(--traffic-dep)" rx="1"/>
+                              <rect x={x} y={baseY - barH + depH} width={BAR_W} height={arrH}
+                                    fill="var(--traffic-arr)"/>
+                              <rect x={x} y={baseY - barH + depH + arrH} width={BAR_W} height={ovfH}
+                                    fill="var(--traffic-ovf)"/>
+                              {isToday && (
+                                <rect x={x - 1} y={baseY - barH - 1} width={BAR_W + 2} height={barH + 2}
+                                      fill="none" stroke="var(--accent)" strokeWidth="1.5" rx="2"/>
+                              )}
+                              <text x={x + BAR_W / 2} y={baseY - barH - 4} textAnchor="middle"
+                                    fontSize="10" fontWeight="600"
+                                    fill={isToday ? "var(--accent)" : "var(--text-faint)"}
+                                    fontFamily="var(--font-mono)">{total}</text>
+                              {/* Tampilkan label tanggal setiap ~ceil(dates/10) bar */}
+                              {(i % Math.max(1, Math.ceil(dates.length / 10)) === 0 || i === dates.length - 1) && (
+                                <text x={x + BAR_W / 2} y={baseY + 14} textAnchor="middle"
+                                      fontSize="10" fill="var(--text-faint)"
+                                      fontFamily="var(--font-mono)">{d.slice(5)}</text>
+                              )}
+                            </g>
+                          )
+                        })}
+                      </svg>
+                    )
+                  })()}
                   <div className="chart-legend">
                     <div className="chart-legend-item"><div className="chart-legend-swatch" style={{ background: "var(--traffic-dep)" }}/> DEP</div>
                     <div className="chart-legend-item"><div className="chart-legend-swatch" style={{ background: "var(--traffic-arr)" }}/> ARR</div>
