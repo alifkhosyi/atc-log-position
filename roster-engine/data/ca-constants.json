@@ -1,0 +1,440 @@
+{
+  "Ambon": {
+    "excel_name": "Ambon",
+    "constant_per_hour": 53269.30333333334,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Banyuwangi": {
+    "excel_name": "Banyuwangi",
+    "constant_per_hour": 19250,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Bengkulu": {
+    "excel_name": "Bengkulu",
+    "constant_per_hour": 25090.909090909092,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Berau": {
+    "excel_name": "Berau",
+    "constant_per_hour": 28875,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Biak": {
+    "excel_name": "Biak",
+    "constant_per_hour": 33655.84242424242,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Curug": {
+    "excel_name": "Curug",
+    "constant_per_hour": 22250,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Gorontalo": {
+    "excel_name": "Gorontalo",
+    "constant_per_hour": 24533.333333333332,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Malang": {
+    "excel_name": "Malang",
+    "constant_per_hour": 28233.333333333332,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Malinau": {
+    "excel_name": "Malinau",
+    "constant_per_hour": 22458.333333333332,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Manokwari": {
+    "excel_name": "Manokwari",
+    "constant_per_hour": 14972.222222222223,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Matak": {
+    "excel_name": "Matak",
+    "constant_per_hour": 17111.11111111111,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Merauke": {
+    "excel_name": "Merauke",
+    "constant_per_hour": 23100,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Nabire": {
+    "excel_name": "Nabire",
+    "constant_per_hour": 18666.666666666668,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Natuna": {
+    "excel_name": "Natuna",
+    "constant_per_hour": 10457.14,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Oksibil": {
+    "excel_name": "Oksibil",
+    "constant_per_hour": 17966.666666666668,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Pangandaran": {
+    "excel_name": "Pangandaran",
+    "constant_per_hour": 17111.11111111111,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Pangkalan Bun": {
+    "excel_name": "Pangkalan Bun",
+    "constant_per_hour": 16727.272727272728,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Samarinda": {
+    "excel_name": "Samarinda",
+    "constant_per_hour": 18666.666666666668,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Silangit": {
+    "excel_name": "Silangit",
+    "constant_per_hour": 22000,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Solo": {
+    "excel_name": "Solo",
+    "constant_per_hour": 24871.194444444445,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Tambolaka": {
+    "excel_name": "Tambolaka",
+    "constant_per_hour": 12833.333333333334,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Tanah Merah": {
+    "excel_name": "Tanah Merah",
+    "constant_per_hour": 15400,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Tanjung Pandan": {
+    "excel_name": "Tanjung Pandan",
+    "constant_per_hour": 23333.333333333332,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Tasikmalaya": {
+    "excel_name": "Tasikmalaya",
+    "constant_per_hour": 6535.7125,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Wamena": {
+    "excel_name": "Wamena",
+    "constant_per_hour": 17966.666666666668,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Timika": {
+    "excel_name": "Timika",
+    "constant_per_hour": 41666.666666666664,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Bima": {
+    "excel_name": "Bima",
+    "constant_per_hour": 12833.333333333334,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Cilacap": {
+    "excel_name": "Cilacap",
+    "constant_per_hour": 16041.666666666666,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Cirebon": {
+    "excel_name": "Cirebon",
+    "constant_per_hour": 17111.11111111111,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Ende": {
+    "excel_name": "Ende",
+    "constant_per_hour": 15400,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Gunung Sitoli": {
+    "excel_name": "Gunung Sitoli",
+    "constant_per_hour": 15400,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Ketapang": {
+    "excel_name": "Ketapang",
+    "constant_per_hour": 14259.25925925926,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Luwuk": {
+    "excel_name": "Luwuk",
+    "constant_per_hour": 18666.666666666668,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Maumere": {
+    "excel_name": "Maumere",
+    "constant_per_hour": 12833.333333333334,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Rengat": {
+    "excel_name": "Rengat",
+    "constant_per_hour": 19962.962962962964,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Sampit": {
+    "excel_name": "Sampit",
+    "constant_per_hour": 14000,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Sumbawa": {
+    "excel_name": "Sumbawa",
+    "constant_per_hour": 15400,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Sumenep": {
+    "excel_name": "Sumenep",
+    "constant_per_hour": 17111.11111111111,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Tual": {
+    "excel_name": "Tual",
+    "constant_per_hour": 15400,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Waingapu": {
+    "excel_name": "Waingapu",
+    "constant_per_hour": 15400,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Aceh": {
+    "excel_name": "Aceh",
+    "constant_per_hour": 31644.559375,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Bandung": {
+    "excel_name": "Bandung",
+    "constant_per_hour": 20451.739583333332,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Jambi": {
+    "excel_name": "Jambi",
+    "constant_per_hour": 24624.18666666667,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Kertajati": {
+    "excel_name": "Kertajati",
+    "constant_per_hour": 15400,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Labuan Bajo": {
+    "excel_name": "Labuan Bajo",
+    "constant_per_hour": 15794.871794871795,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Lampung": {
+    "excel_name": "Lampung",
+    "constant_per_hour": 20444.444444444445,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Pangkal Pinang": {
+    "excel_name": "Pangkal Pinang",
+    "constant_per_hour": 29755.43,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Palangkaraya": {
+    "excel_name": "Palangkaraya",
+    "constant_per_hour": 16687.5,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Palu": {
+    "excel_name": "Palu",
+    "constant_per_hour": 15333.333333333334,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Tarakan": {
+    "excel_name": "Tarakan",
+    "constant_per_hour": 21079.361904761903,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Ternate": {
+    "excel_name": "Ternate",
+    "constant_per_hour": 20444.444444444445,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Banjarmasin": {
+    "excel_name": "Banjarmasin",
+    "constant_per_hour": 24832.84411764706,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Kendari": {
+    "excel_name": "Kendari",
+    "constant_per_hour": 23384.61923076923,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Kupang": {
+    "excel_name": "Kupang",
+    "constant_per_hour": 30945.78888888889,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Lombok": {
+    "excel_name": "Lombok",
+    "constant_per_hour": 26928.39423076923,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Padang": {
+    "excel_name": "Padang",
+    "constant_per_hour": 29339.473684210527,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Semarang": {
+    "excel_name": "Semarang",
+    "constant_per_hour": 34695.107142857145,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Sorong": {
+    "excel_name": "Sorong",
+    "constant_per_hour": 30864.197530864196,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Batam": {
+    "excel_name": "Batam",
+    "constant_per_hour": 31915.175,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Halim": {
+    "excel_name": "Halim",
+    "constant_per_hour": 31915.175,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Manado": {
+    "excel_name": "Manado",
+    "constant_per_hour": 27046.522222222222,
+    "source": "konstanta (L) sebelum subsidi",
+    "is_tma": false
+  },
+  "Jatsc ACC": {
+    "excel_name": "Jatsc ACC",
+    "constant_per_hour": 130044.30544871795,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Jatsc APP": {
+    "excel_name": "Jatsc APP",
+    "constant_per_hour": 130044.30544871795,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Denpasar": {
+    "excel_name": "Denpasar",
+    "constant_per_hour": 79574.7483796297,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Surabaya": {
+    "excel_name": "Surabaya",
+    "constant_per_hour": 88530.28480392153,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Medan": {
+    "excel_name": "Medan",
+    "constant_per_hour": 63114.735185185185,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Tanjung Pinang": {
+    "excel_name": "Tanjung Pinang",
+    "constant_per_hour": 43315.83719927887,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Matsc": {
+    "excel_name": "Matsc",
+    "constant_per_hour": 91910.70536,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Palembang": {
+    "excel_name": "Palembang",
+    "constant_per_hour": 45371.30937,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Balikpapan": {
+    "excel_name": "Balikpapan",
+    "constant_per_hour": 43477.72,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Pekanbaru": {
+    "excel_name": "Pekanbaru",
+    "constant_per_hour": 46442.24933,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Pontianak": {
+    "excel_name": "Pontianak",
+    "constant_per_hour": 51456.41286,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  },
+  "Sentani": {
+    "excel_name": "Sentani",
+    "constant_per_hour": 51629.62963,
+    "source": "konstata_final (R)",
+    "is_tma": true
+  }
+}
