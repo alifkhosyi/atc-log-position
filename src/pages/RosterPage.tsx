@@ -12,6 +12,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
 import { useApp } from '../lib/context.jsx';
+// Phase 3 fix N-03: CSS tokens untuk shift & leave colors
+import '../styles/roster-tokens.css';
 
 import {
     type Personnel, type RosterCell, type LeaveRange,
@@ -26,28 +28,27 @@ import {
 } from '../lib/roster-engine';
 
 // ============================================================
-// COLOR HELPERS — inline hex consistent dengan LogPosition.SHIFT_LABELS
-// (Phase 3 akan migrasi ke CSS tokens --shift-I..--shift-V)
+// COLOR HELPERS — pakai CSS tokens dari roster-tokens.css (N-03)
 // ============================================================
 
-const SHIFT_HEX: Record<string, string> = {
-    I:   '#3b82f6',
-    II:  '#f59e0b',
-    III: '#a855f7',
-    IV:  '#ec4899',
-    V:   '#14b8a6',
+const SHIFT_TOKEN: Record<string, { stroke: string; soft: string }> = {
+    I:   { stroke: 'var(--shift-I)',   soft: 'var(--shift-I-soft)' },
+    II:  { stroke: 'var(--shift-II)',  soft: 'var(--shift-II-soft)' },
+    III: { stroke: 'var(--shift-III)', soft: 'var(--shift-III-soft)' },
+    IV:  { stroke: 'var(--shift-IV)',  soft: 'var(--shift-IV-soft)' },
+    V:   { stroke: 'var(--shift-V)',   soft: 'var(--shift-V-soft)' },
 };
-const LEAVE_HEX: Record<string, string> = {
-    CUTI:   '#f97316',
-    SAKIT:  '#ef4444',
-    DIKLAT: '#0ea5e9',
-    OTHERS: '#737373',
+const LEAVE_TOKEN: Record<string, { stroke: string; soft: string }> = {
+    CUTI:   { stroke: 'var(--leave-cuti)',   soft: 'var(--leave-cuti-soft)' },
+    SAKIT:  { stroke: 'var(--leave-sakit)',  soft: 'var(--leave-sakit-soft)' },
+    DIKLAT: { stroke: 'var(--leave-diklat)', soft: 'var(--leave-diklat-soft)' },
+    OTHERS: { stroke: 'var(--leave-others)', soft: 'var(--leave-others-soft)' },
 };
 
-function cellBgHex(status: string): string {
-    if (SHIFT_HEX[status]) return SHIFT_HEX[status] + '33';   // 20% opacity bg
-    if (LEAVE_HEX[status]) return LEAVE_HEX[status] + '40';
-    if (status === 'TNI') return 'rgba(245, 158, 11, 0.25)';
+function cellBg(status: string): string {
+    if (SHIFT_TOKEN[status]) return SHIFT_TOKEN[status].soft;
+    if (LEAVE_TOKEN[status]) return LEAVE_TOKEN[status].soft;
+    if (status === 'TNI') return 'var(--tni-soft)';
     return 'var(--surface-2, #f5f5f5)';
 }
 
@@ -874,7 +875,7 @@ export default function RosterPage() {
                                                                 style={{
                                                                     padding: '6px 2px', textAlign: 'center',
                                                                     cursor: c.locked ? 'not-allowed' : 'pointer',
-                                                                    background: cellBgHex(c.status),
+                                                                    background: cellBg(c.status),
                                                                     opacity: c.locked ? 0.55 : 1,
                                                                     outline: isSelected
                                                                         ? '2px solid var(--accent)'
@@ -915,15 +916,15 @@ export default function RosterPage() {
                             fontSize: 'var(--fs-sm, 12px)',
                             color: 'var(--text-muted)',
                         }}>
-                            {Object.entries(SHIFT_HEX).map(([k, hex]) => (
+                            {Object.entries(SHIFT_TOKEN).map(([k, t]) => (
                                 <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                    <span style={{ width: 14, height: 14, background: hex + '33', border: `1px solid ${hex}`, borderRadius: 3 }}/>
+                                    <span style={{ width: 14, height: 14, background: t.soft, border: `1px solid ${t.stroke}`, borderRadius: 3 }}/>
                                     Shift {k}
                                 </span>
                             ))}
-                            {Object.entries(LEAVE_HEX).map(([k, hex]) => (
+                            {Object.entries(LEAVE_TOKEN).map(([k, t]) => (
                                 <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                    <span style={{ width: 14, height: 14, background: hex + '40', border: `1px solid ${hex}`, borderRadius: 3 }}/>
+                                    <span style={{ width: 14, height: 14, background: t.soft, border: `1px solid ${t.stroke}`, borderRadius: 3 }}/>
                                     {k === 'CUTI' ? 'Cuti' : k === 'SAKIT' ? 'Sakit' : k === 'DIKLAT' ? 'Diklat' : 'Lainnya'}
                                 </span>
                             ))}

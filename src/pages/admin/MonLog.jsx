@@ -17,6 +17,36 @@ import { useToast } from "../../components/Toast.jsx"
 
 const SHIFT_TOKENS = ["I", "II", "III", "IV", "V"]
 
+// Phase 3 fix N-04: match cell.personnel_id ke ctx.personnel; warn jika fallback by name/initial
+function matchPersonnelByCellId(personnelList, personnelIdFromCell) {
+  if (!personnelIdFromCell) return null
+  let p = personnelList.find(pp => pp.id === personnelIdFromCell)
+  if (p) return p
+  p = personnelList.find(pp => pp.name === personnelIdFromCell)
+  if (p) {
+    if (typeof console !== "undefined") {
+      console.warn(
+        `[roster] MonLog: personnel "${p.name}" matched by NAME, not UUID (cell.personnel_id="${personnelIdFromCell}"). ` +
+        `Migration aid — update atc_roster_cells.personnel_id ke UUID FK.`
+      )
+    }
+    return p
+  }
+  p = personnelList.find(pp =>
+    (pp.initial || "").toLowerCase() === personnelIdFromCell.toLowerCase()
+  )
+  if (p) {
+    if (typeof console !== "undefined") {
+      console.warn(
+        `[roster] MonLog: personnel "${p.initial}" matched by INITIAL, not UUID (cell.personnel_id="${personnelIdFromCell}"). ` +
+        `Migration aid — update atc_roster_cells.personnel_id ke UUID FK.`
+      )
+    }
+    return p
+  }
+  return null
+}
+
 // ── Side panel drill-down ──
 const SidePanel = ({ log, branches, onClose }) => {
   const branch = branches.find(b => b.code === log.branch_code)
@@ -215,12 +245,8 @@ export const AdminMonLog = () => {
         if (!SHIFT_TOKENS.includes(c.status)) continue
         const ac = idToBranch[c.roster_id]
         if (!ac) continue
-        // Resolve personnel_id → name via ctx.personnel
-        const p = ctx.personnel.find(pp => pp.id === c.personnel_id) ||
-                  ctx.personnel.find(pp => pp.name === c.personnel_id) ||
-                  ctx.personnel.find(pp =>
-                    (pp.initial || "").toLowerCase() === (c.personnel_id || "").toLowerCase()
-                  )
+        // Phase 3 N-04: match by UUID, fallback by name/initial dengan console.warn
+        const p = matchPersonnelByCellId(ctx.personnel, c.personnel_id)
         const name = p?.name || c.personnel_id
         if (!map[ac]) map[ac] = new Set()
         map[ac].add(name.toLowerCase())

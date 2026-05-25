@@ -1,0 +1,48 @@
+/* ============================================================
+   Roster color tokens — Phase 3 fix N-03
+   ============================================================
+   Sebelumnya hex inline (#3b82f6 dst) hardcoded di RosterPage.tsx
+   dan LogPosition.jsx. Sekarang jadi CSS custom properties supaya
+   bisa di-override per theme (light/dark) di kemudian hari.
+
+   Untuk override di dark mode, override di [data-theme="dark"] :root,
+   atau di selector apa pun yang sesuai dengan pattern app kamu.
+   ============================================================ */
+
+:root {
+  /* Shift tokens — token I s/d V (1-shift sampai TMA 5-shift) */
+  --shift-I:        #3b82f6;
+  --shift-I-soft:   rgba(59, 130, 246, 0.20);
+  --shift-II:       #f59e0b;
+  --shift-II-soft:  rgba(245, 158, 11, 0.20);
+  --shift-III:      #a855f7;
+  --shift-III-soft: rgba(168, 85, 247, 0.20);
+  --shift-IV:       #ec4899;
+  --shift-IV-soft:  rgba(236, 72, 153, 0.20);
+  --shift-V:        #14b8a6;
+  --shift-V-soft:   rgba(20, 184, 166, 0.20);
+
+  /* Leave / off-roster categories */
+  --leave-cuti:        #f97316;
+  --leave-cuti-soft:   rgba(249, 115, 22, 0.25);
+  --leave-sakit:       #ef4444;
+  --leave-sakit-soft:  rgba(239, 68, 68, 0.25);
+  --leave-diklat:      #0ea5e9;
+  --leave-diklat-soft: rgba(14, 165, 233, 0.25);
+  --leave-others:      #737373;
+  --leave-others-soft: rgba(115, 115, 115, 0.25);
+
+  /* TNI cell background */
+  --tni-soft: rgba(245, 158, 11, 0.25);
+}
+
+/* Optional: utility classes biar bisa pakai langsung di JSX */
+.shift-cell-I    { background: var(--shift-I-soft); }
+.shift-cell-II   { background: var(--shift-II-soft); }
+.shift-cell-III  { background: var(--shift-III-soft); }
+.shift-cell-IV   { background: var(--shift-IV-soft); }
+.shift-cell-V    { background: var(--shift-V-soft); }
+.leave-cell-CUTI    { background: var(--leave-cuti-soft); }
+.leave-cell-SAKIT   { background: var(--leave-sakit-soft); }
+.leave-cell-DIKLAT  { background: var(--leave-diklat-soft); }
+.leave-cell-OTHERS  { background: var(--leave-others-soft); }

@@ -18,63 +18,62 @@ import { I } from "../../components/Icons.jsx"
 import { Pulse } from "../../components/Pulse.jsx"
 import { useToast } from "../../components/Toast.jsx"
 import { useConfirm } from "../../components/ConfirmDialog.jsx"
+// Phase 3 fix N-06 + C-03: shared accessible Combobox
+import { Combobox } from "../../components/Combobox.jsx"
+// Phase 3 fix N-03: CSS tokens
+import "../../styles/roster-tokens.css"
 
 const isControllerCwp = (cwp) => (cwp || "").toLowerCase().includes("controller")
 
-// Map status token → label & color (untuk roster card)
+// Map status token → label & color (pakai CSS tokens, bukan hex inline)
+// Phase 3 fix N-03
 const SHIFT_LABELS = {
-  I:    { label: "Shift I",   color: "#3b82f6" },
-  II:   { label: "Shift II",  color: "#f59e0b" },
-  III:  { label: "Shift III", color: "#a855f7" },
-  IV:   { label: "Shift IV",  color: "#ec4899" },
-  V:    { label: "Shift V",   color: "#14b8a6" },
+  I:    { label: "Shift I",   color: "var(--shift-I)" },
+  II:   { label: "Shift II",  color: "var(--shift-II)" },
+  III:  { label: "Shift III", color: "var(--shift-III)" },
+  IV:   { label: "Shift IV",  color: "var(--shift-IV)" },
+  V:    { label: "Shift V",   color: "var(--shift-V)" },
 }
 const LEAVE_LABELS = {
-  CUTI:   { label: "Cuti",   color: "#f97316" },
-  SAKIT:  { label: "Sakit",  color: "#ef4444" },
-  DIKLAT: { label: "Diklat", color: "#0ea5e9" },
-  OTHERS: { label: "Off",    color: "#737373" },
+  CUTI:   { label: "Cuti",   color: "var(--leave-cuti)" },
+  SAKIT:  { label: "Sakit",  color: "var(--leave-sakit)" },
+  DIKLAT: { label: "Diklat", color: "var(--leave-diklat)" },
+  OTHERS: { label: "Off",    color: "var(--leave-others)" },
 }
 
-// ── Combobox (search-as-you-type personnel picker) ─────────
-const Combobox = ({ value, onChange, options, placeholder }) => {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-  useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener("mousedown", h)
-    return () => document.removeEventListener("mousedown", h)
-  }, [])
-  const q = (value || "").toLowerCase()
-  const filtered = q.trim() === ""
-    ? options
-    : [
-        ...options.filter(p => p.name.toLowerCase().startsWith(q)),
-        ...options.filter(p =>
-          !p.name.toLowerCase().startsWith(q) && p.name.toLowerCase().includes(q)
-        ),
-      ]
-  return (
-    <div className="combobox" ref={ref}>
-      <input
-        type="text" value={value || ""} placeholder={placeholder} autoComplete="off"
-        onChange={e => { onChange(e.target.value); setOpen(true) }}
-        onFocus={() => setOpen(true)}
-      />
-      {open && (
-        <div className="combobox-list">
-          {filtered.length === 0
-            ? <div className="combobox-empty">Tidak ditemukan</div>
-            : filtered.slice(0, 8).map(p => (
-                <div key={p.id} className="combobox-item"
-                     onClick={() => { onChange(p.name); setOpen(false) }}>
-                  {p.name}
-                </div>
-              ))}
-        </div>
-      )}
-    </div>
+// Phase 3 fix N-04: helper untuk match personnel cell-by-cell dengan UUID FK warning
+// Saat ini kita fallback by name/initial supaya backward-compat. Setelah migrate
+// data biar consistent UUID, hapus fallback ini.
+function matchPersonnelByCellId(personnelList, personnelIdFromCell) {
+  if (!personnelIdFromCell) return null
+  // Primary: UUID match
+  let p = personnelList.find(pp => pp.id === personnelIdFromCell)
+  if (p) return p
+  // Fallback 1: by name (LEGACY — issues console.warn)
+  p = personnelList.find(pp => pp.name === personnelIdFromCell)
+  if (p) {
+    if (typeof console !== "undefined") {
+      console.warn(
+        `[roster] Personnel "${p.name}" matched by NAME, not UUID id (cell.personnel_id="${personnelIdFromCell}"). ` +
+        `Migration aid only — update atc_roster_cells.personnel_id to UUID FK.`
+      )
+    }
+    return p
+  }
+  // Fallback 2: by initial (LEGACY — issues console.warn)
+  p = personnelList.find(pp =>
+    (pp.initial || "").toLowerCase() === personnelIdFromCell.toLowerCase()
   )
+  if (p) {
+    if (typeof console !== "undefined") {
+      console.warn(
+        `[roster] Personnel "${p.initial}" matched by INITIAL, not UUID id (cell.personnel_id="${personnelIdFromCell}"). ` +
+        `Migration aid only — update atc_roster_cells.personnel_id to UUID FK.`
+      )
+    }
+    return p
+  }
+  return null
 }
 
 // ── Active position card with inline off-mic flow ─────────
@@ -401,12 +400,8 @@ export const CabangLog = () => {
 
         if (!cells) continue
         for (const c of cells) {
-          // Match personnel by ID atau name
-          const p = myPersonnel.find(pp => pp.id === c.personnel_id) ||
-                    myPersonnel.find(pp => pp.name === c.personnel_id) ||
-                    myPersonnel.find(pp =>
-                      (pp.initial || "").toLowerCase() === (c.personnel_id || "").toLowerCase()
-                    )
+          // Phase 3 N-04: match by UUID; fallback by name/initial dengan console.warn
+          const p = matchPersonnelByCellId(myPersonnel, c.personnel_id)
           collected.push({
             personnel_id: c.personnel_id,
             shift_status: c.status,
