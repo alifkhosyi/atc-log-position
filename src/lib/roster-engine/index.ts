@@ -13,3 +13,6 @@ export * from './greedy';
 export * from './generator';
 export * from './frms-rules';
 export * from './frms-validator';
+export * from './rolling';
+export * from './swap';
+export * from './control-allowance';
