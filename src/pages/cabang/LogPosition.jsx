@@ -1,17 +1,11 @@
 // ============================================================
-// src/pages/cabang/LogPosition.jsx — Cabang log position (REDESIGN)
+// src/pages/cabang/LogPosition.jsx — Cabang log position (REDESIGN + ROSTER LINK)
 // ──────────────────────────────────────────────────────────
-// Visual: Log Position Redesign.html mockup
-// Logic preserved:
-//   - Same onMic / offMic supabase mutations (position_logs)
-//   - Same Controller vs non-Controller branch in off-mic flow
-//   - Same combobox search semantics (startsWith → contains)
-//   - Same myBranches / mySectors / myPersonnel computation
-// New affordances:
-//   - Always-visible quick-input banner (no toggle)
-//   - Bigger active position cards with inline traffic form
-//   - Search box + unit chip filter for today's log table
-//   - Per-row delete with ConfirmDialog
+// v2 (hybrid): roster jadi suggested today, manual override tetap ada.
+//   - Section baru "Sesuai Roster Hari Ini" di atas
+//   - Quick On Mic per personel (no typing)
+//   - Cuti / sakit auto-detected dari roster
+//   - Form manual existing tetap untuk emergency override
 // ============================================================
 import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "../../supabase.js"
@@ -26,6 +20,21 @@ import { useToast } from "../../components/Toast.jsx"
 import { useConfirm } from "../../components/ConfirmDialog.jsx"
 
 const isControllerCwp = (cwp) => (cwp || "").toLowerCase().includes("controller")
+
+// Map status token → label & color (untuk roster card)
+const SHIFT_LABELS = {
+  I:    { label: "Shift I",   color: "#3b82f6" },
+  II:   { label: "Shift II",  color: "#f59e0b" },
+  III:  { label: "Shift III", color: "#a855f7" },
+  IV:   { label: "Shift IV",  color: "#ec4899" },
+  V:    { label: "Shift V",   color: "#14b8a6" },
+}
+const LEAVE_LABELS = {
+  CUTI:   { label: "Cuti",   color: "#f97316" },
+  SAKIT:  { label: "Sakit",  color: "#ef4444" },
+  DIKLAT: { label: "Diklat", color: "#0ea5e9" },
+  OTHERS: { label: "Off",    color: "#737373" },
+}
 
 // ── Combobox (search-as-you-type personnel picker) ─────────
 const Combobox = ({ value, onChange, options, placeholder }) => {
@@ -70,7 +79,7 @@ const Combobox = ({ value, onChange, options, placeholder }) => {
 
 // ── Active position card with inline off-mic flow ─────────
 const ActivePositionCard = ({ log, onOffMic, saving }) => {
-  const [mode, setMode] = useState("idle") // idle | confirming
+  const [mode, setMode] = useState("idle")
   const [dep, setDep] = useState("")
   const [arr, setArr] = useState("")
   const [ovf, setOvf] = useState("")
@@ -84,7 +93,6 @@ const ActivePositionCard = ({ log, onOffMic, saving }) => {
       arr: parseInt(arr) || 0,
       ovf: parseInt(ovf) || 0,
     } : null)
-    // Don't reset mode here — parent reload will unmount this card
   }
 
   return (
@@ -171,7 +179,77 @@ const ActivePositionCard = ({ log, onOffMic, saving }) => {
   )
 }
 
-// ── Main page ─────────────────────────────────────────────
+
+// ============================================================
+// ROSTER CARD — quick on-mic dari roster hari ini
+// ============================================================
+const RosterPersonCard = ({ entry, isOnMic, onQuickOnMic, saving }) => {
+  // Cuti / sakit / off → display only, no button
+  const isLeave = !!LEAVE_LABELS[entry.shift_status]
+  const isWorking = !!SHIFT_LABELS[entry.shift_status]
+  const meta = SHIFT_LABELS[entry.shift_status] || LEAVE_LABELS[entry.shift_status]
+
+  return (
+    <div className="roster-card" style={{
+      border: "1px solid var(--border, #e5e7eb)",
+      borderRadius: 8,
+      padding: 10,
+      display: "flex", flexDirection: "column", gap: 6,
+      background: isOnMic ? "rgba(34, 197, 94, 0.06)" : "var(--bg-card, white)",
+      minWidth: 200,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {isOnMic ? (
+          <span style={{ fontSize: 16 }}>✅</span>
+        ) : isLeave ? (
+          <span style={{ fontSize: 16 }}>✖</span>
+        ) : (
+          <span style={{ fontSize: 16 }}>⏰</span>
+        )}
+        <span style={{
+          fontSize: 11, fontWeight: 700,
+          background: meta?.color || "#9ca3af", color: "white",
+          padding: "2px 6px", borderRadius: 4,
+        }}>
+          {meta?.label || entry.shift_status}
+        </span>
+      </div>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>
+        {entry.name || entry.initial}
+      </div>
+      {entry.initial && entry.initial !== entry.name && (
+        <div style={{ fontSize: 11, color: "var(--text-faint, #9ca3af)" }}>
+          {entry.initial}
+        </div>
+      )}
+      {isWorking && !isOnMic && (
+        <button
+          className="btn btn-sm btn-primary"
+          style={{ marginTop: 4, justifyContent: "center" }}
+          onClick={() => onQuickOnMic(entry)}
+          disabled={saving}
+        >
+          <I n="mic" s={12}/> On Mic
+        </button>
+      )}
+      {isOnMic && (
+        <div style={{ fontSize: 11, color: "var(--status-on, #22c55e)" }}>
+          ● Sedang On Mic
+        </div>
+      )}
+      {isLeave && (
+        <div style={{ fontSize: 11, color: "var(--text-faint, #9ca3af)" }}>
+          Off-roster hari ini
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ============================================================
+// MAIN PAGE
+// ============================================================
 export const CabangLog = () => {
   const ctx = useApp()
   const toast = useToast()
@@ -206,7 +284,129 @@ export const CabangLog = () => {
     return true
   })
 
-  // ── On Mic ──
+  // ============================================================
+  // ROSTER TODAY — load dari Supabase atc_rosters + atc_roster_cells
+  // ============================================================
+  const [rosterToday, setRosterToday] = useState([])
+  const [rosterLoading, setRosterLoading] = useState(false)
+  const [rosterNotFound, setRosterNotFound] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadRosterToday() {
+      if (!ctx.user?.branch_code) return
+      setRosterLoading(true)
+      setRosterNotFound(false)
+
+      const today = new Date()
+      const year = today.getFullYear()
+      const month = today.getMonth() + 1
+      const day = today.getDate()
+
+      // Cek semua unit di cabang ini (TWR, APP, dst)
+      const units = br.units || ["TWR"]
+      const collected = []
+
+      for (const u of units) {
+        const { data: rRow } = await supabase
+          .from('atc_rosters')
+          .select('id')
+          .eq('airport_code', ctx.user.branch_code)
+          .eq('unit', u)
+          .eq('year', year)
+          .eq('month', month)
+          .maybeSingle()
+
+        if (!rRow) continue
+
+        const { data: cells } = await supabase
+          .from('atc_roster_cells')
+          .select('personnel_id, status')
+          .eq('roster_id', rRow.id)
+          .eq('day', day)
+
+        if (!cells) continue
+        for (const c of cells) {
+          // Match personnel by ID atau name
+          const p = myPersonnel.find(pp => pp.id === c.personnel_id) ||
+                    myPersonnel.find(pp => pp.name === c.personnel_id) ||
+                    myPersonnel.find(pp =>
+                      (pp.initial || "").toLowerCase() === (c.personnel_id || "").toLowerCase()
+                    )
+          collected.push({
+            personnel_id: c.personnel_id,
+            shift_status: c.status,
+            unit: u,
+            name: p?.name || c.personnel_id,
+            initial: p?.initial || c.personnel_id,
+            matched_personnel: p,
+          })
+        }
+      }
+
+      if (cancelled) return
+      if (collected.length === 0) {
+        setRosterToday([])
+        setRosterNotFound(true)
+      } else {
+        // Sort: working personnel dulu, lalu yang off
+        collected.sort((a, b) => {
+          const aw = SHIFT_LABELS[a.shift_status] ? 0 : 1
+          const bw = SHIFT_LABELS[b.shift_status] ? 0 : 1
+          if (aw !== bw) return aw - bw
+          return (a.name || "").localeCompare(b.name || "")
+        })
+        setRosterToday(collected)
+      }
+      setRosterLoading(false)
+    }
+    loadRosterToday()
+    return () => { cancelled = true }
+  }, [ctx.user?.branch_code, myPersonnel.length])
+
+  // Check apakah personel sudah on-mic (di active logs)
+  const isPersonOnMic = (entry) => {
+    const candidates = [entry.name, entry.initial].filter(Boolean).map(s => s.toLowerCase())
+    return active.some(l => candidates.includes((l.atc_name || "").toLowerCase()))
+  }
+
+  // ── Quick On Mic dari roster card ──
+  const onQuickOnMic = async (entry) => {
+    if (!entry.name || saving) return
+    if (active.some(l => l.atc_name === entry.name)) {
+      toast.error("ATC sudah on mic", `${entry.name} masih aktif`)
+      return
+    }
+    setSaving(true)
+    // Default unit dari entry.unit (dari roster), sector pertama, CWP pertama
+    const entryUnitSectors = mySectors.filter(s => s.unit === entry.unit)
+    const sectorName = entryUnitSectors[0]?.name || "Sector 1"
+    const cwpName = entryUnitSectors[0]?.cwps?.[0] || "Controller"
+
+    const { error } = await supabase.from("position_logs").insert({
+      branch_code: ctx.user.branch_code,
+      atc_name: entry.name,
+      unit: entry.unit,
+      sector: sectorName,
+      cwp: cwpName,
+      shift: getShift(),
+      on_time: new Date().toISOString(),
+      logged_by: ctx.user.id,
+    })
+    if (error) {
+      toast.error("Gagal on mic", error.message)
+    } else {
+      logAudit("ON_MIC_FROM_ROSTER",
+        `${entry.name} — ${entry.unit} ${sectorName} (${cwpName})`,
+        ctx.user)
+      toast.success("On mic berhasil (dari roster)",
+        `${entry.name} — ${entry.unit} ${sectorName}`)
+      await ctx.reload()
+    }
+    setSaving(false)
+  }
+
+  // ── On Mic manual ──
   const onMic = async () => {
     if (!nm.trim() || saving) return
     if (active.some(l => l.atc_name === nm.trim())) {
@@ -238,7 +438,7 @@ export const CabangLog = () => {
     setSaving(false)
   }
 
-  // ── Off Mic (called from ActivePositionCard) ──
+  // ── Off Mic ──
   const onOffMic = async (log, traffic) => {
     if (saving) return
     setSaving(true)
@@ -294,6 +494,7 @@ export const CabangLog = () => {
   }
 
   const completedTodayCount = today.filter(l => l.off_time).length
+  const workingCount = rosterToday.filter(e => SHIFT_LABELS[e.shift_status]).length
 
   return (
     <div className="page-content">
@@ -312,49 +513,98 @@ export const CabangLog = () => {
         </div>
       </div>
 
-      {/* INPUT BANNER — always visible */}
-      <div className="input-banner">
-        <div className="input-banner-header">
-          <h2><I n="mic" s={18}/> Input ATC On Mic</h2>
-          <span className="muted text-sm">
-            Shift <strong style={{ color: "var(--text)" }}>{getShift()}</strong>
+      {/* ROSTER HARI INI (BARU) */}
+      <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title">
+            <I n="checklist" s={16}/> Sesuai Roster Hari Ini
+          </h2>
+          <span className="panel-counter">
+            {rosterLoading ? "Loading…" : `${workingCount} jadwal shift`}
           </span>
         </div>
-        <div className="quick-row">
-          <div className="field" style={{ margin: 0 }}>
-            <label>Nama ATC</label>
-            <Combobox
-              value={nm}
-              onChange={setNm}
-              options={myPersonnel}
-              placeholder="Ketik nama..."
-            />
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>Unit</label>
-            <select value={unit} onChange={e => { setUnit(e.target.value); setSi(0); setCi(0) }}>
-              {(br.units || ["TWR"]).map(u => <option key={u}>{u}</option>)}
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>Sektor</label>
-            <select value={si} onChange={e => { setSi(+e.target.value); setCi(0) }}>
-              {unitSectors.length === 0
-                ? <option>—</option>
-                : unitSectors.map((s, i) => <option key={i} value={i}>{s.name}</option>)}
-            </select>
-          </div>
-          <div className="field" style={{ margin: 0 }}>
-            <label>CWP</label>
-            <select value={ci} onChange={e => setCi(+e.target.value)}>
-              {cwps.map((c, i) => <option key={i} value={i}>{c}</option>)}
-            </select>
-          </div>
-          <button className="btn btn-primary btn-lg" onClick={onMic} disabled={!nm.trim() || saving}>
-            <I n="mic" s={16}/> {saving ? "Menyimpan…" : "On Mic"}
-          </button>
+        <div className="panel-body" style={{ paddingTop: 12 }}>
+          {rosterNotFound ? (
+            <div className="empty-state">
+              <p>Belum ada roster untuk bulan ini.</p>
+              <p className="faint text-sm">
+                Buka menu <strong>Roster ATC</strong> untuk generate dulu.
+              </p>
+            </div>
+          ) : rosterToday.length === 0 && !rosterLoading ? (
+            <div className="empty-state">
+              <p className="faint text-sm">Roster tidak punya data untuk hari ini.</p>
+            </div>
+          ) : (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gap: 10,
+            }}>
+              {rosterToday.map((entry, i) => (
+                <RosterPersonCard
+                  key={`${entry.personnel_id}-${entry.unit}-${i}`}
+                  entry={entry}
+                  isOnMic={isPersonOnMic(entry)}
+                  onQuickOnMic={onQuickOnMic}
+                  saving={saving}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* INPUT BANNER — manual override / emergency */}
+      <details className="input-banner" style={{ padding: 0 }}>
+        <summary style={{
+          padding: "12px 16px", cursor: "pointer",
+          listStyle: "none", fontWeight: 600,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <span><I n="mic" s={16}/> Input Manual / Override</span>
+          <span className="muted text-sm">Shift {getShift()}</span>
+        </summary>
+        <div style={{ padding: "0 16px 16px" }}>
+          <p className="muted text-sm" style={{ marginBottom: 8 }}>
+            Pakai form ini untuk personel di luar roster (mis. lembur, ganti shift mendadak).
+          </p>
+          <div className="quick-row">
+            <div className="field" style={{ margin: 0 }}>
+              <label>Nama ATC</label>
+              <Combobox
+                value={nm}
+                onChange={setNm}
+                options={myPersonnel}
+                placeholder="Ketik nama..."
+              />
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label>Unit</label>
+              <select value={unit} onChange={e => { setUnit(e.target.value); setSi(0); setCi(0) }}>
+                {(br.units || ["TWR"]).map(u => <option key={u}>{u}</option>)}
+              </select>
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label>Sektor</label>
+              <select value={si} onChange={e => { setSi(+e.target.value); setCi(0) }}>
+                {unitSectors.length === 0
+                  ? <option>—</option>
+                  : unitSectors.map((s, i) => <option key={i} value={i}>{s.name}</option>)}
+              </select>
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label>CWP</label>
+              <select value={ci} onChange={e => setCi(+e.target.value)}>
+                {cwps.map((c, i) => <option key={i} value={i}>{c}</option>)}
+              </select>
+            </div>
+            <button className="btn btn-primary btn-lg" onClick={onMic} disabled={!nm.trim() || saving}>
+              <I n="mic" s={16}/> {saving ? "Menyimpan…" : "On Mic"}
+            </button>
+          </div>
+        </div>
+      </details>
 
       {/* ACTIVE POSITIONS */}
       <div className={"panel" + (active.length > 0 ? " panel-glow" : "")}>
@@ -367,7 +617,7 @@ export const CabangLog = () => {
             <div className="empty-state">
               <I n="micOff" s={44}/>
               <p>Belum ada ATC on mic</p>
-              <p className="faint text-sm">Gunakan form di atas untuk input</p>
+              <p className="faint text-sm">Klik <strong>On Mic</strong> di card roster di atas</p>
             </div>
           ) : (
             <div className="ap-grid">
@@ -389,7 +639,6 @@ export const CabangLog = () => {
           <span className="panel-counter">{today.length} log</span>
         </div>
         <div className="panel-body" style={{ paddingTop: 12 }}>
-          {/* Filter row */}
           <div className="log-filters">
             <div style={{ position: "relative", flex: "0 1 240px" }}>
               <span style={{
