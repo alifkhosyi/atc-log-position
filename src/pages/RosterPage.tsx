@@ -1,34 +1,18 @@
 /**
  * RosterPage.tsx — Menu "Roster" untuk atc-log-position.
  *
+ * v5 (Phase 1 audit fix): port dari Tailwind → design tokens existing app
+ * (CSS classes .panel/.btn/.stat-card + CSS vars --text/--border/--accent/dst).
+ *
  * Native React component yang panggil engine TypeScript langsung
  * (tidak ada API call eksternal). Simpan hasil ke Supabase tabel
- * rosters + roster_cells + leaves.
- *
- * ----- Setup yang harus kamu lakukan sebelum komponen ini jalan -----
- *
- * 1. Apply SQL: `db/setup_roster_tables.sql` di Supabase Editor
- * 2. Pastikan path import supabase client di bawah ini benar:
- *      import { supabase } from '@/lib/supabase'
- *    Kalau di repo kamu beda, ganti ke path yang sesuai.
- * 3. Tambah route di router-mu:
- *      <Route path="/roster" element={<RosterPage />} />
- * 4. Tambah menu item ke navigation (sidebar/topbar).
- *
- * ----- Adjust kalau perlu -----
- *
- * Tabel personnel di Supabase log-position kamu — kolom apa namanya?
- * Aku asumsi: { id, initial, full_name, airport_code, unit, is_active }.
- * Cari komentar `// TODO: adjust query personnel` di bawah & sesuaikan.
+ * atc_rosters + atc_roster_cells + atc_leaves.
  */
 
 import { useEffect, useMemo, useState } from 'react';
-// Supabase client di repo log-position: src/supabase.js
 import { supabase } from '../supabase';
-// User context (role + branch_code)
 import { useApp } from '../lib/context.jsx';
 
-// Roster engine: src/lib/roster-engine/
 import {
     type Personnel, type RosterCell, type LeaveRange,
     type FrmsIssue,
@@ -37,36 +21,34 @@ import {
     validateFull, splitBySeverity,
     leaveRangeFromDates,
     listAirports, getAirport, getUnit, getBaselineForMonth,
-    computeAllowanceTable, summarizeAllowance,
-    type PersonnelAllowance, type AllowanceSummary,
+    computeAllowanceTable,
+    type PersonnelAllowance,
 } from '../lib/roster-engine';
 
 // ============================================================
-// HELPERS / CONSTANTS
+// COLOR HELPERS — inline hex consistent dengan LogPosition.SHIFT_LABELS
+// (Phase 3 akan migrasi ke CSS tokens --shift-I..--shift-V)
 // ============================================================
 
-const SHIFT_COLOR: Record<string, string> = {
-    I: 'bg-blue-200',
-    II: 'bg-yellow-200',
-    III: 'bg-purple-200',
-    IV: 'bg-pink-200',
-    V: 'bg-teal-200',
+const SHIFT_HEX: Record<string, string> = {
+    I:   '#3b82f6',
+    II:  '#f59e0b',
+    III: '#a855f7',
+    IV:  '#ec4899',
+    V:   '#14b8a6',
+};
+const LEAVE_HEX: Record<string, string> = {
+    CUTI:   '#f97316',
+    SAKIT:  '#ef4444',
+    DIKLAT: '#0ea5e9',
+    OTHERS: '#737373',
 };
 
-const LEAVE_COLOR: Record<string, string> = {
-    CUTI: 'bg-orange-300',
-    SAKIT: 'bg-red-300',
-    DIKLAT: 'bg-sky-300',
-    OTHERS: 'bg-gray-300',
-};
-
-const OFF_COLOR = 'bg-gray-100';
-
-function cellColor(status: string): string {
-    if (SHIFT_COLOR[status]) return SHIFT_COLOR[status];
-    if (LEAVE_COLOR[status]) return LEAVE_COLOR[status];
-    if (status === 'TNI') return 'bg-amber-200';
-    return OFF_COLOR;
+function cellBgHex(status: string): string {
+    if (SHIFT_HEX[status]) return SHIFT_HEX[status] + '33';   // 20% opacity bg
+    if (LEAVE_HEX[status]) return LEAVE_HEX[status] + '40';
+    if (status === 'TNI') return 'rgba(245, 158, 11, 0.25)';
+    return 'var(--surface-2, #f5f5f5)';
 }
 
 const MONTHS = [
@@ -107,34 +89,26 @@ interface RosterRow {
 }
 
 // ============================================================
-// COMPONENT
+// MAIN COMPONENT
 // ============================================================
 
 export default function RosterPage() {
-    // ---- User context (untuk lock airport per role) ----
     const ctx: any = useApp();
     const user = ctx?.user;
     const isAdmin = user?.role === 'admin';
     const userBranchCode = (user?.branch_code || '').toUpperCase();
 
-    // ---- Setup state ----
     const allAirports = useMemo(() => listAirports(), []);
 
-    // ---- Resolve airport_code dari user.branch_code ----
-    // App pakai ICAO 4-letter (WARR, WIII, WAAA, dst).
-    // Engine pakai nama UPPER (SURABAYA, JAKARTA, MAKASSAR, dst).
-    // Strategy: lookup branch → name → engine airport name.
+    // Resolve airport_code: ICAO branch → engine name
     const resolvedFromBranch = useMemo(() => {
         if (!userBranchCode) return null;
-        // 1. Coba langsung — kalau engine punya code itu
         const direct = getAirport(userBranchCode);
         if (direct) return direct.airport_code;
-        // 2. Lookup ctx.branches → name
         const branchObj = ctx?.branches?.find((b: any) => b.code === userBranchCode);
         if (!branchObj) return null;
         const branchName = (branchObj.name || '').toLowerCase();
         if (!branchName) return null;
-        // 3. Match engine airport by name (case-insensitive, contains either way)
         for (const a of allAirports) {
             const engName = a.airport_name.toLowerCase();
             if (engName === branchName) return a.airport_code;
@@ -144,25 +118,20 @@ export default function RosterPage() {
         return null;
     }, [userBranchCode, ctx?.branches, allAirports]);
 
-    // Default airport
     const [airportCode, setAirportCode] = useState(
         isAdmin ? 'AMBON' : (resolvedFromBranch || userBranchCode || 'AMBON')
     );
     const [unit, setUnit] = useState('TWR');
     const [year, setYear] = useState(new Date().getFullYear());
     const [month, setMonth] = useState(new Date().getMonth() + 1);
-
-    // ---- Tab navigation ----
     const [activeTab, setActiveTab] = useState<'roster' | 'ca'>('roster');
 
-    // ---- Lock airport ke branch_code kalau bukan admin ----
     useEffect(() => {
         if (!isAdmin && resolvedFromBranch && resolvedFromBranch !== airportCode) {
             setAirportCode(resolvedFromBranch);
         }
     }, [isAdmin, resolvedFromBranch]);
 
-    // Display name untuk header (kalau MO cabang)
     const branchDisplayName = useMemo(() => {
         if (isAdmin) return null;
         const branchObj = ctx?.branches?.find((b: any) => b.code === userBranchCode);
@@ -188,14 +157,12 @@ export default function RosterPage() {
     const [info, setInfo] = useState('');
     const [swapSelection, setSwapSelection] = useState<{ personnelId: string; day: number } | null>(null);
 
-    // ---- Add leave form ----
     const [leaveForm, setLeaveForm] = useState({
         personnelId: '', startDate: '', endDate: '', category: 'CUTI' as DBLeave['category'],
     });
 
     const daysInMonth = useMemo(() => new Date(year, month, 0).getDate(), [year, month]);
 
-    // Available units for current airport
     const availableUnits = useMemo(() => {
         const ap = getAirport(airportCode);
         return ap ? ap.units.map(u => u.unit) : ['TWR'];
@@ -206,27 +173,22 @@ export default function RosterPage() {
         return ap ? getUnit(ap, unit) : undefined;
     }, [airportCode, unit]);
 
+    const selectableAirports = useMemo(() => {
+        if (isAdmin) return allAirports;
+        return allAirports.filter(a => a.airport_code === (resolvedFromBranch || userBranchCode));
+    }, [isAdmin, resolvedFromBranch, userBranchCode, allAirports]);
+
     // ============================================================
-    // 1. LOAD PERSONNEL & LEAVES dari Supabase
+    // LOAD PERSONNEL & LEAVES
     // ============================================================
     useEffect(() => {
         let cancelled = false;
 
         async function loadPersonnel() {
-            // Strategy 1: pakai ctx.personnel (sudah ada di app, sudah proven jalan)
-            // Filter by branch_code = user's branch (untuk MO cabang) atau airportCode resolved.
-            // Tapi engine perlu cocok dengan airport_code yang dipilih → kita ambil semua
-            // personel cabang ini, lalu mapping ke shape engine.
             const ctxPersonnel: any[] = ctx?.personnel || [];
-            // Filter: ambil personel di branch_code yang match dengan airport saat ini
-            // (untuk MO cabang: branch_code === userBranchCode)
-            const branchFilter = isAdmin
-                ? null  // admin bisa pilih cabang manapun — match dari engine code
-                : userBranchCode;
-            let filtered = ctxPersonnel.filter((p: any) => {
-                // Match by branch_code (kalau MO cabang)
+            const branchFilter = isAdmin ? null : userBranchCode;
+            const filtered = ctxPersonnel.filter((p: any) => {
                 if (branchFilter && p.branch_code !== branchFilter) return false;
-                // Unit filter (kalau kolom 'unit' ada di personnel)
                 if (p.unit && p.unit !== unit) return false;
                 return p.is_active !== false;
             });
@@ -246,7 +208,6 @@ export default function RosterPage() {
                 return;
             }
 
-            // Strategy 2: Fallback ke engine config (initials dari airport_configs.json)
             const cfg = unitConfig;
             if (cfg?.initials && cfg.initials.length > 0) {
                 setDbPersonnel(cfg.initials.map((ini, i) => ({
@@ -286,7 +247,7 @@ export default function RosterPage() {
     }, [airportCode, unit, year, month, unitConfig, ctx?.personnel?.length, isAdmin, userBranchCode]);
 
     // ============================================================
-    // 2. LOAD existing roster (kalau ada)
+    // LOAD EXISTING ROSTER
     // ============================================================
     useEffect(() => {
         let cancelled = false;
@@ -320,19 +281,13 @@ export default function RosterPage() {
             if (cells) {
                 const grouped: Record<string, RosterCell[]> = {};
                 for (const p of dbPersonnel) {
-                    grouped[p.id] = Array.from({ length: daysInMonth }, () => ({
-                        status: '-', locked: false,
-                    }));
+                    grouped[p.id] = Array.from({ length: daysInMonth }, () => ({ status: '-', locked: false }));
                 }
                 for (const c of cells as any[]) {
                     if (!grouped[c.personnel_id]) {
-                        grouped[c.personnel_id] = Array.from({ length: daysInMonth }, () => ({
-                            status: '-', locked: false,
-                        }));
+                        grouped[c.personnel_id] = Array.from({ length: daysInMonth }, () => ({ status: '-', locked: false }));
                     }
-                    grouped[c.personnel_id][c.day - 1] = {
-                        status: c.status, locked: c.locked,
-                    };
+                    grouped[c.personnel_id][c.day - 1] = { status: c.status, locked: c.locked };
                 }
                 setRoster(grouped);
                 validateRoster(grouped);
@@ -343,7 +298,7 @@ export default function RosterPage() {
     }, [airportCode, unit, year, month, dbPersonnel, daysInMonth]);
 
     // ============================================================
-    // 3. REALTIME — auto-refresh kalau ada user lain swap
+    // REALTIME SUBSCRIPTION
     // ============================================================
     useEffect(() => {
         if (!rosterId) return;
@@ -363,9 +318,7 @@ export default function RosterPage() {
                         for (const c of cells as any[]) {
                             if (updated[c.personnel_id]) {
                                 updated[c.personnel_id] = [...updated[c.personnel_id]];
-                                updated[c.personnel_id][c.day - 1] = {
-                                    status: c.status, locked: c.locked,
-                                };
+                                updated[c.personnel_id][c.day - 1] = { status: c.status, locked: c.locked };
                             }
                         }
                         return updated;
@@ -376,7 +329,7 @@ export default function RosterPage() {
     }, [rosterId]);
 
     // ============================================================
-    // 4. GENERATE ROSTER
+    // GENERATE
     // ============================================================
     async function handleGenerate() {
         if (dbPersonnel.length === 0) {
@@ -387,7 +340,6 @@ export default function RosterPage() {
         setError('');
         setInfo('');
         try {
-            // Build Personnel objects untuk engine
             const personnel: Personnel[] = dbPersonnel
                 .filter(p => p.is_active !== false)
                 .map(p => ({
@@ -396,17 +348,13 @@ export default function RosterPage() {
                     priorityOrder: p.priority_order ?? 0,
                 }));
 
-            // Attach leaves (sudah loaded dari DB)
             for (const lv of dbLeaves) {
                 const p = personnel.find(pp => pp.id === lv.personnel_id);
                 if (!p) continue;
-                const projected = leaveRangeFromDates(
-                    lv.start_date, lv.end_date, year, month, lv.category,
-                );
+                const projected = leaveRangeFromDates(lv.start_date, lv.end_date, year, month, lv.category);
                 if (projected) p.leaves.push(projected);
             }
 
-            // Load prev_month_tail dari bulan N-1
             const prevMonth = month === 1 ? 12 : month - 1;
             const prevYear = month === 1 ? year - 1 : year;
             const { data: prevRow } = await supabase
@@ -419,10 +367,8 @@ export default function RosterPage() {
                 .maybeSingle();
             const prevTail = (prevRow as any)?.metadata?.pattern_phase_at_eom || null;
 
-            // Baseline pattern dari config
             const baseline = getBaselineForMonth(airportCode, unit, daysInMonth) || null;
 
-            // Generate
             const result = generateRoster({
                 year, month, personnel,
                 requiredPerDay: unitConfig?.min_on_duty_baseline ?? 3,
@@ -436,14 +382,12 @@ export default function RosterPage() {
                 return;
             }
 
-            // Compute pattern_phase_at_eom
             const tailLen = Math.min(7, result.daysInMonth);
             const phase: Record<string, string[]> = {};
             for (const [pid, cells] of Object.entries(result.roster)) {
                 phase[pid] = cells.slice(-tailLen).map(c => c.status);
             }
 
-            // Upsert roster row
             const { data: rosterRow, error: insertErr } = await supabase
                 .from('atc_rosters')
                 .upsert({
@@ -460,9 +404,8 @@ export default function RosterPage() {
                 .single();
             if (insertErr) throw insertErr;
 
-            // Delete old cells + insert new
             await supabase.from('atc_roster_cells').delete().eq('roster_id', rosterRow!.id);
-            const cellsToInsert = [];
+            const cellsToInsert: any[] = [];
             for (const [pid, cells] of Object.entries(result.roster)) {
                 for (let i = 0; i < cells.length; i++) {
                     cellsToInsert.push({
@@ -474,7 +417,6 @@ export default function RosterPage() {
                     });
                 }
             }
-            // Batch insert
             for (let i = 0; i < cellsToInsert.length; i += 500) {
                 await supabase.from('atc_roster_cells').insert(cellsToInsert.slice(i, i + 500));
             }
@@ -492,9 +434,6 @@ export default function RosterPage() {
         }
     }
 
-    // ============================================================
-    // 5. VALIDATE FRMS
-    // ============================================================
     function validateRoster(r: Record<string, RosterCell[]>) {
         if (unitConfig?.is_tni) {
             setFrmsErrors([]); setFrmsWarnings([]); return;
@@ -517,13 +456,10 @@ export default function RosterPage() {
             setFrmsErrors(errors);
             setFrmsWarnings(warnings);
         } catch {
-            // ignore
+            /* ignore */
         }
     }
 
-    // ============================================================
-    // 6. SWAP CELL (click 2 cells)
-    // ============================================================
     async function handleCellClick(personnelId: string, day: number) {
         if (!roster) return;
         const cell = roster[personnelId]?.[day - 1];
@@ -539,11 +475,10 @@ export default function RosterPage() {
             return;
         }
         if (swapSelection.personnelId === personnelId) {
-            setSwapSelection(null);  // unselect
+            setSwapSelection(null);
             return;
         }
 
-        // Do swap
         setError('');
         const personnel: Personnel[] = dbPersonnel.map(p => ({
             id: p.id, initial: p.initial,
@@ -566,7 +501,6 @@ export default function RosterPage() {
             setError(result.message);
             return;
         }
-        // Update DB
         if (rosterId) {
             const a = swapSelection.personnelId;
             const b = personnelId;
@@ -576,20 +510,16 @@ export default function RosterPage() {
                 supabase.from('atc_roster_cells').update({ status: roster[b][day - 1].status })
                     .eq('roster_id', rosterId).eq('personnel_id', b).eq('day', day),
             ]);
-            // Edit FINAL → revert ke DRAFT
             if (rosterStatus === 'FINAL') {
                 await supabase.from('atc_rosters').update({ status: 'DRAFT' }).eq('id', rosterId);
                 setRosterStatus('DRAFT');
                 setInfo('Roster di-revert ke DRAFT karena ada perubahan.');
             }
         }
-        setRoster({ ...roster });  // force re-render
+        setRoster({ ...roster });
         validateRoster(roster);
     }
 
-    // ============================================================
-    // 7. MARK FINAL / REVERT
-    // ============================================================
     async function handleMarkFinal() {
         if (!rosterId) return;
         if (frmsErrors.length > 0) {
@@ -610,9 +540,6 @@ export default function RosterPage() {
         setInfo('Roster di-revert ke DRAFT.');
     }
 
-    // ============================================================
-    // 8. ADD LEAVE
-    // ============================================================
     async function handleAddLeave() {
         if (!leaveForm.personnelId || !leaveForm.startDate || !leaveForm.endDate) {
             setError('Pilih personel + tanggal mulai + tanggal selesai.');
@@ -632,7 +559,6 @@ export default function RosterPage() {
         if (err) { setError(err.message); return; }
         setInfo(`Cuti ditambahkan untuk ${leaveForm.personnelId} (${leaveForm.startDate} – ${leaveForm.endDate}).`);
         setLeaveForm({ personnelId: '', startDate: '', endDate: '', category: 'CUTI' });
-        // Reload leaves
         const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
         const lastDay = new Date(year, month, 0).getDate();
         const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -645,286 +571,370 @@ export default function RosterPage() {
     // ============================================================
     // RENDER
     // ============================================================
-    // Airport list yang boleh dipilih oleh user ini
-    const selectableAirports = useMemo(() => {
-        if (isAdmin) return allAirports;
-        // MO cabang: cuma cabang sendiri
-        return allAirports.filter(a => a.airport_code === userBranchCode);
-    }, [isAdmin, userBranchCode, allAirports]);
-
     return (
-        <div className="p-4 md:p-6 space-y-4 max-w-full">
-            <header className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Roster ATC</h1>
-                <span className="text-sm text-gray-500">
-                    {dbPersonnel.length} personel
-                    {!isAdmin && userBranchCode && (
-                        <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
-                            Cabang {userBranchCode}
-                        </span>
-                    )}
-                </span>
-            </header>
-
-            {/* Tab navigation */}
-            <div className="flex border-b">
-                <button
-                    onClick={() => setActiveTab('roster')}
-                    className={`px-4 py-2 font-semibold border-b-2 ${
-                        activeTab === 'roster'
-                            ? 'border-blue-600 text-blue-700'
-                            : 'border-transparent text-gray-500 hover:text-gray-800'
-                    }`}>
-                    📅 Roster
-                </button>
-                <button
-                    onClick={() => setActiveTab('ca')}
-                    className={`px-4 py-2 font-semibold border-b-2 ${
-                        activeTab === 'ca'
-                            ? 'border-blue-600 text-blue-700'
-                            : 'border-transparent text-gray-500 hover:text-gray-800'
-                    }`}>
-                    💰 Control Allowance
-                </button>
-            </div>
-
-            {/* Toolbar (shared antara tab Roster & CA) */}
-            <div className="flex flex-wrap gap-3 items-end p-3 bg-gray-50 rounded">
-                {isAdmin ? (
-                    <label className="flex flex-col">
-                        <span className="text-xs font-semibold text-gray-600 mb-1">Cabang</span>
-                        <select className="border rounded px-2 py-1 min-w-[160px]"
-                                value={airportCode}
-                                onChange={e => { setAirportCode(e.target.value); setUnit('TWR'); }}>
-                            {selectableAirports.map(a => (
-                                <option key={a.airport_code} value={a.airport_code}>
-                                    {a.airport_name}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                ) : (
-                    <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-gray-600 mb-1">Cabang</span>
-                        <div className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded font-semibold text-sm">
-                            {branchDisplayName || airportCode}
-                        </div>
-                    </div>
-                )}
-                <label className="flex flex-col">
-                    <span className="text-xs font-semibold text-gray-600 mb-1">Unit</span>
-                    <select className="border rounded px-2 py-1"
-                            value={unit} onChange={e => setUnit(e.target.value)}>
-                        {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                </label>
-                <label className="flex flex-col">
-                    <span className="text-xs font-semibold text-gray-600 mb-1">Bulan</span>
-                    <select className="border rounded px-2 py-1"
-                            value={month} onChange={e => setMonth(+e.target.value)}>
-                        {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
-                    </select>
-                </label>
-                <label className="flex flex-col">
-                    <span className="text-xs font-semibold text-gray-600 mb-1">Tahun</span>
-                    <input type="number" className="border rounded px-2 py-1 w-24"
-                           value={year} onChange={e => setYear(+e.target.value)} />
-                </label>
-                <button onClick={handleGenerate}
-                        disabled={loading || dbPersonnel.length === 0}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50">
-                    {loading ? 'Memproses…' : (roster ? 'Re-generate' : 'Generate')}
-                </button>
-            </div>
-
-            {/* Status banner */}
-            {roster && (
-                <div className="flex flex-wrap gap-2 items-center">
-                    <span className={`px-3 py-1 rounded text-sm font-bold ${
-                        rosterStatus === 'FINAL'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                        {rosterStatus === 'FINAL' ? '✅ FINAL' : '🚧 DRAFT'}
-                    </span>
-                    <span className="text-sm text-gray-500">Mode: {mode}</span>
-                    {rosterStatus === 'DRAFT' ? (
-                        <button onClick={handleMarkFinal}
-                                disabled={frmsErrors.length > 0}
-                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50">
-                            Mark FINAL
-                        </button>
-                    ) : (
-                        <button onClick={handleRevert}
-                                className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm">
-                            ↩ Revert ke DRAFT
-                        </button>
-                    )}
-                    {swapSelection && (
-                        <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs rounded">
-                            Klik cell ke-2 di hari yang sama untuk swap, atau klik ulang untuk batal
-                        </span>
-                    )}
+        <div className="page-content">
+            {/* TOPBAR */}
+            <div className="topbar">
+                <div>
+                    <h1 className="topbar-title">Roster ATC</h1>
+                    <p className="topbar-sub">
+                        Generate jadwal bulanan personel ATC
+                        {!isAdmin && branchDisplayName && (
+                            <> — Cabang <strong style={{ color: 'var(--text)' }}>{branchDisplayName}</strong></>
+                        )}
+                    </p>
                 </div>
-            )}
+                <div className="topbar-actions">
+                    <span className="status-pill-info">
+                        <strong style={{ color: 'var(--text)', margin: '0 4px' }}>{dbPersonnel.length}</strong> personel
+                    </span>
+                </div>
+            </div>
 
-            {/* Alerts */}
+            {/* TABS */}
+            <div className="roster-tabs" style={{
+                display: 'flex',
+                gap: 4,
+                borderBottom: '1px solid var(--border)',
+                marginBottom: 16,
+            }}>
+                {(['roster', 'ca'] as const).map(t => (
+                    <button
+                        key={t}
+                        onClick={() => setActiveTab(t)}
+                        className="btn"
+                        style={{
+                            border: 'none',
+                            borderBottom: activeTab === t ? '2px solid var(--accent)' : '2px solid transparent',
+                            background: 'transparent',
+                            color: activeTab === t ? 'var(--accent)' : 'var(--text-muted)',
+                            borderRadius: 0,
+                            fontWeight: 600,
+                            padding: '10px 14px',
+                            marginBottom: -1,
+                        }}
+                    >
+                        {t === 'roster' ? 'Roster' : 'Control Allowance'}
+                    </button>
+                ))}
+            </div>
+
+            {/* TOOLBAR */}
+            <div className="input-banner">
+                <div className="quick-row">
+                    {isAdmin ? (
+                        <div className="field" style={{ margin: 0 }}>
+                            <label>Cabang</label>
+                            <select
+                                value={airportCode}
+                                onChange={e => { setAirportCode(e.target.value); setUnit('TWR'); }}
+                            >
+                                {selectableAirports.map(a => (
+                                    <option key={a.airport_code} value={a.airport_code}>
+                                        {a.airport_name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    ) : (
+                        <div className="field" style={{ margin: 0 }}>
+                            <label>Cabang</label>
+                            <div style={{
+                                padding: '6px 12px',
+                                background: 'var(--accent-soft)',
+                                color: 'var(--accent)',
+                                borderRadius: 'var(--r, 6px)',
+                                fontWeight: 600,
+                                fontSize: 'var(--fs-sm, 13px)',
+                                border: '1px solid var(--border)',
+                            }}>
+                                {branchDisplayName || airportCode}
+                            </div>
+                        </div>
+                    )}
+                    <div className="field" style={{ margin: 0 }}>
+                        <label>Unit</label>
+                        <select value={unit} onChange={e => setUnit(e.target.value)}>
+                            {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                        <label>Bulan</label>
+                        <select value={month} onChange={e => setMonth(+e.target.value)}>
+                            {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                        </select>
+                    </div>
+                    <div className="field" style={{ margin: 0 }}>
+                        <label>Tahun</label>
+                        <input type="number" value={year} onChange={e => setYear(+e.target.value)}
+                               style={{ width: 100 }}/>
+                    </div>
+                    <button
+                        className="btn btn-primary btn-lg"
+                        onClick={handleGenerate}
+                        disabled={loading || dbPersonnel.length === 0}
+                    >
+                        {loading ? 'Memproses…' : (roster ? 'Re-generate' : 'Generate')}
+                    </button>
+                </div>
+            </div>
+
+            {/* ALERTS */}
             {info && (
-                <div className="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded text-sm">
-                    {info}
+                <div className="panel" style={{ marginTop: 12, background: 'var(--accent-soft)' }}>
+                    <div className="panel-body" style={{ padding: '10px 14px', color: 'var(--accent)' }}>
+                        {info}
+                    </div>
                 </div>
             )}
             {error && (
-                <div className="bg-red-50 border border-red-200 text-red-800 p-3 rounded text-sm whitespace-pre-line">
-                    {error}
+                <div className="panel" style={{ marginTop: 12, background: 'var(--status-off-soft, rgba(239,68,68,0.1))' }}>
+                    <div className="panel-body" style={{ padding: '10px 14px', color: 'var(--status-off, #dc2626)', whiteSpace: 'pre-line' }}>
+                        {error}
+                    </div>
                 </div>
             )}
 
-            {/* ==================== TAB ROSTER ==================== */}
-            {activeTab === 'roster' && (
-            <>
-            {/* FRMS panel */}
-            {roster && (frmsErrors.length > 0 || frmsWarnings.length > 0) && (
-                <details className="border rounded p-3 bg-white">
-                    <summary className="cursor-pointer font-semibold">
-                        FRMS: <span className="text-red-700">{frmsErrors.length} errors</span>
-                        , <span className="text-amber-700">{frmsWarnings.length} warnings</span>
-                    </summary>
-                    <ul className="mt-2 text-sm space-y-1">
-                        {frmsErrors.map((e, i) =>
-                            <li key={`e-${i}`} className="text-red-700">
-                                [{e.rule}] {e.message}
-                            </li>
-                        )}
-                        {frmsWarnings.map((w, i) =>
-                            <li key={`w-${i}`} className="text-amber-700">
-                                [{w.rule}] {w.message}
-                            </li>
-                        )}
-                    </ul>
-                </details>
-            )}
+            {/* TAB CONTENT */}
+            {activeTab === 'roster' ? (
+                <>
+                    {/* Status row */}
+                    {roster && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '12px 0' }}>
+                            <span className={'status-badge ' + (rosterStatus === 'FINAL' ? 'status-on' : 'status-off')}>
+                                {rosterStatus === 'FINAL' ? 'FINAL' : 'DRAFT'}
+                            </span>
+                            <span className="faint text-sm">Mode: {mode || '—'}</span>
+                            {rosterStatus === 'DRAFT' ? (
+                                <button className="btn btn-sm btn-primary" onClick={handleMarkFinal} disabled={frmsErrors.length > 0}>
+                                    Mark FINAL
+                                </button>
+                            ) : (
+                                <button className="btn btn-sm" onClick={handleRevert}>
+                                    Revert ke DRAFT
+                                </button>
+                            )}
+                            {swapSelection && (
+                                <span className="status-badge" style={{ background: 'var(--status-warn-soft)', color: 'var(--status-warn)' }}>
+                                    Klik cell ke-2 di hari yang sama untuk swap, atau klik ulang untuk batal
+                                </span>
+                            )}
+                        </div>
+                    )}
 
-            {/* Add leave form */}
-            <details className="border rounded p-3 bg-white">
-                <summary className="cursor-pointer font-semibold">+ Tambah Cuti / Off-Roster</summary>
-                <div className="mt-3 flex flex-wrap gap-2 items-end">
-                    <select className="border rounded px-2 py-1"
-                            value={leaveForm.personnelId}
-                            onChange={e => setLeaveForm({ ...leaveForm, personnelId: e.target.value })}>
-                        <option value="">— Pilih personel —</option>
-                        {dbPersonnel.map(p => (
-                            <option key={p.id} value={p.id}>
-                                {p.initial}{p.full_name ? ` — ${p.full_name}` : ''}
-                            </option>
-                        ))}
-                    </select>
-                    <input type="date" className="border rounded px-2 py-1"
-                           value={leaveForm.startDate}
-                           onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })} />
-                    <span className="text-gray-500">—</span>
-                    <input type="date" className="border rounded px-2 py-1"
-                           value={leaveForm.endDate}
-                           onChange={e => setLeaveForm({ ...leaveForm, endDate: e.target.value })} />
-                    <select className="border rounded px-2 py-1"
-                            value={leaveForm.category}
-                            onChange={e => setLeaveForm({ ...leaveForm, category: e.target.value as DBLeave['category'] })}>
-                        <option value="CUTI">Cuti</option>
-                        <option value="SAKIT">Sakit</option>
-                        <option value="DIKLAT">Diklat</option>
-                        <option value="OTHERS">Lainnya</option>
-                    </select>
-                    <button onClick={handleAddLeave}
-                            className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm">
-                        Tambah
-                    </button>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                    Cuti boleh lintas bulan — engine otomatis tracking ke bulan berikutnya.
-                </p>
-            </details>
-
-            {/* Roster table */}
-            {roster ? (
-                <div className="overflow-x-auto border rounded">
-                    <table className="text-xs border-collapse">
-                        <thead>
-                            <tr className="bg-gray-50 sticky top-0">
-                                <th className="sticky left-0 bg-gray-50 px-3 py-2 text-left min-w-[160px] border-r">
-                                    Personel
-                                </th>
-                                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
-                                    const dt = new Date(year, month - 1, d);
-                                    const dow = dt.getDay();
-                                    const isWeekend = dow === 0 || dow === 6;
-                                    return (
-                                        <th key={d} className={`px-1 py-2 w-8 text-center border-r ${isWeekend ? 'bg-gray-100' : ''}`}>
-                                            <div>{d}</div>
-                                            <div className="text-[9px] text-gray-400 font-normal">
-                                                {['M', 'S', 'S', 'R', 'K', 'J', 'S'][dow]}
-                                            </div>
-                                        </th>
-                                    );
-                                })}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {dbPersonnel.map(p => (
-                                <tr key={p.id} className="border-t hover:bg-gray-50">
-                                    <td className="sticky left-0 bg-white px-3 py-1 font-semibold border-r whitespace-nowrap">
-                                        {p.initial}
-                                        {p.full_name && (
-                                            <div className="text-[10px] text-gray-500 font-normal">
-                                                {p.full_name}
-                                            </div>
+                    {/* FRMS panel */}
+                    {roster && (frmsErrors.length > 0 || frmsWarnings.length > 0) && (
+                        <div className="panel">
+                            <details>
+                                <summary className="panel-header" style={{ cursor: 'pointer' }}>
+                                    <h2 className="panel-title">
+                                        FRMS Compliance — {frmsErrors.length} error, {frmsWarnings.length} warning
+                                    </h2>
+                                </summary>
+                                <div className="panel-body" style={{ paddingTop: 0 }}>
+                                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: 'var(--fs-sm, 13px)' }}>
+                                        {frmsErrors.map((e, i) =>
+                                            <li key={`e-${i}`} style={{ color: 'var(--status-off, #dc2626)', marginBottom: 4 }}>
+                                                [{e.rule}] {e.message}
+                                            </li>
                                         )}
-                                    </td>
-                                    {(roster[p.id] || Array.from({ length: daysInMonth }, () => ({ status: '-', locked: false }))).map((c, i) => {
-                                        const isSelected = swapSelection?.personnelId === p.id && swapSelection?.day === i + 1;
-                                        const symbol = c.status === '-' ? '' : (c.status.length > 1 ? c.status[0] : c.status);
-                                        return (
-                                            <td key={i}
-                                                onClick={() => handleCellClick(p.id, i + 1)}
-                                                className={`
-                                                    px-1 py-1 text-center cursor-pointer select-none
-                                                    ${cellColor(c.status)}
-                                                    ${c.locked ? 'opacity-60 cursor-not-allowed border-2 border-gray-400' : 'hover:ring-2 hover:ring-blue-400'}
-                                                    ${isSelected ? 'ring-2 ring-green-500' : ''}
-                                                    border-r
-                                                `}
-                                                title={`Hari ${i + 1}: ${c.status}${c.locked ? ' (locked)' : ''}`}>
-                                                {symbol}
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
+                                        {frmsWarnings.map((w, i) =>
+                                            <li key={`w-${i}`} style={{ color: 'var(--status-warn, #f59e0b)', marginBottom: 4 }}>
+                                                [{w.rule}] {w.message}
+                                            </li>
+                                        )}
+                                    </ul>
+                                </div>
+                            </details>
+                        </div>
+                    )}
+
+                    {/* Add leave form */}
+                    <div className="panel">
+                        <details>
+                            <summary className="panel-header" style={{ cursor: 'pointer' }}>
+                                <h2 className="panel-title">Tambah Cuti / Off-Roster</h2>
+                            </summary>
+                            <div className="panel-body" style={{ paddingTop: 0 }}>
+                                <div className="quick-row">
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label>Personel</label>
+                                        <select
+                                            value={leaveForm.personnelId}
+                                            onChange={e => setLeaveForm({ ...leaveForm, personnelId: e.target.value })}
+                                        >
+                                            <option value="">— Pilih personel —</option>
+                                            {dbPersonnel.map(p => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.initial}{p.full_name ? ` — ${p.full_name}` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label>Tanggal Mulai</label>
+                                        <input type="date"
+                                               value={leaveForm.startDate}
+                                               onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })}/>
+                                    </div>
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label>Tanggal Selesai</label>
+                                        <input type="date"
+                                               value={leaveForm.endDate}
+                                               onChange={e => setLeaveForm({ ...leaveForm, endDate: e.target.value })}/>
+                                    </div>
+                                    <div className="field" style={{ margin: 0 }}>
+                                        <label>Kategori</label>
+                                        <select
+                                            value={leaveForm.category}
+                                            onChange={e => setLeaveForm({ ...leaveForm, category: e.target.value as DBLeave['category'] })}
+                                        >
+                                            <option value="CUTI">Cuti</option>
+                                            <option value="SAKIT">Sakit</option>
+                                            <option value="DIKLAT">Diklat</option>
+                                            <option value="OTHERS">Lainnya</option>
+                                        </select>
+                                    </div>
+                                    <button className="btn btn-primary btn-sm" onClick={handleAddLeave}>
+                                        Tambah
+                                    </button>
+                                </div>
+                                <p className="faint text-sm" style={{ marginTop: 8 }}>
+                                    Cuti boleh lintas bulan — engine otomatis tracking ke bulan berikutnya.
+                                </p>
+                            </div>
+                        </details>
+                    </div>
+
+                    {/* Roster table */}
+                    {roster ? (
+                        <div className="panel">
+                            <div className="panel-header">
+                                <h2 className="panel-title">Tabel Roster</h2>
+                                <span className="panel-counter">
+                                    {dbPersonnel.length} personel × {daysInMonth} hari
+                                </span>
+                            </div>
+                            <div className="panel-body" style={{ padding: 0 }}>
+                                <div className="table-wrap" style={{ overflowX: 'auto' }}>
+                                    <table className="data-table" style={{ fontSize: 11 }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{
+                                                    position: 'sticky', left: 0, zIndex: 2,
+                                                    background: 'var(--surface, white)',
+                                                    minWidth: 160,
+                                                    borderRight: '1px solid var(--border)',
+                                                }}>
+                                                    Personel
+                                                </th>
+                                                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+                                                    const dt = new Date(year, month - 1, d);
+                                                    const dow = dt.getDay();
+                                                    const isWeekend = dow === 0 || dow === 6;
+                                                    return (
+                                                        <th key={d} style={{
+                                                            padding: '6px 4px', minWidth: 30, textAlign: 'center',
+                                                            background: isWeekend ? 'var(--surface-2, #f5f5f5)' : undefined,
+                                                            borderLeft: '1px solid var(--border)',
+                                                        }}>
+                                                            <div style={{ fontWeight: 600 }}>{d}</div>
+                                                            <div className="faint" style={{ fontSize: 9, fontWeight: 400 }}>
+                                                                {['M', 'S', 'S', 'R', 'K', 'J', 'S'][dow]}
+                                                            </div>
+                                                        </th>
+                                                    );
+                                                })}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {dbPersonnel.map(p => (
+                                                <tr key={p.id}>
+                                                    <td style={{
+                                                        position: 'sticky', left: 0, zIndex: 1,
+                                                        background: 'var(--surface, white)',
+                                                        borderRight: '1px solid var(--border)',
+                                                        whiteSpace: 'nowrap',
+                                                    }}>
+                                                        <strong>{p.initial}</strong>
+                                                        {p.full_name && p.full_name !== p.initial && (
+                                                            <div className="faint" style={{ fontSize: 10, fontWeight: 400 }}>
+                                                                {p.full_name}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    {(roster[p.id] || Array.from({ length: daysInMonth }, () => ({ status: '-', locked: false }))).map((c, i) => {
+                                                        const isSelected = swapSelection?.personnelId === p.id && swapSelection?.day === i + 1;
+                                                        const symbol = c.status === '-' ? '' : (c.status.length > 1 ? c.status[0] : c.status);
+                                                        return (
+                                                            <td
+                                                                key={i}
+                                                                onClick={() => handleCellClick(p.id, i + 1)}
+                                                                title={`Hari ${i + 1}: ${c.status}${c.locked ? ' (locked)' : ''}`}
+                                                                style={{
+                                                                    padding: '6px 2px', textAlign: 'center',
+                                                                    cursor: c.locked ? 'not-allowed' : 'pointer',
+                                                                    background: cellBgHex(c.status),
+                                                                    opacity: c.locked ? 0.55 : 1,
+                                                                    outline: isSelected
+                                                                        ? '2px solid var(--accent)'
+                                                                        : c.locked
+                                                                            ? '1px solid var(--border)'
+                                                                            : 'none',
+                                                                    outlineOffset: -2,
+                                                                    fontWeight: 600,
+                                                                    userSelect: 'none',
+                                                                    borderLeft: '1px solid var(--border)',
+                                                                }}
+                                                            >
+                                                                {symbol}
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
+                            <p>
+                                Belum ada roster untuk {airportCode}/{unit} {MONTHS[month - 1]} {year}.
+                            </p>
+                            <p className="faint text-sm">Klik <strong>Generate</strong> untuk membuat.</p>
+                        </div>
+                    )}
+
+                    {/* Legenda */}
+                    {roster && (
+                        <div style={{
+                            display: 'flex', flexWrap: 'wrap', gap: 12,
+                            marginTop: 10,
+                            fontSize: 'var(--fs-sm, 12px)',
+                            color: 'var(--text-muted)',
+                        }}>
+                            {Object.entries(SHIFT_HEX).map(([k, hex]) => (
+                                <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ width: 14, height: 14, background: hex + '33', border: `1px solid ${hex}`, borderRadius: 3 }}/>
+                                    Shift {k}
+                                </span>
                             ))}
-                        </tbody>
-                    </table>
-                </div>
+                            {Object.entries(LEAVE_HEX).map(([k, hex]) => (
+                                <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ width: 14, height: 14, background: hex + '40', border: `1px solid ${hex}`, borderRadius: 3 }}/>
+                                    {k === 'CUTI' ? 'Cuti' : k === 'SAKIT' ? 'Sakit' : k === 'DIKLAT' ? 'Diklat' : 'Lainnya'}
+                                </span>
+                            ))}
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 14, height: 14, background: 'var(--surface-2, #f5f5f5)', border: '1px solid var(--border)', borderRadius: 3 }}/>
+                                Off
+                            </span>
+                        </div>
+                    )}
+                </>
             ) : (
-                <div className="text-gray-500 italic py-8 text-center">
-                    Belum ada roster untuk {airportCode}/{unit} {MONTHS[month - 1]} {year}.<br />
-                    Klik <strong>Generate</strong> untuk membuat.
-                </div>
-            )}
-
-            {/* Legenda */}
-            {roster && (
-                <div className="flex flex-wrap gap-3 text-xs text-gray-600 pt-2">
-                    <span className="inline-flex items-center"><span className="w-4 h-4 bg-blue-200 mr-1 inline-block"></span>Shift I</span>
-                    <span className="inline-flex items-center"><span className="w-4 h-4 bg-yellow-200 mr-1 inline-block"></span>Shift II</span>
-                    <span className="inline-flex items-center"><span className="w-4 h-4 bg-orange-300 mr-1 inline-block"></span>Cuti</span>
-                    <span className="inline-flex items-center"><span className="w-4 h-4 bg-red-300 mr-1 inline-block"></span>Sakit</span>
-                    <span className="inline-flex items-center"><span className="w-4 h-4 bg-sky-300 mr-1 inline-block"></span>Diklat</span>
-                    <span className="inline-flex items-center"><span className="w-4 h-4 bg-gray-100 mr-1 inline-block border"></span>Off</span>
-                </div>
-            )}
-            </>
-            )}
-
-            {/* ==================== TAB CONTROL ALLOWANCE ==================== */}
-            {activeTab === 'ca' && (
                 <CAPanel
                     airportCode={airportCode}
                     unit={unit}
@@ -942,7 +952,7 @@ export default function RosterPage() {
 
 
 // ============================================================
-// CA PANEL — Sub-component untuk tab Control Allowance
+// CA PANEL — sub-component untuk tab Control Allowance
 // ============================================================
 
 interface CAPanelProps {
@@ -961,28 +971,28 @@ function CAPanel(props: CAPanelProps) {
 
     if (!roster) {
         return (
-            <div className="text-gray-500 italic py-8 text-center">
-                Belum ada roster. Buka tab <strong>Roster</strong>, klik Generate dulu,
-                baru Control Allowance bisa dihitung.
+            <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
+                <p>Belum ada roster.</p>
+                <p className="faint text-sm">Buka tab <strong>Roster</strong>, klik Generate dulu.</p>
             </div>
         );
     }
 
     if (!unitConfig?.rolling) {
         return (
-            <div className="bg-amber-50 border border-amber-300 text-amber-800 p-3 rounded text-sm">
-                Control Allowance memerlukan konfigurasi rolling.
-                Unit <strong>{airportCode}/{unit}</strong> belum punya rolling table —
-                tunjangan tidak bisa dihitung.
+            <div className="panel" style={{ marginTop: 12 }}>
+                <div className="panel-body" style={{ padding: 14, color: 'var(--status-warn, #f59e0b)' }}>
+                    Control Allowance memerlukan konfigurasi rolling.
+                    Unit <strong>{airportCode}/{unit}</strong> belum punya rolling table —
+                    tunjangan tidak bisa dihitung.
+                </div>
             </div>
         );
     }
 
-    // Build airport_name untuk lookup konstanta
     const cfg = getAirport(airportCode);
     const airportName = cfg?.airport_name || airportCode;
 
-    // Build fake GenerateResult untuk feed ke engine
     const fakeResult = {
         success: true as const,
         year, month,
@@ -997,7 +1007,7 @@ function CAPanel(props: CAPanelProps) {
 
     const nameLookup: Record<string, string> = {};
     for (const p of dbPersonnel) nameLookup[p.id] = p.full_name || p.initial;
-    const nikLookup: Record<string, string> = {};  // empty for now
+    const nikLookup: Record<string, string> = {};
 
     const allowance = computeAllowanceTable({
         airportName,
@@ -1011,13 +1021,14 @@ function CAPanel(props: CAPanelProps) {
 
     if (allowance.error) {
         return (
-            <div className="bg-red-50 border border-red-300 text-red-800 p-3 rounded text-sm">
-                {allowance.error}
+            <div className="panel" style={{ marginTop: 12 }}>
+                <div className="panel-body" style={{ padding: 14, color: 'var(--status-off, #dc2626)' }}>
+                    {allowance.error}
+                </div>
             </div>
         );
     }
 
-    // CSV export
     function downloadCSV() {
         const headers = ['No', 'Inisial', 'Nama', 'Jam Kontrol (jam)', 'Konstanta (Rp/jam)', 'Tunjangan (Rp)'];
         const lines = [
@@ -1026,11 +1037,9 @@ function CAPanel(props: CAPanelProps) {
             `Konstanta: Rp ${allowance.constant_per_hour.toLocaleString('id-ID')}/jam`,
             '',
             headers.join(','),
-            ...allowance.rows.map((r, i) =>
+            ...allowance.rows.map((r: PersonnelAllowance, i: number) =>
                 [
-                    i + 1,
-                    r.initial,
-                    `"${r.name}"`,
+                    i + 1, r.initial, `"${r.name}"`,
                     r.kontrol_hours.toFixed(2),
                     r.constant_per_hour.toFixed(0),
                     r.allowance_rp.toFixed(0),
@@ -1050,124 +1059,161 @@ function CAPanel(props: CAPanelProps) {
     }
 
     return (
-        <div className="space-y-3">
-            {/* Header metric cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="bg-white border rounded p-3">
-                    <div className="text-xs text-gray-500">Bandara / Unit</div>
-                    <div className="text-base font-bold mt-1">{airportName} {unit}</div>
-                </div>
-                <div className="bg-white border rounded p-3">
-                    <div className="text-xs text-gray-500">
-                        Konstanta {allowance.is_tma && <span className="text-amber-600">★ TMA</span>}
-                    </div>
-                    <div className="text-base font-bold mt-1">
-                        Rp {allowance.constant_per_hour.toLocaleString('id-ID')}<span className="text-xs font-normal">/jam</span>
+        <>
+            {/* Metric cards */}
+            <div className="stats-grid" style={{ marginTop: 12 }}>
+                <div className="stat-card">
+                    <div style={{ flex: 1 }}>
+                        <div className="stat-l">Bandara / Unit</div>
+                        <div className="stat-v" style={{ fontSize: 18 }}>{airportName}</div>
+                        <div className="stat-sub">Unit {unit}</div>
                     </div>
                 </div>
-                <div className="bg-white border rounded p-3">
-                    <div className="text-xs text-gray-500">Total Jam Kontrol</div>
-                    <div className="text-base font-bold mt-1">
-                        {allowance.summary.total_kontrol_hours.toFixed(2)} jam
+                <div className="stat-card">
+                    <div style={{ flex: 1 }}>
+                        <div className="stat-l">
+                            Konstanta {allowance.is_tma && <span className="status-badge status-on" style={{ marginLeft: 4 }}>TMA</span>}
+                        </div>
+                        <div className="stat-v" style={{ fontSize: 18 }}>
+                            Rp {allowance.constant_per_hour.toLocaleString('id-ID')}
+                        </div>
+                        <div className="stat-sub">per jam</div>
                     </div>
                 </div>
-                <div className={`border rounded p-3 ${
-                    rosterStatus === 'FINAL'
-                        ? 'bg-green-50 border-green-300'
-                        : 'bg-yellow-50 border-yellow-300'
-                }`}>
-                    <div className="text-xs text-gray-500">Status Roster</div>
-                    <div className="text-base font-bold mt-1">
-                        {rosterStatus === 'FINAL' ? '🔒 FINAL' : '🚧 DRAFT'}
+                <div className="stat-card">
+                    <div style={{ flex: 1 }}>
+                        <div className="stat-l">Total Jam Kontrol</div>
+                        <div className="stat-v" style={{ fontSize: 18 }}>
+                            {allowance.summary.total_kontrol_hours.toFixed(2)}
+                        </div>
+                        <div className="stat-sub">jam</div>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <div style={{ flex: 1 }}>
+                        <div className="stat-l">Status Roster</div>
+                        <div className="stat-v" style={{
+                            fontSize: 18,
+                            color: rosterStatus === 'FINAL' ? 'var(--status-on)' : 'var(--status-warn)',
+                        }}>
+                            {rosterStatus}
+                        </div>
+                        <div className="stat-sub">
+                            {rosterStatus === 'FINAL' ? 'siap submit' : 'preview saja'}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Banner DRAFT warning */}
+            {/* Banner DRAFT */}
             {rosterStatus !== 'FINAL' && (
-                <div className="bg-yellow-50 border border-yellow-300 text-yellow-800 p-3 rounded text-sm">
-                    ⚠️ Roster masih <strong>DRAFT</strong>. Tunjangan ini boleh dipakai untuk preview,
-                    tapi <strong>jangan submit ke HR/finance</strong> sebelum roster di-mark FINAL
-                    di tab Roster.
+                <div className="panel" style={{ marginTop: 12, background: 'var(--status-warn-soft, rgba(245,158,11,0.1))' }}>
+                    <div className="panel-body" style={{ padding: 12, color: 'var(--status-warn, #f59e0b)' }}>
+                        <strong>Perhatian:</strong> Roster masih DRAFT.
+                        Tunjangan ini boleh dipakai untuk preview, tapi jangan submit ke HR/finance
+                        sebelum roster di-mark FINAL di tab Roster.
+                    </div>
                 </div>
             )}
 
-            {/* Domain rule banner */}
-            <div className="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded text-sm">
-                ℹ️ <strong>Jam Kontrol</strong> = waktu Controller + Assistant per personel
-                (waktu Istirahat <strong>tidak</strong> dihitung). Tunjangan = Jam Kontrol × Konstanta.
+            {/* Domain rule */}
+            <div className="panel" style={{ marginTop: 12, background: 'var(--accent-soft)' }}>
+                <div className="panel-body" style={{ padding: 12, color: 'var(--accent)' }}>
+                    <strong>Jam Kontrol</strong> = waktu Controller + Assistant per personel
+                    (waktu Istirahat tidak dihitung). Tunjangan = Jam Kontrol × Konstanta.
+                </div>
             </div>
 
             {/* Warnings */}
             {allowance.warnings.length > 0 && (
-                <details className="border rounded p-3 bg-white">
-                    <summary className="cursor-pointer font-semibold text-amber-700">
-                        ⚠️ {allowance.warnings.length} validation warning
-                    </summary>
-                    <ul className="mt-2 text-sm space-y-1 text-amber-700">
-                        {allowance.warnings.map((w, i) => <li key={i}>• {w}</li>)}
-                    </ul>
-                </details>
+                <div className="panel" style={{ marginTop: 12 }}>
+                    <details>
+                        <summary className="panel-header" style={{ cursor: 'pointer' }}>
+                            <h2 className="panel-title">{allowance.warnings.length} validation warning</h2>
+                        </summary>
+                        <div className="panel-body" style={{ paddingTop: 0 }}>
+                            <ul style={{ margin: 0, paddingLeft: 20, fontSize: 'var(--fs-sm, 13px)', color: 'var(--status-warn, #f59e0b)' }}>
+                                {allowance.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                            </ul>
+                        </div>
+                    </details>
+                </div>
             )}
 
             {/* CA Table */}
-            <div className="overflow-x-auto border rounded bg-white">
-                <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-3 py-2 text-left w-12">No</th>
-                            <th className="px-3 py-2 text-left">Inisial</th>
-                            <th className="px-3 py-2 text-left">Nama Lengkap</th>
-                            <th className="px-3 py-2 text-right">Jam Kontrol</th>
-                            <th className="px-3 py-2 text-right">Konstanta (Rp/jam)</th>
-                            <th className="px-3 py-2 text-right">Tunjangan (Rp)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {allowance.rows.map((r, i) => (
-                            <tr key={r.personnel_id} className="border-t hover:bg-gray-50">
-                                <td className="px-3 py-2">{i + 1}</td>
-                                <td className="px-3 py-2 font-semibold">{r.initial}</td>
-                                <td className="px-3 py-2">{r.name}</td>
-                                <td className="px-3 py-2 text-right tabular-nums">
-                                    {r.kontrol_hours.toFixed(2)} jam
-                                    <div className="text-[10px] text-gray-400">
-                                        ({r.kontrol_minutes.toLocaleString('id-ID')} mnt)
-                                    </div>
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums">
-                                    {r.constant_per_hour.toLocaleString('id-ID')}
-                                </td>
-                                <td className="px-3 py-2 text-right font-bold text-green-700 tabular-nums">
-                                    Rp {Math.round(r.allowance_rp).toLocaleString('id-ID')}
-                                </td>
-                            </tr>
-                        ))}
-                        <tr className="border-t-2 border-green-600 bg-green-50 font-bold">
-                            <td colSpan={3} className="px-3 py-3 text-right">TOTAL</td>
-                            <td className="px-3 py-3 text-right tabular-nums">
-                                {allowance.summary.total_kontrol_hours.toFixed(2)} jam
-                            </td>
-                            <td></td>
-                            <td className="px-3 py-3 text-right text-green-800 tabular-nums">
-                                Rp {Math.round(allowance.summary.total_allowance).toLocaleString('id-ID')}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div className="panel" style={{ marginTop: 12 }}>
+                <div className="panel-header">
+                    <h2 className="panel-title">Tabel Tunjangan</h2>
+                    <span className="panel-counter">{allowance.summary.n_personnel} personel</span>
+                </div>
+                <div className="panel-body" style={{ padding: 0 }}>
+                    <div className="table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th style={{ width: 50 }}>No</th>
+                                    <th>Inisial</th>
+                                    <th>Nama Lengkap</th>
+                                    <th style={{ textAlign: 'right' }}>Jam Kontrol</th>
+                                    <th style={{ textAlign: 'right' }}>Konstanta (Rp/jam)</th>
+                                    <th style={{ textAlign: 'right' }}>Tunjangan (Rp)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {allowance.rows.map((r: PersonnelAllowance, i: number) => (
+                                    <tr key={r.personnel_id}>
+                                        <td>{i + 1}</td>
+                                        <td><strong>{r.initial}</strong></td>
+                                        <td>{r.name}</td>
+                                        <td className="mono" style={{ textAlign: 'right' }}>
+                                            {r.kontrol_hours.toFixed(2)} jam
+                                            <div className="faint" style={{ fontSize: 10 }}>
+                                                ({r.kontrol_minutes.toLocaleString('id-ID')} mnt)
+                                            </div>
+                                        </td>
+                                        <td className="mono" style={{ textAlign: 'right' }}>
+                                            {r.constant_per_hour.toLocaleString('id-ID')}
+                                        </td>
+                                        <td className="mono" style={{
+                                            textAlign: 'right', fontWeight: 700,
+                                            color: 'var(--status-on, #16a34a)',
+                                        }}>
+                                            Rp {Math.round(r.allowance_rp).toLocaleString('id-ID')}
+                                        </td>
+                                    </tr>
+                                ))}
+                                <tr style={{
+                                    background: 'var(--status-on-soft, rgba(34,197,94,0.08))',
+                                    borderTop: '2px solid var(--status-on, #22c55e)',
+                                    fontWeight: 700,
+                                }}>
+                                    <td colSpan={3} style={{ textAlign: 'right' }}>TOTAL</td>
+                                    <td className="mono" style={{ textAlign: 'right' }}>
+                                        {allowance.summary.total_kontrol_hours.toFixed(2)} jam
+                                    </td>
+                                    <td/>
+                                    <td className="mono" style={{
+                                        textAlign: 'right',
+                                        color: 'var(--status-on, #16a34a)',
+                                    }}>
+                                        Rp {Math.round(allowance.summary.total_allowance).toLocaleString('id-ID')}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
-            <div className="text-xs text-gray-500">
-                {allowance.summary.n_personnel} personel •
-                Rata-rata Rp {Math.round(allowance.summary.avg_allowance).toLocaleString('id-ID')} per personel
+            <div className="faint text-sm" style={{ marginTop: 8 }}>
+                Rata-rata Rp {Math.round(allowance.summary.avg_allowance).toLocaleString('id-ID')} per personel.
             </div>
 
-            {/* Export */}
-            <button
-                onClick={downloadCSV}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm">
-                ⬇ Download CSV
-            </button>
-        </div>
+            <div style={{ marginTop: 12 }}>
+                <button className="btn btn-primary" onClick={downloadCSV}>
+                    Download CSV
+                </button>
+            </div>
+        </>
     );
 }
