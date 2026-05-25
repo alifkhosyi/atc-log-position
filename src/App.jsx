@@ -38,6 +38,9 @@ import { AdminAudit }         from "./pages/admin/Audit.jsx"
 import Reports from "./Reports.jsx"
 import AdminReportMonitoring from "./AdminReportMonitoring.jsx"
 
+// === Roster (BARU — atc_roster engine) ===
+import RosterPage from "./pages/RosterPage.tsx"
+
 // ── Page routing map ──
 const PAGES_CABANG = {
   dashboard:        CabangDash,
@@ -47,6 +50,7 @@ const PAGES_CABANG = {
   handover:         CabangHandover,
   ho_to_mo:         CabangHoToMo,
   reports:          Reports,
+  roster:           RosterPage,    // ← BARU
 }
 const PAGES_ADMIN = {
   dashboard:     AdminDash,
@@ -58,6 +62,7 @@ const PAGES_ADMIN = {
   mon_reports:   AdminReportMonitoring,
   export:        AdminExport,
   audit:         AdminAudit,
+  roster:        RosterPage,       // ← BARU
 }
 
 // ── App shell (inside providers) ──
