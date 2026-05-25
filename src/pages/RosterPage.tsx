@@ -25,6 +25,8 @@
 import { useEffect, useMemo, useState } from 'react';
 // Supabase client di repo log-position: src/supabase.js
 import { supabase } from '../supabase';
+// User context (role + branch_code)
+import { useApp } from '../lib/context.jsx';
 
 // Roster engine: src/lib/roster-engine/
 import {
@@ -35,6 +37,8 @@ import {
     validateFull, splitBySeverity,
     leaveRangeFromDates,
     listAirports, getAirport, getUnit, getBaselineForMonth,
+    computeAllowanceTable, summarizeAllowance,
+    type PersonnelAllowance, type AllowanceSummary,
 } from '../lib/roster-engine';
 
 // ============================================================
@@ -107,12 +111,32 @@ interface RosterRow {
 // ============================================================
 
 export default function RosterPage() {
+    // ---- User context (untuk lock airport per role) ----
+    const ctx = useApp();
+    const user = ctx?.user;
+    const isAdmin = user?.role === 'admin';
+    // Branch code MO cabang — format diasumsikan UPPER, match airport_code engine
+    const userBranchCode = (user?.branch_code || '').toUpperCase();
+
     // ---- Setup state ----
     const allAirports = useMemo(() => listAirports(), []);
-    const [airportCode, setAirportCode] = useState('AMBON');
+    // Default airport: kalau MO cabang, lock ke branch_code. Kalau admin, default AMBON.
+    const [airportCode, setAirportCode] = useState(
+        isAdmin ? 'AMBON' : (userBranchCode || 'AMBON')
+    );
     const [unit, setUnit] = useState('TWR');
     const [year, setYear] = useState(new Date().getFullYear());
     const [month, setMonth] = useState(new Date().getMonth() + 1);
+
+    // ---- Tab navigation: 'roster' atau 'ca' (Control Allowance) ----
+    const [activeTab, setActiveTab] = useState<'roster' | 'ca'>('roster');
+
+    // ---- Lock airport ke branch_code kalau bukan admin ----
+    useEffect(() => {
+        if (!isAdmin && userBranchCode && userBranchCode !== airportCode) {
+            setAirportCode(userBranchCode);
+        }
+    }, [isAdmin, userBranchCode]);
 
     // ---- Data state ----
     const [dbPersonnel, setDbPersonnel] = useState<DBPersonnel[]>([]);
@@ -578,21 +602,60 @@ export default function RosterPage() {
     // ============================================================
     // RENDER
     // ============================================================
+    // Airport list yang boleh dipilih oleh user ini
+    const selectableAirports = useMemo(() => {
+        if (isAdmin) return allAirports;
+        // MO cabang: cuma cabang sendiri
+        return allAirports.filter(a => a.airport_code === userBranchCode);
+    }, [isAdmin, userBranchCode, allAirports]);
+
     return (
         <div className="p-4 md:p-6 space-y-4 max-w-full">
             <header className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">Roster ATC</h1>
-                <span className="text-sm text-gray-500">{dbPersonnel.length} personel</span>
+                <span className="text-sm text-gray-500">
+                    {dbPersonnel.length} personel
+                    {!isAdmin && userBranchCode && (
+                        <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                            Cabang {userBranchCode}
+                        </span>
+                    )}
+                </span>
             </header>
 
-            {/* Toolbar */}
+            {/* Tab navigation */}
+            <div className="flex border-b">
+                <button
+                    onClick={() => setActiveTab('roster')}
+                    className={`px-4 py-2 font-semibold border-b-2 ${
+                        activeTab === 'roster'
+                            ? 'border-blue-600 text-blue-700'
+                            : 'border-transparent text-gray-500 hover:text-gray-800'
+                    }`}>
+                    📅 Roster
+                </button>
+                <button
+                    onClick={() => setActiveTab('ca')}
+                    className={`px-4 py-2 font-semibold border-b-2 ${
+                        activeTab === 'ca'
+                            ? 'border-blue-600 text-blue-700'
+                            : 'border-transparent text-gray-500 hover:text-gray-800'
+                    }`}>
+                    💰 Control Allowance
+                </button>
+            </div>
+
+            {/* Toolbar (shared antara tab Roster & CA) */}
             <div className="flex flex-wrap gap-3 items-end p-3 bg-gray-50 rounded">
                 <label className="flex flex-col">
-                    <span className="text-xs font-semibold text-gray-600 mb-1">Cabang</span>
-                    <select className="border rounded px-2 py-1 min-w-[160px]"
+                    <span className="text-xs font-semibold text-gray-600 mb-1">
+                        Cabang {!isAdmin && '(terkunci)'}
+                    </span>
+                    <select className="border rounded px-2 py-1 min-w-[160px] disabled:bg-gray-100 disabled:cursor-not-allowed"
                             value={airportCode}
+                            disabled={!isAdmin}
                             onChange={e => { setAirportCode(e.target.value); setUnit('TWR'); }}>
-                        {allAirports.map(a => (
+                        {selectableAirports.map(a => (
                             <option key={a.airport_code} value={a.airport_code}>
                                 {a.airport_name}
                             </option>
@@ -668,6 +731,9 @@ export default function RosterPage() {
                 </div>
             )}
 
+            {/* ==================== TAB ROSTER ==================== */}
+            {activeTab === 'roster' && (
+            <>
             {/* FRMS panel */}
             {roster && (frmsErrors.length > 0 || frmsWarnings.length > 0) && (
                 <details className="border rounded p-3 bg-white">
@@ -805,6 +871,254 @@ export default function RosterPage() {
                     <span className="inline-flex items-center"><span className="w-4 h-4 bg-gray-100 mr-1 inline-block border"></span>Off</span>
                 </div>
             )}
+            </>
+            )}
+
+            {/* ==================== TAB CONTROL ALLOWANCE ==================== */}
+            {activeTab === 'ca' && (
+                <CAPanel
+                    airportCode={airportCode}
+                    unit={unit}
+                    year={year}
+                    month={month}
+                    roster={roster}
+                    rosterStatus={rosterStatus}
+                    dbPersonnel={dbPersonnel}
+                    unitConfig={unitConfig}
+                />
+            )}
+        </div>
+    );
+}
+
+
+// ============================================================
+// CA PANEL — Sub-component untuk tab Control Allowance
+// ============================================================
+
+interface CAPanelProps {
+    airportCode: string;
+    unit: string;
+    year: number;
+    month: number;
+    roster: Record<string, RosterCell[]> | null;
+    rosterStatus: 'DRAFT' | 'FINAL';
+    dbPersonnel: DBPersonnel[];
+    unitConfig: ReturnType<typeof getUnit> | undefined;
+}
+
+function CAPanel(props: CAPanelProps) {
+    const { airportCode, unit, year, month, roster, rosterStatus, dbPersonnel, unitConfig } = props;
+
+    if (!roster) {
+        return (
+            <div className="text-gray-500 italic py-8 text-center">
+                Belum ada roster. Buka tab <strong>Roster</strong>, klik Generate dulu,
+                baru Control Allowance bisa dihitung.
+            </div>
+        );
+    }
+
+    if (!unitConfig?.rolling) {
+        return (
+            <div className="bg-amber-50 border border-amber-300 text-amber-800 p-3 rounded text-sm">
+                Control Allowance memerlukan konfigurasi rolling.
+                Unit <strong>{airportCode}/{unit}</strong> belum punya rolling table —
+                tunjangan tidak bisa dihitung.
+            </div>
+        );
+    }
+
+    // Build airport_name untuk lookup konstanta
+    const cfg = getAirport(airportCode);
+    const airportName = cfg?.airport_name || airportCode;
+
+    // Build fake GenerateResult untuk feed ke engine
+    const fakeResult = {
+        success: true as const,
+        year, month,
+        daysInMonth: new Date(year, month, 0).getDate(),
+        personnel: dbPersonnel.map(p => ({ id: p.id, initial: p.initial, leaves: [] })),
+        roster,
+        mode: 'external' as const,
+        cutoffDay: 0,
+        requiredPerDay: unitConfig?.min_on_duty_baseline ?? 3,
+        isTni: false,
+    };
+
+    const nameLookup: Record<string, string> = {};
+    for (const p of dbPersonnel) nameLookup[p.id] = p.full_name || p.initial;
+    const nikLookup: Record<string, string> = {};  // empty for now
+
+    const allowance = computeAllowanceTable({
+        airportName,
+        result: fakeResult,
+        unitConfig,
+        priorityOrder: dbPersonnel.map(p => p.id),
+        nameLookup,
+        nikLookup,
+        rosterStatus,
+    });
+
+    if (allowance.error) {
+        return (
+            <div className="bg-red-50 border border-red-300 text-red-800 p-3 rounded text-sm">
+                {allowance.error}
+            </div>
+        );
+    }
+
+    // CSV export
+    function downloadCSV() {
+        const headers = ['No', 'Inisial', 'Nama', 'Jam Kontrol (jam)', 'Konstanta (Rp/jam)', 'Tunjangan (Rp)'];
+        const lines = [
+            `Control Allowance - ${airportName} ${unit} - ${month}/${year}`,
+            `Status: ${rosterStatus}`,
+            `Konstanta: Rp ${allowance.constant_per_hour.toLocaleString('id-ID')}/jam`,
+            '',
+            headers.join(','),
+            ...allowance.rows.map((r, i) =>
+                [
+                    i + 1,
+                    r.initial,
+                    `"${r.name}"`,
+                    r.kontrol_hours.toFixed(2),
+                    r.constant_per_hour.toFixed(0),
+                    r.allowance_rp.toFixed(0),
+                ].join(',')
+            ),
+            '',
+            `TOTAL,,,${allowance.summary.total_kontrol_hours.toFixed(2)},,${allowance.summary.total_allowance.toFixed(0)}`,
+        ];
+        const csv = lines.join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `CA_${airportName.replace(/\s+/g, '_')}_${unit}_${year}_${String(month).padStart(2, '0')}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    return (
+        <div className="space-y-3">
+            {/* Header metric cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="bg-white border rounded p-3">
+                    <div className="text-xs text-gray-500">Bandara / Unit</div>
+                    <div className="text-base font-bold mt-1">{airportName} {unit}</div>
+                </div>
+                <div className="bg-white border rounded p-3">
+                    <div className="text-xs text-gray-500">
+                        Konstanta {allowance.is_tma && <span className="text-amber-600">★ TMA</span>}
+                    </div>
+                    <div className="text-base font-bold mt-1">
+                        Rp {allowance.constant_per_hour.toLocaleString('id-ID')}<span className="text-xs font-normal">/jam</span>
+                    </div>
+                </div>
+                <div className="bg-white border rounded p-3">
+                    <div className="text-xs text-gray-500">Total Jam Kontrol</div>
+                    <div className="text-base font-bold mt-1">
+                        {allowance.summary.total_kontrol_hours.toFixed(2)} jam
+                    </div>
+                </div>
+                <div className={`border rounded p-3 ${
+                    rosterStatus === 'FINAL'
+                        ? 'bg-green-50 border-green-300'
+                        : 'bg-yellow-50 border-yellow-300'
+                }`}>
+                    <div className="text-xs text-gray-500">Status Roster</div>
+                    <div className="text-base font-bold mt-1">
+                        {rosterStatus === 'FINAL' ? '🔒 FINAL' : '🚧 DRAFT'}
+                    </div>
+                </div>
+            </div>
+
+            {/* Banner DRAFT warning */}
+            {rosterStatus !== 'FINAL' && (
+                <div className="bg-yellow-50 border border-yellow-300 text-yellow-800 p-3 rounded text-sm">
+                    ⚠️ Roster masih <strong>DRAFT</strong>. Tunjangan ini boleh dipakai untuk preview,
+                    tapi <strong>jangan submit ke HR/finance</strong> sebelum roster di-mark FINAL
+                    di tab Roster.
+                </div>
+            )}
+
+            {/* Domain rule banner */}
+            <div className="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded text-sm">
+                ℹ️ <strong>Jam Kontrol</strong> = waktu Controller + Assistant per personel
+                (waktu Istirahat <strong>tidak</strong> dihitung). Tunjangan = Jam Kontrol × Konstanta.
+            </div>
+
+            {/* Warnings */}
+            {allowance.warnings.length > 0 && (
+                <details className="border rounded p-3 bg-white">
+                    <summary className="cursor-pointer font-semibold text-amber-700">
+                        ⚠️ {allowance.warnings.length} validation warning
+                    </summary>
+                    <ul className="mt-2 text-sm space-y-1 text-amber-700">
+                        {allowance.warnings.map((w, i) => <li key={i}>• {w}</li>)}
+                    </ul>
+                </details>
+            )}
+
+            {/* CA Table */}
+            <div className="overflow-x-auto border rounded bg-white">
+                <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-3 py-2 text-left w-12">No</th>
+                            <th className="px-3 py-2 text-left">Inisial</th>
+                            <th className="px-3 py-2 text-left">Nama Lengkap</th>
+                            <th className="px-3 py-2 text-right">Jam Kontrol</th>
+                            <th className="px-3 py-2 text-right">Konstanta (Rp/jam)</th>
+                            <th className="px-3 py-2 text-right">Tunjangan (Rp)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {allowance.rows.map((r, i) => (
+                            <tr key={r.personnel_id} className="border-t hover:bg-gray-50">
+                                <td className="px-3 py-2">{i + 1}</td>
+                                <td className="px-3 py-2 font-semibold">{r.initial}</td>
+                                <td className="px-3 py-2">{r.name}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">
+                                    {r.kontrol_hours.toFixed(2)} jam
+                                    <div className="text-[10px] text-gray-400">
+                                        ({r.kontrol_minutes.toLocaleString('id-ID')} mnt)
+                                    </div>
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums">
+                                    {r.constant_per_hour.toLocaleString('id-ID')}
+                                </td>
+                                <td className="px-3 py-2 text-right font-bold text-green-700 tabular-nums">
+                                    Rp {Math.round(r.allowance_rp).toLocaleString('id-ID')}
+                                </td>
+                            </tr>
+                        ))}
+                        <tr className="border-t-2 border-green-600 bg-green-50 font-bold">
+                            <td colSpan={3} className="px-3 py-3 text-right">TOTAL</td>
+                            <td className="px-3 py-3 text-right tabular-nums">
+                                {allowance.summary.total_kontrol_hours.toFixed(2)} jam
+                            </td>
+                            <td></td>
+                            <td className="px-3 py-3 text-right text-green-800 tabular-nums">
+                                Rp {Math.round(allowance.summary.total_allowance).toLocaleString('id-ID')}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="text-xs text-gray-500">
+                {allowance.summary.n_personnel} personel •
+                Rata-rata Rp {Math.round(allowance.summary.avg_allowance).toLocaleString('id-ID')} per personel
+            </div>
+
+            {/* Export */}
+            <button
+                onClick={downloadCSV}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm">
+                ⬇ Download CSV
+            </button>
         </div>
     );
 }
