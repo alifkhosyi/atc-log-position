@@ -1,43 +1,35 @@
 // ============================================================
-// src/components/Login.jsx — Login screen (Phase 5 redesign)
+// src/components/Login.jsx — Login screen (Phase 5 · prototype 1:1)
 // ──────────────────────────────────────────────────────────
-// What's new vs Phase 4:
-//   • Enterprise split-panel layout (hero ≥1024px, stacked
-//     below). Mobile keeps the brand at the top of the card.
-//   • Composable in-file primitives — Alert, FormField,
-//     PasswordInput — so the markup reads as form semantics
-//     and we don't duplicate <label>/<input>/aria-* wiring.
-//   • Six interaction states implemented end-to-end:
-//       default · hover · focus-visible · active · disabled
-//     plus loading (button + form), error (banner + per-field),
-//     and success (post-reset flash).
-//   • Inline client-side validation (email shape + required)
-//     runs onBlur and again on submit; aria-invalid and
-//     aria-describedby wire each field to its error message.
-//   • Password visibility toggle with proper aria-pressed and
-//     CapsLock detection — both purely additive (don't block
-//     submit, don't break password managers / autofill).
-//   • Friendly Indonesian error mapping is unchanged in spirit
-//     but split into a pure helper for testability.
-//   • Network-aware: shows an offline banner the instant the
-//     browser reports `offline`, and blocks submit until back.
-//   • "Lupa password?" wired to supabase.auth.resetPasswordForEmail
-//     with the same friendly error mapping + success feedback.
-//   • Prevents double-submit (button disabled + aria-busy on
-//     form). All async paths null-safe.
-//   • Honours prefers-reduced-motion via the stylesheet.
+// Ports the standalone "Login Prototype" verbatim:
+//   - Split layout (hero kiri 1.05fr · form kanan 1fr ≥ 980px)
+//   - Conic-gradient brand mark with radar-sweep animation
+//   - Live UTC clock in hero footer
+//   - Inline theme toggle (top-right of form pane) — same
+//     localStorage key as ThemeToggle.jsx so the choice persists
+//     to the rest of the app
+//   - Alert / field-hint / caps-warn primitives
 //
-// All styling comes from src/styles/login-clean.css — this file
-// owns behaviour & accessibility wiring, not visuals.
+// All UI text & visual treatment matches the prototype exactly.
+// What's added over the prototype:
+//   - Real Supabase auth (signInWithPassword + resetPasswordForEmail)
+//   - Friendly Indonesian error mapping
+//   - Network online/offline awareness (window events)
+//   - Double-submit guard + aria-busy
+//   - Auto-focus first empty field on mount
+//   - Inline client-side validation (email shape + min length)
+//   - Demo state from the prototype is dropped (it was Tweaks-driven)
+//
+// Styling lives in src/styles/login-clean.css (also ported 1:1).
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../supabase.js"
-import { RadarLogo, I } from "./Icons.jsx"
+import { I } from "./Icons.jsx"
 import "../styles/login-clean.css"
 
 /* ----------------------------------------------------------------
-   Helpers
+   helpers — pure, testable
    ---------------------------------------------------------------- */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -53,262 +45,200 @@ const friendlyAuthError = (raw = "") => {
     return "Email belum dikonfirmasi. Cek inbox Anda untuk link aktivasi."
   if (m.includes("user not found"))
     return "Akun tidak ditemukan. Hubungi admin AirNav untuk pendaftaran."
-  if (!raw) return "Terjadi kesalahan. Silakan coba lagi."
-  return raw
+  return raw || "Terjadi kesalahan. Silakan coba lagi."
+}
+
+const validateEmail = (v) => {
+  const t = (v || "").trim()
+  if (!t) return "Email wajib diisi."
+  if (!EMAIL_RE.test(t)) return "Format email tidak valid."
+  return ""
+}
+const validatePassword = (v) => {
+  if (!v) return "Password wajib diisi."
+  if (v.length < 6) return "Password minimal 6 karakter."
+  return ""
 }
 
 /* ----------------------------------------------------------------
-   Primitives (kept in-file: only used here, and small enough that
-   extracting them would add overhead without payoff)
+   live UTC clock — shown in hero footer
    ---------------------------------------------------------------- */
-const Alert = ({ kind = "danger", title, children, id, onDismiss }) => (
-  <div
-    id={id}
-    className={`login-alert login-alert--${kind}`}
-    role={kind === "danger" ? "alert" : "status"}
-    aria-live={kind === "danger" ? "assertive" : "polite"}
-  >
-    <span className="login-alert-icon" aria-hidden="true">
-      {kind === "danger" ? "!" : kind === "success" ? "✓" : "i"}
-    </span>
-    <div>
-      {title && <strong>{title}</strong>}
-      {title && children ? <> — </> : null}
-      {children}
-      {onDismiss && (
-        <>
-          {" "}
-          <button
-            type="button"
-            className="login-link"
-            onClick={onDismiss}
-            aria-label="Tutup notifikasi"
-          >
-            Tutup
-          </button>
-        </>
-      )}
-    </div>
-  </div>
-)
-
-const FormField = ({
-  id,
-  label,
-  meta,
-  error,
-  hint,
-  children,
-}) => {
-  const helpId = `${id}-help`
-  const errorId = `${id}-error`
-  const describedBy = error ? errorId : (hint ? helpId : undefined)
-  return (
-    <div className="login-field">
-      <div className="login-field-row">
-        <label htmlFor={id} className="login-label">{label}</label>
-        {meta && <span className="login-label-meta">{meta}</span>}
-      </div>
-      {React.cloneElement(children, {
-        id,
-        "aria-invalid": error ? "true" : undefined,
-        "aria-describedby": describedBy,
-      })}
-      <div
-        id={error ? errorId : helpId}
-        className={`login-help${error ? " login-help--error" : ""}`}
-        aria-live="polite"
-      >
-        {error || hint || " "}
-      </div>
-    </div>
-  )
+const fmtZ = (d) => {
+  const pad = (n) => String(n).padStart(2, "0")
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}Z`
+}
+const useNow = () => {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(t)
+  }, [])
+  return now
 }
 
-const PasswordInput = ({
-  id,
-  value,
-  onChange,
-  onBlur,
-  onKeyDown,
-  disabled,
-  placeholder = "••••••••",
-  autoComplete = "current-password",
-}) => {
-  const [visible, setVisible] = useState(false)
-  const [capsLock, setCapsLock] = useState(false)
+/* ----------------------------------------------------------------
+   theme — same contract as ThemeToggle.jsx (atc-theme key)
+   ---------------------------------------------------------------- */
+const readTheme = () => {
+  try { return localStorage.getItem("atc-theme") === "light" ? "light" : "dark" }
+  catch { return "dark" }
+}
+const useTheme = () => {
+  const [theme, setTheme] = useState(readTheme)
+  useEffect(() => {
+    if (theme === "light") document.documentElement.dataset.theme = "light"
+    else document.documentElement.removeAttribute("data-theme")
+    try { localStorage.setItem("atc-theme", theme) } catch {}
+  }, [theme])
+  return [theme, setTheme]
+}
 
-  const handleKey = (e) => {
-    // CapsLock detection — non-blocking, purely informational
-    if (typeof e.getModifierState === "function") {
-      setCapsLock(e.getModifierState("CapsLock"))
-    }
-    onKeyDown?.(e)
-  }
-
+/* ----------------------------------------------------------------
+   Hero pane — desktop ≥ 980px
+   ---------------------------------------------------------------- */
+const Hero = ({ online }) => {
+  const now = useNow()
   return (
-    <>
-      <div className="login-input-wrap">
-        <input
-          id={id}
-          type={visible ? "text" : "password"}
-          value={value}
-          onChange={onChange}
-          onBlur={onBlur}
-          onKeyDown={handleKey}
-          onKeyUp={handleKey}
-          disabled={disabled}
-          placeholder={placeholder}
-          autoComplete={autoComplete}
-          spellCheck={false}
-          className="login-input login-input--has-trailing"
-        />
-        <button
-          type="button"
-          className="login-input-trailing"
-          onClick={() => setVisible((v) => !v)}
-          aria-pressed={visible}
-          aria-label={visible ? "Sembunyikan password" : "Tampilkan password"}
-          tabIndex={0}
-          disabled={disabled}
-        >
-          <I n={visible ? "eye-off" : "eye"} s={18} />
-          {/* Icon flips with state; aria-pressed carries the meaning for SR. */}
-        </button>
+    <aside className="hero" aria-hidden="true">
+      <div className="lockup">
+        <span className="mark" aria-hidden="true" />
+        <div className="lockup-text">
+          <b>Log Position</b>
+          <small>AirNav Indonesia · Operations</small>
+        </div>
       </div>
-      {capsLock && (
-        <span className="login-caps" role="status">
-          <I n="alert-triangle" s={14} /> Caps Lock aktif
+
+      <div className="pitch">
+        <span className="eyebrow">Operational sign-in</span>
+        <h1>Catat posisi, handover, dan jam jaga <em>tanpa friksi.</em></h1>
+        <p>
+          Satu tempat untuk Log Position, Handover Mo-to-Mo, dan rekap traffic
+          harian — dari menara hingga kantor pusat.
+        </p>
+
+        <ul className="features">
+          <li>
+            <I n="check" s={14} />
+            <span><b>Approval otomatis</b> sesuai FRMS &amp; control allowance.</span>
+          </li>
+          <li>
+            <I n="check" s={14} />
+            <span><b>Audit trail penuh</b> untuk setiap pergantian shift.</span>
+          </li>
+          <li>
+            <I n="check" s={14} />
+            <span><b>Multi-cabang</b> dengan permission per-role.</span>
+          </li>
+        </ul>
+      </div>
+
+      <div className="hero-footer">
+        <span className={`trust${online ? "" : " offline"}`}>
+          <span className="dot" />
+          <b>{online ? "Sistem operasional" : "Sambungan terputus"}</b>
         </span>
-      )}
-    </>
+        <span className="hero-clock">{fmtZ(now)}</span>
+      </div>
+    </aside>
   )
 }
 
 /* ----------------------------------------------------------------
-   Login component
+   Login form — real supabase wiring + prototype markup
    ---------------------------------------------------------------- */
-export const Login = ({ onLogin }) => {
-  // form state
-  const [email, setEmail] = useState("")
-  const [pw, setPw] = useState("")
+const LoginForm = ({ online, onLogin }) => {
+  const [email, setEmail]       = useState("")
+  const [pw, setPw]             = useState("")
   const [remember, setRemember] = useState(true)
+  const [showPw, setShowPw]     = useState(false)
+  const [caps, setCaps]         = useState(false)
 
-  // per-field validation
   const [emailErr, setEmailErr] = useState("")
-  const [pwErr, setPwErr] = useState("")
-
-  // global ui state
+  const [pwErr, setPwErr]       = useState("")
+  const [banner, setBanner]     = useState(null)   // { kind, title, message }
   const [submitting, setSubmitting] = useState(false)
-  const [resetting, setResetting] = useState(false)
-  const [banner, setBanner] = useState(null) // { kind, title?, message }
-  const [online, setOnline] = useState(
-    typeof navigator !== "undefined" ? navigator.onLine : true
-  )
+  const [resetting,  setResetting]  = useState(false)
 
   const emailRef = useRef(null)
-  const passwordRef = useRef(null)
+  const pwRef    = useRef(null)
 
-  /* --- focus the first empty field on mount ----------------------- */
+  // focus first empty field on mount
   useEffect(() => {
     const t = window.setTimeout(() => {
-      const target = email ? passwordRef.current : emailRef.current
-      target?.focus({ preventScroll: true })
+      (email ? pwRef.current : emailRef.current)?.focus({ preventScroll: true })
     }, 50)
     return () => window.clearTimeout(t)
-    // mount-only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /* --- online / offline awareness -------------------------------- */
+  // sync offline banner with parent-driven `online`
   useEffect(() => {
-    const onOn = () => setOnline(true)
-    const onOff = () => setOnline(false)
-    window.addEventListener("online", onOn)
-    window.addEventListener("offline", onOff)
-    return () => {
-      window.removeEventListener("online", onOn)
-      window.removeEventListener("offline", onOff)
+    if (!online) {
+      setBanner({
+        kind: "warn",
+        title: "Sedang offline",
+        message: "Sambungkan internet Anda untuk melanjutkan.",
+      })
+    } else {
+      setBanner((b) => (b && b.title === "Sedang offline" ? null : b))
     }
-  }, [])
+  }, [online])
 
-  /* --- validators ------------------------------------------------- */
-  const validateEmail = useCallback((v) => {
-    const trimmed = v.trim()
-    if (!trimmed) return "Email wajib diisi."
-    if (!EMAIL_RE.test(trimmed)) return "Format email tidak valid."
-    return ""
-  }, [])
+  const handleKey = (e) => {
+    if (typeof e.getModifierState === "function") {
+      setCaps(e.getModifierState("CapsLock"))
+    }
+  }
 
-  const validatePassword = useCallback((v) => {
-    if (!v) return "Password wajib diisi."
-    if (v.length < 6) return "Password minimal 6 karakter."
-    return ""
-  }, [])
+  const handleSubmit = useCallback(async (e) => {
+    e?.preventDefault?.()
+    if (submitting || resetting) return
+    if (!online) {
+      setBanner({
+        kind: "warn",
+        title: "Sedang offline",
+        message: "Sambungkan internet Anda untuk melanjutkan.",
+      })
+      return
+    }
+    const eErr = validateEmail(email)
+    const pErr = validatePassword(pw)
+    setEmailErr(eErr); setPwErr(pErr)
+    if (eErr || pErr) {
+      ;(eErr ? emailRef : pwRef).current?.focus()
+      return
+    }
 
-  /* --- submit ----------------------------------------------------- */
-  const handleSubmit = useCallback(
-    async (e) => {
-      e?.preventDefault?.()
-      if (submitting) return
-
-      // hard guard: offline
-      if (!online) {
-        setBanner({
-          kind: "warn",
-          title: "Tidak ada koneksi",
-          message: "Hubungkan kembali jaringan internet Anda untuk masuk.",
-        })
-        return
-      }
-
-      // client-side validation
-      const eErr = validateEmail(email)
-      const pErr = validatePassword(pw)
-      setEmailErr(eErr)
-      setPwErr(pErr)
-      if (eErr || pErr) {
-        // Move focus to the first invalid field — keyboard + SR friendly
-        if (eErr) emailRef.current?.focus()
-        else passwordRef.current?.focus()
-        return
-      }
-
-      setSubmitting(true)
-      setBanner(null)
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password: pw,
-        })
-        if (error) {
-          setBanner({
-            kind: "danger",
-            title: "Gagal masuk",
-            message: friendlyAuthError(error.message),
-          })
-          setSubmitting(false)
-          // re-focus password to fix it — but don't clobber the value
-          passwordRef.current?.focus()
-          return
-        }
-        // success — handoff to parent
-        onLogin?.(data?.session ?? null)
-      } catch (err) {
+    setSubmitting(true); setBanner(null)
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: pw,
+      })
+      if (error) {
         setBanner({
           kind: "danger",
           title: "Gagal masuk",
-          message: friendlyAuthError(err?.message || ""),
+          message: friendlyAuthError(error.message),
         })
         setSubmitting(false)
+        pwRef.current?.focus()
+        return
       }
-    },
-    [email, pw, online, submitting, validateEmail, validatePassword, onLogin]
-  )
+      // success — hand off to parent (App.jsx wires session into AppProvider)
+      onLogin?.(data?.session ?? null)
+    } catch (err) {
+      setBanner({
+        kind: "danger",
+        title: "Gagal masuk",
+        message: friendlyAuthError(err?.message || ""),
+      })
+      setSubmitting(false)
+    }
+  }, [email, pw, online, submitting, resetting, onLogin])
 
-  /* --- forgot password ------------------------------------------- */
   const handleForgot = useCallback(async () => {
-    if (resetting) return
+    if (resetting || submitting) return
     const eErr = validateEmail(email)
     if (eErr) {
       setEmailErr("Isi email Anda dulu untuk reset password.")
@@ -318,13 +248,12 @@ export const Login = ({ onLogin }) => {
     if (!online) {
       setBanner({
         kind: "warn",
-        title: "Tidak ada koneksi",
-        message: "Hubungkan kembali jaringan internet Anda untuk mengirim email reset.",
+        title: "Sedang offline",
+        message: "Sambungkan internet Anda untuk mengirim email reset.",
       })
       return
     }
-    setResetting(true)
-    setBanner(null)
+    setResetting(true); setBanner(null)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
@@ -339,7 +268,7 @@ export const Login = ({ onLogin }) => {
         setBanner({
           kind: "success",
           title: "Email terkirim",
-          message: `Kami sudah mengirim instruksi reset ke ${email.trim()}.`,
+          message: `Instruksi reset dikirim ke ${email.trim()}.`,
         })
       }
     } catch (err) {
@@ -351,206 +280,237 @@ export const Login = ({ onLogin }) => {
     } finally {
       setResetting(false)
     }
-  }, [email, online, resetting, validateEmail])
+  }, [email, online, resetting, submitting])
 
-  /* --- derived UI ------------------------------------------------ */
   const formBusy = submitting || resetting
-  const yearLabel = useMemo(() => new Date().getFullYear(), [])
 
   return (
-    <div className="login-bg">
-      {/* ---------- Hero panel (desktop ≥1024px) -------------------- */}
-      <aside className="login-hero" aria-hidden="true">
-        <div>
-          <div className="login-hero-top">
-            <RadarLogo size={32} />
-            <span>ATC Log Position</span>
-          </div>
-          <span className="login-hero-eyebrow" style={{ marginTop: 12, display: "inline-flex" }}>
-            AirNav Indonesia · Operations
-          </span>
-          <h1 className="login-hero-headline">
-            Catat posisi, handover, dan kontrol jam jaga tanpa friksi.
-          </h1>
-          <p className="login-hero-sub">
-            Satu tempat untuk Log Position, Handover Mo-to-Mo, dan rekap traffic harian — siap pakai dari menara hingga kantor pusat.
-          </p>
-          <ul className="login-hero-list">
-            <li><span>Approval otomatis sesuai FRMS &amp; control allowance</span></li>
-            <li><span>Audit trail penuh untuk setiap pergantian shift</span></li>
-            <li><span>Dukungan multi-cabang dengan permission per-role</span></li>
-          </ul>
+    <form
+      className="form-card"
+      onSubmit={handleSubmit}
+      noValidate
+      aria-busy={formBusy ? "true" : "false"}
+    >
+      {/* Mobile / centered-layout brand */}
+      <div className="lockup mobile-lockup">
+        <span className="mark" aria-hidden="true" />
+        <div className="lockup-text">
+          <b>Log Position</b>
+          <small>AirNav Indonesia</small>
         </div>
-        <div className="login-hero-footer">
-          <span className="login-hero-status">
-            <span className="login-hero-status-dot" />
-            Sistem operasional &middot; All systems normal
-          </span>
-          <span>v5.0 · {yearLabel}</span>
-        </div>
-      </aside>
+      </div>
 
-      {/* ---------- Form panel ------------------------------------- */}
-      <section className="login-panel">
-        <div className="login-container">
-          {/* Mobile brand (hidden on desktop via CSS) */}
-          <div className="login-brand">
-            <div className="login-brand-mark">
-              <RadarLogo size={40} />
-              <div>
-                <h1 className="login-title">ATC Log Position</h1>
-                <p className="login-subtitle">AirNav Indonesia</p>
-              </div>
-            </div>
-            <p className="login-desc">
-              Air Traffic Control · Position Management System
-            </p>
+      <div className="form-eyebrow">Sign in · v5.0</div>
+      <h2>Masuk ke sistem</h2>
+      <p className="sub">Gunakan email AirNav resmi Anda untuk mengakses dashboard.</p>
+
+      {banner && (
+        <div
+          className={`alert alert--${banner.kind}`}
+          role={banner.kind === "danger" ? "alert" : "status"}
+        >
+          <I
+            n={
+              banner.kind === "danger"  ? "alert"
+              : banner.kind === "success" ? "check"
+              : banner.kind === "warn"    ? "wifi-off"
+              : "info"
+            }
+            s={16}
+          />
+          <div className="alert-body">
+            <b>{banner.title}</b>
+            <p>{banner.message}</p>
           </div>
-
-          <form
-            className="login-card"
-            onSubmit={handleSubmit}
-            noValidate
-            aria-busy={formBusy ? "true" : "false"}
-            aria-describedby="login-banner-region"
+          <button
+            type="button"
+            className="alert-close"
+            onClick={() => setBanner(null)}
+            aria-label="Tutup notifikasi"
           >
-            <header className="login-card-head">
-              <h2 className="login-card-title">Masuk ke sistem</h2>
-              <p className="login-card-sub">
-                Gunakan email AirNav resmi Anda untuk mengakses dashboard.
-              </p>
-            </header>
-
-            {/* Banner region — always present so SR doesn't lose context */}
-            <div id="login-banner-region">
-              {!online && (
-                <Alert kind="warn" title="Sedang offline">
-                  Sambungkan internet Anda untuk melanjutkan. Form di bawah akan otomatis aktif kembali begitu jaringan tersambung.
-                </Alert>
-              )}
-              {banner && (
-                <Alert
-                  kind={banner.kind}
-                  title={banner.title}
-                  id="login-banner"
-                  onDismiss={() => setBanner(null)}
-                >
-                  {banner.message}
-                </Alert>
-              )}
-            </div>
-
-            <div className="login-form">
-              <FormField
-                id="login-email"
-                label="Email kerja"
-                error={emailErr}
-                hint="Contoh: nama@airnavindonesia.co.id"
-              >
-                <input
-                  ref={emailRef}
-                  type="email"
-                  inputMode="email"
-                  autoComplete="username"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value)
-                    if (emailErr) setEmailErr("")
-                  }}
-                  onBlur={(e) => setEmailErr(validateEmail(e.target.value))}
-                  disabled={formBusy}
-                  placeholder="nama@airnavindonesia.co.id"
-                  className="login-input"
-                />
-              </FormField>
-
-              <FormField
-                id="login-password"
-                label="Password"
-                meta={
-                  <button
-                    type="button"
-                    className="login-link"
-                    onClick={handleForgot}
-                    disabled={formBusy}
-                    aria-busy={resetting ? "true" : "false"}
-                  >
-                    {resetting ? "Mengirim…" : "Lupa password?"}
-                  </button>
-                }
-                error={pwErr}
-              >
-                <PasswordInput
-                  value={pw}
-                  onChange={(e) => {
-                    setPw(e.target.value)
-                    if (pwErr) setPwErr("")
-                  }}
-                  onBlur={(e) => setPwErr(validatePassword(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleSubmit(e)
-                  }}
-                  disabled={formBusy}
-                />
-              </FormField>
-
-              <div className="login-helper-row">
-                <label className="login-check">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    disabled={formBusy}
-                  />
-                  Tetap masuk di perangkat ini
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="login-btn"
-                disabled={formBusy || !online}
-                data-loading={submitting ? "true" : "false"}
-                aria-live="polite"
-              >
-                <span className="login-btn-label">
-                  {submitting ? "Memverifikasi…" : "Masuk"}
-                </span>
-                {submitting && (
-                  <span className="login-spinner" role="presentation" aria-hidden="true" />
-                )}
-                <span className="login-sr-only">
-                  {submitting ? "Sedang memverifikasi kredensial" : "Submit form login"}
-                </span>
-              </button>
-            </div>
-
-            <div className="login-card-foot">
-              <p style={{ margin: 0 }}>
-                Belum punya akun?{" "}
-                <a
-                  className="login-link"
-                  href="mailto:helpdesk@airnavindonesia.co.id?subject=Permintaan%20akun%20ATC%20Log%20Position"
-                >
-                  Hubungi admin AirNav
-                </a>
-              </p>
-            </div>
-          </form>
-
-          <footer className="login-footer">
-            <span className="login-footer-meta">
-              <span className={`login-trust${online ? "" : " login-trust--offline"}`}>
-                <span className="login-trust-dot" />
-                {online ? "Terhubung ke server" : "Offline"}
-              </span>
-            </span>
-            <span>&copy; {yearLabel} AirNav Indonesia · v5.0</span>
-          </footer>
+            <I n="x" s={14} />
+          </button>
         </div>
-      </section>
+      )}
+
+      {/* email */}
+      <div className="field">
+        <div className="field-row">
+          <label htmlFor="login-email">Email kerja</label>
+        </div>
+        <div className="input-wrap">
+          <input
+            ref={emailRef}
+            id="login-email"
+            type="email"
+            inputMode="email"
+            autoComplete="username"
+            spellCheck={false}
+            autoCapitalize="off"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); if (emailErr) setEmailErr("") }}
+            onBlur={(e) => setEmailErr(validateEmail(e.target.value))}
+            disabled={formBusy}
+            placeholder="nama@airnavindonesia.co.id"
+            className={`input${emailErr ? " has-error" : ""}`}
+            aria-invalid={emailErr ? "true" : undefined}
+            aria-describedby="login-email-hint"
+          />
+        </div>
+        <div
+          id="login-email-hint"
+          className={`field-hint${emailErr ? " is-error" : ""}`}
+          aria-live="polite"
+        >
+          {emailErr
+            ? <><I n="alert" s={12} /> {emailErr}</>
+            : <span>Contoh: nama@airnavindonesia.co.id</span>}
+        </div>
+      </div>
+
+      {/* password */}
+      <div className="field">
+        <div className="field-row">
+          <label htmlFor="login-pw">Password</label>
+          <button
+            type="button"
+            className="field-link"
+            onClick={handleForgot}
+            disabled={formBusy}
+          >
+            {resetting ? "Mengirim…" : "Lupa password?"}
+          </button>
+        </div>
+        <div className="input-wrap">
+          <input
+            ref={pwRef}
+            id="login-pw"
+            type={showPw ? "text" : "password"}
+            autoComplete="current-password"
+            value={pw}
+            onChange={(e) => { setPw(e.target.value); if (pwErr) setPwErr("") }}
+            onBlur={(e) => setPwErr(validatePassword(e.target.value))}
+            onKeyDown={handleKey}
+            onKeyUp={handleKey}
+            disabled={formBusy}
+            placeholder="••••••••"
+            className={`input with-trailing${pwErr ? " has-error" : ""}`}
+            aria-invalid={pwErr ? "true" : undefined}
+            aria-describedby="login-pw-hint"
+          />
+          <button
+            type="button"
+            className="input-trailing"
+            onClick={() => setShowPw((v) => !v)}
+            aria-pressed={showPw}
+            aria-label={showPw ? "Sembunyikan password" : "Tampilkan password"}
+            disabled={formBusy}
+            tabIndex={0}
+          >
+            <I n={showPw ? "eye-off" : "eye"} s={16} />
+          </button>
+        </div>
+        <div
+          id="login-pw-hint"
+          className={`field-hint${pwErr ? " is-error" : ""}`}
+          aria-live="polite"
+        >
+          {pwErr
+            ? <><I n="alert" s={12} /> {pwErr}</>
+            : <span>Minimal 6 karakter.</span>}
+        </div>
+        {caps && (
+          <span className="caps-warn" role="status">
+            <I n="alert" s={12} /> Caps Lock aktif
+          </span>
+        )}
+      </div>
+
+      {/* remember me */}
+      <div className="helper-row">
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+            disabled={formBusy}
+          />
+          <span className="checkbox-box" />
+          Tetap masuk di perangkat ini
+        </label>
+      </div>
+
+      <button
+        type="submit"
+        className="btn-primary"
+        disabled={formBusy || !online}
+        data-loading={submitting ? "true" : "false"}
+      >
+        {submitting
+          ? <><span className="spinner" /> Memverifikasi…</>
+          : <>Masuk <I n="arrow-right" s={16} /></>}
+      </button>
+
+      <div className="form-footer">
+        <span>
+          Belum punya akun?{" "}
+          <a href="mailto:helpdesk@airnavindonesia.co.id?subject=Permintaan%20akun%20ATC%20Log%20Position">
+            Hubungi admin
+          </a>
+        </span>
+        <span className="meta">v5.0 · {new Date().getFullYear()}</span>
+      </div>
+    </form>
+  )
+}
+
+/* ----------------------------------------------------------------
+   Login — outer shell (theme toggle, stage layout, network)
+   ---------------------------------------------------------------- */
+export const Login = ({ onLogin }) => {
+  const [theme, setTheme] = useTheme()
+  const [online, setOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  )
+
+  useEffect(() => {
+    const onOn  = () => setOnline(true)
+    const onOff = () => setOnline(false)
+    window.addEventListener("online", onOn)
+    window.addEventListener("offline", onOff)
+    return () => {
+      window.removeEventListener("online", onOn)
+      window.removeEventListener("offline", onOff)
+    }
+  }, [])
+
+  // Stage layout — matches prototype: split on ≥980px, single column below.
+  // Kept attribute so future tweaks (e.g. centered marketing variant) can flip it.
+  const layout = "split"
+
+  // Memoise to keep render cheap
+  const themeLabel = useMemo(
+    () => (theme === "dark" ? "Beralih ke mode terang" : "Beralih ke mode gelap"),
+    [theme]
+  )
+
+  return (
+    <div className="stage" data-layout={layout}>
+      <Hero online={online} />
+
+      <div className="form-pane">
+        <button
+          className="theme-toggle"
+          type="button"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          aria-label="Ganti tema"
+          title={themeLabel}
+        >
+          <I n={theme === "dark" ? "sun" : "moon"} s={16} />
+        </button>
+
+        <LoginForm online={online} onLogin={onLogin} />
+      </div>
     </div>
   )
 }
