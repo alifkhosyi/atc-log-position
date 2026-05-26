@@ -1,41 +1,36 @@
 // ============================================================
 // src/pages/cabang/Dashboard.jsx — Cabang Dashboard (Redesign v2 · prototype 1:1)
 // ──────────────────────────────────────────────────────────
-// Ports "Dashboard Redesign v2" prototype verbatim:
-//   · Topbar — title + branch + shift + live HH:MM:SS WIB clock
-//   · Stats (4-up) — On Mic | Log Hari Ini | Traffic Hari Ini | Coverage Unit
-//   · Alerts & Warnings panel (FRMS + open-position warnings, derived live)
-//   · Posisi Aktif — 1-line position cards (read-only nav + inline off-mic)
-//   · Traffic Harian — 7-day stacked bar chart from real ctx.logs
-//   · Timeline Hari Ini — read-only table of today's logs
+// Ports "Dashboard Redesign v2" prototype VERBATIM. No extras.
 //
-// All classes are namespaced `dash-*` (see src/styles/dashboard.css)
-// to prevent collision with global classes used by the other pages.
+// Sections (in order):
+//   1. Topbar      — title + branch/shift/clock sub. NO buttons.
+//   2. Stats       — 4-up: On Mic | Log Hari Ini | Traffic Hari Ini | Coverage
+//   3. Alerts      — FRMS warnings + empty-unit info, derived live
+//   4. Posisi Aktif — read-only cards (click → Log Position page)
+//   5. Traffic Harian — 7-day stacked bars from real ctx.logs
+//   6. Timeline    — read-only table of today's logs
 //
-// What's preserved from the previous Dashboard.jsx (real wiring):
-//   · ctx.reload() refresh
-//   · isControllerCwp routing — Controllers go to Log Position for traffic
-//   · Non-controller off-mic via supabase + audit log
-//   · Delete log via supabase + audit log
-//   · myBranches / active / today / todayTC compute
+// All write actions (off-mic, delete log) live on the Log Position
+// page, not here. The dashboard is purely informational + navigation.
+//
+// Classes are namespaced `dash-*` (see src/styles/dashboard.css)
+// to prevent collision with the global classes in src/index.css
+// that other pages still use.
 // ============================================================
 
 import React, { useEffect, useMemo, useState } from "react"
-import { supabase } from "../../supabase.js"
 import { useApp } from "../../lib/context.jsx"
 import {
   fmtT, durMin, getShift,
-  getAccessibleBranches, logAudit,
+  getAccessibleBranches,
 } from "../../lib/utils.js"
 import { I } from "../../components/Icons.jsx"
-import { useToast } from "../../components/Toast.jsx"
-import { useConfirm } from "../../components/ConfirmDialog.jsx"
 import "../../styles/dashboard.css"
 
 /* ----------------------------------------------------------------
    helpers
    ---------------------------------------------------------------- */
-const isControllerCwp = (cwp) => (cwp || "").toLowerCase().includes("controller")
 const pad = (n) => String(n).padStart(2, "0")
 const fmtHMS = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 const fmtDuration = (mins) => {
@@ -119,7 +114,7 @@ const computeAlerts = ({ active, branchUnits, now }) => {
     }
   })
 
-  // Unit kosong: ada di branch units tapi tidak ada active log
+  // Slot kosong: unit yang ada di branch tapi tidak ada active log
   const activeUnits = new Set(active.map(l => l.unit))
   ;(branchUnits || []).forEach((u) => {
     if (!activeUnits.has(u)) {
@@ -166,21 +161,20 @@ const Alerts = ({ items, onAct }) => (
 )
 
 /* ----------------------------------------------------------------
-   PositionCard (read-only nav + inline off-mic + delete)
+   PositionCard — read-only navigation (click → Log Position page)
    ---------------------------------------------------------------- */
-const PositionCard = ({ log, now, onOpen, onOff, onDelete, busy }) => {
+const PositionCard = ({ log, now, onClick }) => {
   const mins = durMin(log.on_time, now.toISOString())
   const isWarn = mins >= 120
-  const controllerOff = isControllerCwp(log.cwp)
   return (
     <div
       className={`dash-pos-card${isWarn ? " is-warn" : ""}`}
       role="button"
       tabIndex={0}
-      onClick={() => onOpen?.(log)}
+      onClick={() => onClick?.(log)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault(); onOpen?.(log)
+          e.preventDefault(); onClick?.(log)
         }
       }}
       aria-label={`Buka detail ${log.atc_name} di Log Position`}
@@ -198,34 +192,11 @@ const PositionCard = ({ log, now, onOpen, onOff, onDelete, busy }) => {
         </span>
         <span className="dash-pos-arrow"><I n="chevron-right" s={14}/></span>
       </div>
-      <div className="dash-pos-actions" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          className="dash-btn dash-btn--danger"
-          onClick={() => onOff?.(log)}
-          disabled={busy}
-          title={controllerOff
-            ? "Lapor traffic di halaman Log Position"
-            : "Off mic langsung"}
-        >
-          <I n="micOff" s={12}/> Off
-        </button>
-        <button
-          type="button"
-          className="dash-btn-icon"
-          onClick={() => onDelete?.(log)}
-          disabled={busy}
-          title="Hapus log"
-          aria-label="Hapus log"
-        >
-          <I n="trash" s={14}/>
-        </button>
-      </div>
     </div>
   )
 }
 
-const ActivePositions = ({ logs, now, onOpen, onOff, onDelete, busy, goLog }) => (
+const ActivePositions = ({ logs, now, onSelect, goLog }) => (
   <div className={`dash-panel${logs.length > 0 ? " is-glow" : ""}`}>
     <div className="dash-panel-h">
       <div className="dash-panel-t"><span className="dash-pulse"/> Posisi Aktif</div>
@@ -250,10 +221,7 @@ const ActivePositions = ({ logs, now, onOpen, onOff, onDelete, busy, goLog }) =>
             key={l.id}
             log={l}
             now={now}
-            onOpen={onOpen}
-            onOff={onOff}
-            onDelete={onDelete}
-            busy={busy}
+            onClick={onSelect}
           />
         ))}
       </div>
@@ -362,9 +330,9 @@ const TrafficHarian = ({ data }) => {
 }
 
 /* ----------------------------------------------------------------
-   Timeline Hari Ini
+   Timeline — read-only (click row → Log Position page)
    ---------------------------------------------------------------- */
-const Timeline = ({ logs, now, onDelete, busy }) => (
+const Timeline = ({ logs, now, onRowClick }) => (
   <div className="dash-panel">
     <div className="dash-panel-h">
       <div className="dash-panel-t"><I n="chart" s={15}/> Timeline Hari Ini</div>
@@ -382,7 +350,6 @@ const Timeline = ({ logs, now, onDelete, busy }) => (
               <th>Nama</th>
               <th>Unit</th>
               <th>Sektor</th>
-              <th>CWP</th>
               <th>On</th>
               <th>Off</th>
               <th>Durasi</th>
@@ -390,7 +357,6 @@ const Timeline = ({ logs, now, onDelete, busy }) => (
               <th className="dash-th-center">ARR</th>
               <th className="dash-th-center">OVF</th>
               <th>Status</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -401,11 +367,14 @@ const Timeline = ({ logs, now, onDelete, busy }) => (
                 : durMin(l.on_time, now.toISOString())
               const isWarn = !offIso && dur >= 120
               return (
-                <tr key={l.id}>
+                <tr
+                  key={l.id}
+                  onClick={() => onRowClick?.(l)}
+                  style={{ cursor: "pointer" }}
+                >
                   <td className="name"><b>{l.atc_name}</b></td>
                   <td><span className="dash-ut">{l.unit}</span></td>
                   <td className="muted">{l.sector}</td>
-                  <td className="muted">{l.cwp}</td>
                   <td className="mono">{fmtT(l.on_time)}</td>
                   <td className="mono">
                     {offIso ? fmtT(offIso) : <span className="faint">—</span>}
@@ -431,18 +400,6 @@ const Timeline = ({ logs, now, onDelete, busy }) => (
                       ? <span className="dash-sb-stat off">Off</span>
                       : <span className="dash-sb-stat on"><span className="dash-pulse"/> On</span>}
                   </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="dash-btn-icon"
-                      onClick={() => onDelete?.(l)}
-                      disabled={busy}
-                      title="Hapus log"
-                      aria-label="Hapus log"
-                    >
-                      <I n="trash" s={14}/>
-                    </button>
-                  </td>
                 </tr>
               )
             })}
@@ -457,11 +414,8 @@ const Timeline = ({ logs, now, onDelete, busy }) => (
    Page
    ---------------------------------------------------------------- */
 export const CabangDash = () => {
-  const ctx     = useApp()
-  const toast   = useToast()
-  const confirm = useConfirm()
-  const now     = useNow(1000)
-  const [busy, setBusy] = useState(false)
+  const ctx = useApp()
+  const now = useNow(1000)
 
   const myBranches = useMemo(
     () => getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes),
@@ -504,81 +458,8 @@ export const CabangDash = () => {
     [ctx.logs, now, myBranches]
   )
 
-  const onRefresh = async () => {
-    if (busy) return
-    setBusy(true)
-    toast.info("Memuat ulang…", "Sinkronisasi data dari server")
-    try {
-      await ctx.reload()
-      toast.success("Data diperbarui",
-        `${active.length} posisi aktif · ${today.length} log hari ini`)
-    } catch (e) {
-      toast.error("Gagal memuat ulang", e?.message || "Coba lagi")
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const onOffMic = async (log) => {
-    if (busy) return
-    if (isControllerCwp(log.cwp)) {
-      toast.info("Lapor traffic dulu",
-        "Controller harus laporkan DEP/ARR/OVF di halaman Log Position")
-      ctx.goPage("log")
-      return
-    }
-    const ok = await confirm({
-      title: "Off mic sekarang?",
-      detail: "Posisi akan ditutup. Data tidak bisa dibatalkan dari sini.",
-      target: `${log.atc_name} · ${log.unit} ${log.sector} · On ${fmtT(log.on_time)}`,
-      confirmText: "Off Mic",
-      destructive: true,
-    })
-    if (!ok) return
-    setBusy(true)
-    const { error } = await supabase
-      .from("position_logs")
-      .update({ off_time: new Date().toISOString() })
-      .eq("id", log.id)
-    if (error) {
-      toast.error("Gagal off mic", error.message)
-    } else {
-      logAudit("OFF_MIC",
-        `${log.atc_name} — ${log.unit} ${log.sector} (dashboard, no traffic)`,
-        ctx.user)
-      toast.success("Off mic berhasil",
-        `${log.atc_name} — durasi ${durMin(log.on_time, new Date().toISOString())} menit`)
-      await ctx.reload()
-    }
-    setBusy(false)
-  }
-
-  const onDeleteLog = async (log) => {
-    if (busy) return
-    const ok = await confirm({
-      title: "Hapus log ini?",
-      detail: "Data akan hilang permanen dan tidak masuk laporan harian.",
-      target: `${log.atc_name} · ${log.unit} · ${fmtT(log.on_time)}–${log.off_time ? fmtT(log.off_time) : "now"}`,
-      confirmText: "Hapus log",
-      destructive: true,
-    })
-    if (!ok) return
-    setBusy(true)
-    const { error } = await supabase.from("position_logs").delete().eq("id", log.id)
-    if (error) {
-      toast.error("Gagal menghapus", error.message)
-    } else {
-      logAudit("DELETE_LOG",
-        `${log.atc_name} — ${log.unit} ${log.sector} (${fmtT(log.on_time)})`,
-        ctx.user)
-      toast.success("Log dihapus")
-      await ctx.reload()
-    }
-    setBusy(false)
-  }
-
-  const onOpenPosition = () => ctx.goPage("log")
-  const onAlertAct = () => ctx.goPage("log")
+  /* All interactions on this read-only page route to Log Position. */
+  const goLog = () => ctx.goPage("log")
 
   return (
     <div className="dash-page">
@@ -597,24 +478,6 @@ export const CabangDash = () => {
             <time>{fmtHMS(now)} WIB</time>
           </div>
         </div>
-        <div className="dash-topbar-actions">
-          <button
-            type="button"
-            className="dash-btn"
-            onClick={onRefresh}
-            disabled={busy}
-            aria-busy={busy ? "true" : "false"}
-          >
-            <I n="refresh" s={14}/> Refresh
-          </button>
-          <button
-            type="button"
-            className="dash-btn dash-btn--primary"
-            onClick={() => ctx.goPage("log")}
-          >
-            <I n="mic" s={14}/> Input On Mic
-          </button>
-        </div>
       </div>
 
       <Stats
@@ -626,16 +489,13 @@ export const CabangDash = () => {
         shiftLabel={getShift()}
       />
 
-      <Alerts items={alerts} onAct={onAlertAct} />
+      <Alerts items={alerts} onAct={goLog} />
 
       <ActivePositions
         logs={active}
         now={now}
-        onOpen={onOpenPosition}
-        onOff={onOffMic}
-        onDelete={onDeleteLog}
-        busy={busy}
-        goLog={() => ctx.goPage("log")}
+        onSelect={goLog}
+        goLog={goLog}
       />
 
       <TrafficHarian data={traffic7} />
@@ -643,8 +503,7 @@ export const CabangDash = () => {
       <Timeline
         logs={today}
         now={now}
-        onDelete={onDeleteLog}
-        busy={busy}
+        onRowClick={goLog}
       />
     </div>
   )
