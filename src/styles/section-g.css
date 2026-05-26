@@ -1,0 +1,363 @@
+/* ============================================================
+   src/styles/section-g.css
+   ──────────────────────────────────────────────────────────
+   Scoped styles for:
+     - Daily Report → Section G (Pelaporan Personnel)
+     - Sidebar pending-count badge (`.sidebar-badge`)
+     - Section tab pending pip (`.sec-tab-pending`)
+   All values use existing tokens from src/index.css.
+   ============================================================ */
+
+/* ── Sidebar badge ───────────────────────────────────────── */
+.sidebar-item { position: relative; }
+.sidebar-badge {
+  margin-left: auto;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--status-warn);
+  color: #0a0e1a;
+  font: 700 11px/18px var(--font-sans);
+  text-align: center;
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 0 2px var(--surface-1);
+  animation: sg-pulse 2.4s ease-in-out infinite;
+}
+.sidebar-collapsed .sidebar-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  margin: 0;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 10px;
+  padding: 0 4px;
+}
+@keyframes sg-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 0 rgba(245,158,11,.45); }
+  50%      { box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 6px rgba(245,158,11,0); }
+}
+
+/* ── DailyReport tab pending pip ─────────────────────────── */
+.sec-tab-pending {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 9px;
+  background: var(--status-warn);
+  color: #0a0e1a;
+  font: 700 11px/1 var(--font-sans);
+}
+
+/* ── Section G page wrapper ──────────────────────────────── */
+.sg-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+/* ── Countdown banner (Layer 3) ──────────────────────────── */
+.sg-countdown {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 14px 14px 18px;
+  border: 1px solid var(--status-warn-soft);
+  background: rgba(245,158,11,0.08);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.sg-countdown-bar {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--status-warn);
+}
+.sg-countdown-icon {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: rgba(245,158,11,0.18);
+  color: var(--status-warn);
+}
+.sg-countdown-body { flex: 1; min-width: 0; }
+.sg-countdown-body b {
+  display: block;
+  color: var(--text);
+  font: 600 14px/1.3 var(--font-sans);
+  margin-bottom: 2px;
+}
+.sg-countdown-body p {
+  margin: 0;
+  color: var(--text-muted);
+  font: 400 12.5px/1.5 var(--font-sans);
+}
+.sg-countdown-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+.sg-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.sg-date-nav,
+.sg-filters,
+.sg-toolbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sg-toolbar-meta { margin-left: auto; }
+
+.sg-date-input,
+.sg-select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text);
+  border-radius: var(--r-sm);
+  font: 500 13px var(--font-sans);
+}
+.sg-date-input { font-family: var(--font-mono); }
+
+.sg-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px; min-width: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font: 500 12.5px var(--font-sans);
+  transition: var(--t-fast);
+}
+.sg-btn-ghost:hover { color: var(--text); border-color: var(--border-strong); }
+
+.sg-btn-today {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: transparent;
+  border-radius: var(--r-sm);
+  font: 600 12px var(--font-sans);
+  cursor: pointer;
+}
+.sg-btn-today:hover { background: var(--accent-soft); }
+
+.sg-filter-label {
+  font: 500 12px var(--font-sans);
+  color: var(--text-muted);
+}
+
+.sg-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 12.5px var(--font-sans);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.sg-toggle input { accent-color: var(--accent); }
+
+.sg-meta-text {
+  font: 500 12.5px var(--font-sans);
+  color: var(--text-muted);
+}
+.sg-meta-text b { color: var(--status-warn); }
+
+/* ── Pills ───────────────────────────────────────────────── */
+.sg-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font: 600 11px/1.4 var(--font-sans);
+  letter-spacing: 0.02em;
+}
+.sg-pill-pending { background: var(--status-warn-soft);  color: var(--status-warn); }
+.sg-pill-done    { background: var(--status-on-soft);    color: var(--status-on);   }
+.sg-pill-open    { background: var(--accent-soft);       color: var(--accent);      }
+.sg-pill-locked  { background: var(--status-off-soft);   color: var(--text-muted);  }
+
+/* ── Table ───────────────────────────────────────────────── */
+.sg-table-wrap {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: auto;
+}
+.sg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 500 13px var(--font-sans);
+  color: var(--text);
+}
+.sg-table thead th {
+  position: sticky; top: 0;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font: 600 11px/1 var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.sg-th-num { text-align: center !important; }
+.sg-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.sg-table tbody tr:hover { background: var(--surface-2); }
+.sg-mono { font-family: var(--font-mono); font-size: 12.5px; }
+.sg-muted { color: var(--text-muted); }
+.sg-faint { color: var(--text-faint); }
+.sg-unit {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  font: 700 11px/1.4 var(--font-mono);
+  color: var(--text);
+}
+.sg-td-shift {
+  font: 500 12px var(--font-sans);
+  color: var(--text-muted);
+}
+
+/* Row accent: amber left border when any DEP/ARR/OVF still null */
+.sg-row-pending td:first-child {
+  box-shadow: inset 3px 0 0 var(--status-warn);
+}
+.sg-row-open td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Editable cells */
+.sg-cell {
+  text-align: center;
+  font-family: var(--font-mono);
+  cursor: text;
+  width: 56px;
+}
+.sg-cell-empty { color: var(--text-muted); }
+.sg-cell-placeholder {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-sm);
+  color: var(--text-faint);
+}
+.sg-cell-locked { color: var(--text-muted); background: var(--surface-2); }
+.sg-cell-editing { padding: 4px; }
+.sg-cell-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+  color: var(--text);
+  font: 500 13px var(--font-mono);
+  text-align: center;
+}
+.sg-cell-input:focus { outline: 2px solid var(--accent-soft); outline-offset: 0; }
+
+/* Table footer */
+.sg-table tfoot td {
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  font: 600 12px var(--font-sans);
+}
+.sg-tfoot-label { color: var(--text-muted); }
+.sg-tfoot-num { color: var(--text); text-align: center; }
+
+/* ── Empty / loading states ──────────────────────────────── */
+.sg-empty, .sg-loading {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font: 500 13px var(--font-sans);
+  background: var(--surface-1);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+}
+
+/* ── Submit bar ──────────────────────────────────────────── */
+.sg-submitbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.sg-submitbar-help {
+  flex: 1; min-width: 0;
+  font: 500 12.5px var(--font-sans);
+  color: var(--text-muted);
+}
+.sg-btn-submit {
+  height: 36px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: #0a0e1a;
+  font: 700 13px var(--font-sans);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+.sg-btn-submit:hover:not(:disabled) { background: var(--accent-2); }
+.sg-btn-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sg-btn-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.sg-btn-x:hover { color: var(--text); border-color: var(--border); }
+
+/* ── Deadline footnote ───────────────────────────────────── */
+.sg-deadline-hint {
+  text-align: right;
+  font: 500 11.5px var(--font-sans);
+  color: var(--text-faint);
+  padding: 0 6px;
+}

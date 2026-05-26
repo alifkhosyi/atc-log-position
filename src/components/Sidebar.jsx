@@ -6,8 +6,16 @@
 // ============================================================
 import React from "react"
 import { I, RadarLogo } from "./Icons.jsx"
+import { usePendingSessions } from "../hooks/usePendingSessions.js"
+import "../styles/section-g.css"
 
 export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
+  // Pending Section G sessions for the user's branch (cabang only).
+  // Admins skip the query — they don't see the cabang report flow.
+  const { count: pendingCount } = usePendingSessions(
+    user.role === "admin" ? null : user.branch_code,
+  )
+
   const groups = user.role === "admin" ? [
     {
       section: "Monitoring",
@@ -44,7 +52,7 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
       section: "Operasional",
       items: [
         { id:"dashboard",       label:"Dashboard",         icon:"dashboard" },
-        { id:"log",             label:"Log Position",      icon:"mic" },
+        // Log Position deprecated — workflow merged into Daily Report → Section G.
         { id:"handover",        label:"Handover/Takeover", icon:"checklist" },
         { id:"ho_to_mo",        label:"HO/TO MO",          icon:"shield" },
         { id:"rekap_personnel", label:"Rekap Personnel",   icon:"users" },
@@ -60,7 +68,7 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
     {
       section: "Laporan",
       items: [
-        { id:"reports", label:"Report", icon:"note" },
+        { id:"reports", label:"Report", icon:"note", badge: pendingCount },
       ],
     },
   ]
@@ -83,17 +91,30 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
         {groups.map((g, gi) => (
           <div key={gi} className="sidebar-group">
             {!col && <div className="sidebar-section">{g.section}</div>}
-            {g.items.map(it => (
-              <button
-                key={it.id}
-                className={"sidebar-item" + (page === it.id ? " sidebar-item-active" : "")}
-                onClick={() => go(it.id)}
-                title={col ? it.label : undefined}
-              >
-                <I n={it.icon} s={17}/>
-                {!col && <span>{it.label}</span>}
-              </button>
-            ))}
+            {g.items.map(it => {
+              const showBadge = typeof it.badge === "number" && it.badge > 0
+              return (
+                <button
+                  key={it.id}
+                  className={"sidebar-item" + (page === it.id ? " sidebar-item-active" : "")}
+                  onClick={() => go(it.id)}
+                  title={col
+                    ? `${it.label}${showBadge ? ` — ${it.badge} pending` : ""}`
+                    : undefined}
+                >
+                  <I n={it.icon} s={17}/>
+                  {!col && <span>{it.label}</span>}
+                  {showBadge && (
+                    <span
+                      className="sidebar-badge"
+                      aria-label={`${it.badge} session belum diisi`}
+                    >
+                      {it.badge > 99 ? "99+" : it.badge}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         ))}
       </nav>

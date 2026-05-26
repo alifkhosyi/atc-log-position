@@ -18,11 +18,19 @@ import { RadarLogo } from "./components/Icons.jsx"
 
 // Cabang pages
 import { CabangDash }            from "./pages/cabang/Dashboard.jsx"
-import { CabangLog }             from "./pages/cabang/LogPosition.jsx"
+// CabangLog (Log Position) deprecated — workflow now lives in Daily Report → Section G.
+// The "log" page id is intercepted by context.goPage(); this stub catches any
+// remaining direct state writes (e.g. restored from localStorage).
 import { CabangHandover }        from "./pages/cabang/Handover.jsx"
 import { CabangRekap }           from "./pages/cabang/RekapTraffic.jsx"
 import { CabangRekapPersonnel }  from "./pages/cabang/RekapPersonnel.jsx"
 import { CabangHoToMo }          from "./pages/cabang/HoToMo.jsx"
+
+function LogPositionRedirect() {
+  const { goPage } = useApp()
+  React.useEffect(() => { goPage("log") }, [goPage])
+  return null
+}
 
 // Admin pages
 import { AdminDash }          from "./pages/admin/Dashboard.jsx"
@@ -44,7 +52,7 @@ import RosterPage from "./pages/RosterPage.tsx"
 // ── Page routing map ──
 const PAGES_CABANG = {
   dashboard:        CabangDash,
-  log:              CabangLog,
+  log:              LogPositionRedirect,  // deprecated → forwards to Daily Report
   rekap_personnel:  CabangRekapPersonnel,
   rekap:            CabangRekap,
   handover:         CabangHandover,

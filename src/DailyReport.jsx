@@ -2,8 +2,11 @@
 // src/DailyReport.jsx — Daily Report MO → INMC (REDESIGN sesi 4)
 // Class-based styling, logic 1:1 with pre-redesign version.
 // ============================================================
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabase';
+import SectionG from './components/DailyReport/SectionG.jsx';
+import { useApp } from './lib/context.jsx';
+import { useToast } from './components/Toast.jsx';
 
 // ─── Constants ────────────────────────────────────────────────
 const TRAFFIC_TYPES = [
@@ -71,6 +74,7 @@ const SECTIONS = [
   { id: 'D', label: 'Peralatan',     icon: '📡' },
   { id: 'E', label: 'Insiden',       icon: '⚠️' },
   { id: 'F', label: 'Catatan',       icon: '📝' },
+  { id: 'G', label: 'Personnel',     icon: '👥' },
 ];
 
 const emptyTrafficRow = () => ALL_COLS.reduce((a, c) => ({ ...a, [c.key]: '' }), {});
@@ -107,11 +111,31 @@ const StatusSegment = ({ value, onChange, options }) => (
 
 // ─── Main Component ───────────────────────────────────────────
 export default function DailyReport() {
+  const appCtx = useApp();
+  const toast  = useToast();
+
+  // If the user landed here via the deprecated `/log-position` redirect,
+  // show a one-time toast pointing them at Section G.
+  useEffect(() => {
+    if (appCtx?.logRedirectFlag) {
+      toast?.info(
+        'Halaman Log Position sudah dipindah',
+        'Sekarang ada di Daily Report → tab G · Personnel.',
+        6000,
+      );
+      appCtx.clearLogRedirectFlag?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // If the redirect requested Section G, jump straight to it.
+  const initialSection = appCtx?.logRedirectFlag ? 'G' : 'A';
+
   const [reportDate, setReportDate]         = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading]               = useState(false);
   const [saving, setSaving]                 = useState(false);
   const [saveMsg, setSaveMsg]               = useState(null);
-  const [activeSection, setActiveSection]   = useState('A');
+  const [activeSection, setActiveSection]   = useState(initialSection);
   const [userInfo, setUserInfo]             = useState(null);
   const [branchInfo, setBranchInfo]         = useState(null);
   const [existingId, setExistingId]         = useState(null);
@@ -308,6 +332,20 @@ export default function DailyReport() {
   const bProblems = OPERATIONAL_ASPECTS.filter(a => secB[a.key].status !== 'Normal').length;
   const dProblems = commSystems.filter(s => secD[s.key] && secD[s.key].status !== 'Normal').length;
 
+  // Pending count for Section G tab badge (this date only,
+  // derived from context.logs which is already loaded).
+  const pendingDate = useMemo(() => {
+    if (!userInfo?.branch_code || !appCtx?.logs) return 0;
+    return appCtx.logs.filter(l =>
+      l.branch_code === userInfo.branch_code
+      && l.off_time
+      && new Date(l.on_time).toISOString().slice(0, 10) === reportDate
+      && (l.departure_count === null
+        || l.arrival_count === null
+        || l.overfly_count === null)
+    ).length;
+  }, [appCtx?.logs, userInfo?.branch_code, reportDate]);
+
   // Section completion for tab indicators
   const sectionFilled = {
     A: !!(secA.unitName && secA.managerName),
@@ -316,6 +354,7 @@ export default function DailyReport() {
     D: commSystems.length > 0,
     E: incidents.some(i => i.jenis || i.waktu),
     F: !!notes.trim(),
+    G: pendingDate === 0,
   };
 
   return (
@@ -361,6 +400,7 @@ export default function DailyReport() {
           {SECTIONS.map(sec => {
             const active = activeSection === sec.id;
             const done   = sectionFilled[sec.id] && !active;
+            const showPendingBadge = sec.id === 'G' && pendingDate > 0;
             return (
               <button
                 key={sec.id} type="button"
@@ -369,7 +409,10 @@ export default function DailyReport() {
               >
                 <span className={`sec-tab-id ${done ? 'sec-tab-done' : ''}`}>{sec.id}</span>
                 <span>{sec.icon} {sec.label}</span>
-                {done && (
+                {showPendingBadge && (
+                  <span className="sec-tab-pending" title={`${pendingDate} session belum diisi`}>{pendingDate}</span>
+                )}
+                {done && !showPendingBadge && (
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--status-on)" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
                 )}
               </button>
@@ -756,6 +799,23 @@ export default function DailyReport() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ══ G — PELAPORAN PERSONNEL ══ */}
+      {activeSection === 'G' && (
+        <div className="panel">
+          <div className="panel-header">
+            <h3 className="panel-title"><span className="panel-badge">G</span> Pelaporan Personnel</h3>
+            <span className="panel-counter">
+              {pendingDate > 0
+                ? <>⚠ {pendingDate} session belum diisi</>
+                : <>✓ Tanggal ini lengkap</>}
+            </span>
+          </div>
+          <div className="panel-body" style={{ padding: 0 }}>
+            <SectionG />
+          </div>
+        </div>
       )}
 
       {/* ─── Sticky Save Bar ─── */}

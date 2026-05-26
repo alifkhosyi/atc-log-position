@@ -28,6 +28,20 @@ export const AppProvider = ({ children }) => {
   const [col, setCol]             = useState(false)
   const [navBranch, setNavBranch] = useState(null) // dashboard → mon_log handoff
 
+  // Log Position is deprecated (sesi 5). Any caller that still requests
+  // the "log" page id is redirected to Daily Report and we raise a flag
+  // so the destination can show a one-time deprecation toast.
+  const [logRedirectFlag, setLogRedirectFlag] = useState(false)
+  const goPage = useCallback((id) => {
+    if (id === "log") {
+      setLogRedirectFlag(true)
+      setPage("reports")
+      return
+    }
+    setPage(id)
+  }, [])
+  const clearLogRedirectFlag = useCallback(() => setLogRedirectFlag(false), [])
+
   // ── REDESIGN: persistent branch filter (admin) ──
   // Survives page refresh via localStorage. Default "ALL" = show all branches.
   const [globalBranch, setGlobalBranchState] = useState(() => {
@@ -155,8 +169,9 @@ export const AppProvider = ({ children }) => {
     // auth
     session, user, loading, handleLogin, handleLogout,
     // ui
-    page, goPage: setPage, col, setCol, navBranch, setNavBranch,
+    page, goPage, col, setCol, navBranch, setNavBranch,
     globalBranch, setGlobalBranch,
+    logRedirectFlag, clearLogRedirectFlag,
     // data
     branches, sectors, personnel, moBranchCodes,
     logs, handovers, handoverChecklists,
