@@ -1,26 +1,23 @@
 // ============================================================
 // src/components/Login.jsx — Login screen (Phase 5 · prototype 1:1)
 // ──────────────────────────────────────────────────────────
-// Ports the standalone "Login Prototype" verbatim:
-//   - Split layout (hero kiri 1.05fr · form kanan 1fr ≥ 980px)
-//   - Conic-gradient brand mark with radar-sweep animation
-//   - Live UTC clock in hero footer
-//   - Inline theme toggle (top-right of form pane) — same
-//     localStorage key as ThemeToggle.jsx so the choice persists
-//     to the rest of the app
-//   - Alert / field-hint / caps-warn primitives
+// Ports the standalone "Login Prototype" verbatim and wires it
+// to real Supabase auth.
 //
-// All UI text & visual treatment matches the prototype exactly.
+// IMPORTANT — class names are namespaced `lp-*` to avoid the
+// global collisions that bit the first deploy. src/index.css
+// owns `.field`, `.field input`, `.field label`, `.input-wrap`,
+// `.input-wrap input`, `.btn-primary` etc., and was leaking
+// uppercase labels, gradient buttons, and tall inputs into this
+// page. The matching stylesheet is src/styles/login-clean.css.
+//
 // What's added over the prototype:
-//   - Real Supabase auth (signInWithPassword + resetPasswordForEmail)
-//   - Friendly Indonesian error mapping
-//   - Network online/offline awareness (window events)
-//   - Double-submit guard + aria-busy
-//   - Auto-focus first empty field on mount
-//   - Inline client-side validation (email shape + min length)
-//   - Demo state from the prototype is dropped (it was Tweaks-driven)
-//
-// Styling lives in src/styles/login-clean.css (also ported 1:1).
+//   • Real Supabase auth (signInWithPassword + resetPasswordForEmail)
+//   • Friendly Indonesian error mapping
+//   • Network online/offline awareness (window events)
+//   • Double-submit guard + aria-busy
+//   • Auto-focus first empty field on mount
+//   • Inline client-side validation (email shape + min length)
 // ============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -29,7 +26,7 @@ import { I } from "./Icons.jsx"
 import "../styles/login-clean.css"
 
 /* ----------------------------------------------------------------
-   helpers — pure, testable
+   helpers
    ---------------------------------------------------------------- */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -61,7 +58,7 @@ const validatePassword = (v) => {
 }
 
 /* ----------------------------------------------------------------
-   live UTC clock — shown in hero footer
+   live UTC clock — hero footer
    ---------------------------------------------------------------- */
 const fmtZ = (d) => {
   const pad = (n) => String(n).padStart(2, "0")
@@ -94,29 +91,29 @@ const useTheme = () => {
 }
 
 /* ----------------------------------------------------------------
-   Hero pane — desktop ≥ 980px
+   Hero pane
    ---------------------------------------------------------------- */
 const Hero = ({ online }) => {
   const now = useNow()
   return (
-    <aside className="hero" aria-hidden="true">
-      <div className="lockup">
-        <span className="mark" aria-hidden="true" />
-        <div className="lockup-text">
+    <aside className="lp-hero" aria-hidden="true">
+      <div className="lp-lockup">
+        <span className="lp-mark" aria-hidden="true" />
+        <div className="lp-lockup-text">
           <b>Log Position</b>
           <small>AirNav Indonesia · Operations</small>
         </div>
       </div>
 
-      <div className="pitch">
-        <span className="eyebrow">Operational sign-in</span>
+      <div className="lp-pitch">
+        <span className="lp-eyebrow">Operational sign-in</span>
         <h1>Catat posisi, handover, dan jam jaga <em>tanpa friksi.</em></h1>
         <p>
           Satu tempat untuk Log Position, Handover Mo-to-Mo, dan rekap traffic
           harian — dari menara hingga kantor pusat.
         </p>
 
-        <ul className="features">
+        <ul className="lp-features">
           <li>
             <I n="check" s={14} />
             <span><b>Approval otomatis</b> sesuai FRMS &amp; control allowance.</span>
@@ -132,19 +129,19 @@ const Hero = ({ online }) => {
         </ul>
       </div>
 
-      <div className="hero-footer">
-        <span className={`trust${online ? "" : " offline"}`}>
-          <span className="dot" />
+      <div className="lp-hero-footer">
+        <span className={`lp-trust${online ? "" : " is-offline"}`}>
+          <span className="lp-dot" />
           <b>{online ? "Sistem operasional" : "Sambungan terputus"}</b>
         </span>
-        <span className="hero-clock">{fmtZ(now)}</span>
+        <span className="lp-hero-clock">{fmtZ(now)}</span>
       </div>
     </aside>
   )
 }
 
 /* ----------------------------------------------------------------
-   Login form — real supabase wiring + prototype markup
+   Login form
    ---------------------------------------------------------------- */
 const LoginForm = ({ online, onLogin }) => {
   const [email, setEmail]       = useState("")
@@ -155,7 +152,7 @@ const LoginForm = ({ online, onLogin }) => {
 
   const [emailErr, setEmailErr] = useState("")
   const [pwErr, setPwErr]       = useState("")
-  const [banner, setBanner]     = useState(null)   // { kind, title, message }
+  const [banner, setBanner]     = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [resetting,  setResetting]  = useState(false)
 
@@ -171,7 +168,7 @@ const LoginForm = ({ online, onLogin }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // sync offline banner with parent-driven `online`
+  // sync offline banner
   useEffect(() => {
     if (!online) {
       setBanner({
@@ -225,7 +222,6 @@ const LoginForm = ({ online, onLogin }) => {
         pwRef.current?.focus()
         return
       }
-      // success — hand off to parent (App.jsx wires session into AppProvider)
       onLogin?.(data?.session ?? null)
     } catch (err) {
       setBanner({
@@ -286,27 +282,27 @@ const LoginForm = ({ online, onLogin }) => {
 
   return (
     <form
-      className="form-card"
+      className="lp-form-card"
       onSubmit={handleSubmit}
       noValidate
       aria-busy={formBusy ? "true" : "false"}
     >
-      {/* Mobile / centered-layout brand */}
-      <div className="lockup mobile-lockup">
-        <span className="mark" aria-hidden="true" />
-        <div className="lockup-text">
+      {/* Mobile brand — only visible ≤ 980px (see CSS) */}
+      <div className="lp-lockup lp-mobile-lockup">
+        <span className="lp-mark" aria-hidden="true" />
+        <div className="lp-lockup-text">
           <b>Log Position</b>
           <small>AirNav Indonesia</small>
         </div>
       </div>
 
-      <div className="form-eyebrow">Sign in · v5.0</div>
+      <div className="lp-form-eyebrow">Sign in · v5.0</div>
       <h2>Masuk ke sistem</h2>
-      <p className="sub">Gunakan email AirNav resmi Anda untuk mengakses dashboard.</p>
+      <p className="lp-sub">Gunakan email AirNav resmi Anda untuk mengakses dashboard.</p>
 
       {banner && (
         <div
-          className={`alert alert--${banner.kind}`}
+          className={`lp-alert lp-alert--${banner.kind}`}
           role={banner.kind === "danger" ? "alert" : "status"}
         >
           <I
@@ -318,13 +314,13 @@ const LoginForm = ({ online, onLogin }) => {
             }
             s={16}
           />
-          <div className="alert-body">
+          <div className="lp-alert-body">
             <b>{banner.title}</b>
             <p>{banner.message}</p>
           </div>
           <button
             type="button"
-            className="alert-close"
+            className="lp-alert-close"
             onClick={() => setBanner(null)}
             aria-label="Tutup notifikasi"
           >
@@ -334,11 +330,11 @@ const LoginForm = ({ online, onLogin }) => {
       )}
 
       {/* email */}
-      <div className="field">
-        <div className="field-row">
+      <div className="lp-field">
+        <div className="lp-field-row">
           <label htmlFor="login-email">Email kerja</label>
         </div>
-        <div className="input-wrap">
+        <div className="lp-input-wrap">
           <input
             ref={emailRef}
             id="login-email"
@@ -352,14 +348,14 @@ const LoginForm = ({ online, onLogin }) => {
             onBlur={(e) => setEmailErr(validateEmail(e.target.value))}
             disabled={formBusy}
             placeholder="nama@airnavindonesia.co.id"
-            className={`input${emailErr ? " has-error" : ""}`}
+            className={`lp-input${emailErr ? " is-invalid" : ""}`}
             aria-invalid={emailErr ? "true" : undefined}
             aria-describedby="login-email-hint"
           />
         </div>
         <div
           id="login-email-hint"
-          className={`field-hint${emailErr ? " is-error" : ""}`}
+          className={`lp-field-hint${emailErr ? " is-error" : ""}`}
           aria-live="polite"
         >
           {emailErr
@@ -369,19 +365,19 @@ const LoginForm = ({ online, onLogin }) => {
       </div>
 
       {/* password */}
-      <div className="field">
-        <div className="field-row">
+      <div className="lp-field">
+        <div className="lp-field-row">
           <label htmlFor="login-pw">Password</label>
           <button
             type="button"
-            className="field-link"
+            className="lp-field-link"
             onClick={handleForgot}
             disabled={formBusy}
           >
             {resetting ? "Mengirim…" : "Lupa password?"}
           </button>
         </div>
-        <div className="input-wrap">
+        <div className="lp-input-wrap">
           <input
             ref={pwRef}
             id="login-pw"
@@ -394,13 +390,13 @@ const LoginForm = ({ online, onLogin }) => {
             onKeyUp={handleKey}
             disabled={formBusy}
             placeholder="••••••••"
-            className={`input with-trailing${pwErr ? " has-error" : ""}`}
+            className={`lp-input lp-input--trailing${pwErr ? " is-invalid" : ""}`}
             aria-invalid={pwErr ? "true" : undefined}
             aria-describedby="login-pw-hint"
           />
           <button
             type="button"
-            className="input-trailing"
+            className="lp-input-trailing"
             onClick={() => setShowPw((v) => !v)}
             aria-pressed={showPw}
             aria-label={showPw ? "Sembunyikan password" : "Tampilkan password"}
@@ -412,7 +408,7 @@ const LoginForm = ({ online, onLogin }) => {
         </div>
         <div
           id="login-pw-hint"
-          className={`field-hint${pwErr ? " is-error" : ""}`}
+          className={`lp-field-hint${pwErr ? " is-error" : ""}`}
           aria-live="polite"
         >
           {pwErr
@@ -420,45 +416,45 @@ const LoginForm = ({ online, onLogin }) => {
             : <span>Minimal 6 karakter.</span>}
         </div>
         {caps && (
-          <span className="caps-warn" role="status">
+          <span className="lp-caps-warn" role="status">
             <I n="alert" s={12} /> Caps Lock aktif
           </span>
         )}
       </div>
 
       {/* remember me */}
-      <div className="helper-row">
-        <label className="checkbox">
+      <div className="lp-helper-row">
+        <label className="lp-checkbox">
           <input
             type="checkbox"
             checked={remember}
             onChange={(e) => setRemember(e.target.checked)}
             disabled={formBusy}
           />
-          <span className="checkbox-box" />
+          <span className="lp-checkbox-box" />
           Tetap masuk di perangkat ini
         </label>
       </div>
 
       <button
         type="submit"
-        className="btn-primary"
+        className="lp-btn-primary"
         disabled={formBusy || !online}
         data-loading={submitting ? "true" : "false"}
       >
         {submitting
-          ? <><span className="spinner" /> Memverifikasi…</>
+          ? <><span className="lp-spinner" /> Memverifikasi…</>
           : <>Masuk <I n="arrow-right" s={16} /></>}
       </button>
 
-      <div className="form-footer">
+      <div className="lp-form-footer">
         <span>
           Belum punya akun?{" "}
           <a href="mailto:helpdesk@airnavindonesia.co.id?subject=Permintaan%20akun%20ATC%20Log%20Position">
             Hubungi admin
           </a>
         </span>
-        <span className="meta">v5.0 · {new Date().getFullYear()}</span>
+        <span className="lp-form-meta">v5.0 · {new Date().getFullYear()}</span>
       </div>
     </form>
   )
@@ -484,23 +480,18 @@ export const Login = ({ onLogin }) => {
     }
   }, [])
 
-  // Stage layout — matches prototype: split on ≥980px, single column below.
-  // Kept attribute so future tweaks (e.g. centered marketing variant) can flip it.
-  const layout = "split"
-
-  // Memoise to keep render cheap
   const themeLabel = useMemo(
     () => (theme === "dark" ? "Beralih ke mode terang" : "Beralih ke mode gelap"),
     [theme]
   )
 
   return (
-    <div className="stage" data-layout={layout}>
+    <div className="lp-stage" data-layout="split">
       <Hero online={online} />
 
-      <div className="form-pane">
+      <div className="lp-form-pane">
         <button
-          className="theme-toggle"
+          className="lp-theme-toggle"
           type="button"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           aria-label="Ganti tema"
