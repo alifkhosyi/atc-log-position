@@ -1,34 +1,57 @@
 // ============================================================
-// src/components/Login.jsx — Login screen (Phase 5 · prototype 1:1)
+// src/components/Login.jsx — Login screen (redesign per audit)
 // ──────────────────────────────────────────────────────────
-// Ports the standalone "Login Prototype" verbatim and wires it
-// to real Supabase auth.
+// Full rewrite tracking CLAUDE_HANDOFF.md §8 "Login" acceptance
+// criteria + the Login Prototype.html visual contract:
 //
-// IMPORTANT — class names are namespaced `lp-*` to avoid the
-// global collisions that bit the first deploy. src/index.css
-// owns `.field`, `.field input`, `.field label`, `.input-wrap`,
-// `.input-wrap input`, `.btn-primary` etc., and was leaking
-// uppercase labels, gradient buttons, and tall inputs into this
-// page. The matching stylesheet is src/styles/login-clean.css.
+//   ✓ Single brand lockup (logo + name + branch caption) at top
+//   ✓ Solid CTA in var(--accent) over #0a0e1a → AAA contrast (≥7:1)
+//   ✓ Password visibility toggle exposes aria-pressed
+//   ✓ Caps Lock indicator appears while the modifier is held
+//   ✓ Inline errors with aria-invalid + aria-describedby
+//   ✓ Offline detection disables submit + shows offline banner
+//   ✓ Forgot-password rejects empty / malformed email up front
+//   ✓ Loading state: aria-busy form + spinner + data-loading button
+//   ✓ Dark + light themes both work (uses --accent / --surface tokens)
 //
-// What's added over the prototype:
-//   • Real Supabase auth (signInWithPassword + resetPasswordForEmail)
-//   • Friendly Indonesian error mapping
-//   • Network online/offline awareness (window events)
-//   • Double-submit guard + aria-busy
-//   • Auto-focus first empty field on mount
-//   • Inline client-side validation (email shape + min length)
+// All visuals are owned by src/styles/login-clean.css (lp-* classes).
+// All colors are tokens from src/index.css — no new tokens invented.
+// The screen mounts when context.session is falsy (see App.jsx).
 // ============================================================
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, {
+  useCallback, useEffect, useMemo, useReducer, useRef, useState,
+} from "react"
 import { supabase } from "../supabase.js"
 import { I } from "./Icons.jsx"
 import "../styles/login-clean.css"
 
-/* ----------------------------------------------------------------
-   helpers
-   ---------------------------------------------------------------- */
+/* ────────────────────────────────────────────────────────────
+   Constants
+   ──────────────────────────────────────────────────────────── */
+const THEME_KEY = "atc-theme"
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PW_MIN = 6
+const VERSION = "v5.0"
+
+/* ────────────────────────────────────────────────────────────
+   Pure helpers
+   ──────────────────────────────────────────────────────────── */
+const pad2 = (n) => String(n).padStart(2, "0")
+const fmtUTC = (d) =>
+  `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}Z`
+
+const validateEmail = (v) => {
+  const t = (v || "").trim()
+  if (!t) return "Email wajib diisi."
+  if (!EMAIL_RE.test(t)) return "Format email tidak valid."
+  return ""
+}
+const validatePassword = (v) => {
+  if (!v) return "Password wajib diisi."
+  if (v.length < PW_MIN) return `Password minimal ${PW_MIN} karakter.`
+  return ""
+}
 
 const friendlyAuthError = (raw = "") => {
   const m = String(raw).toLowerCase()
@@ -45,56 +68,77 @@ const friendlyAuthError = (raw = "") => {
   return raw || "Terjadi kesalahan. Silakan coba lagi."
 }
 
-const validateEmail = (v) => {
-  const t = (v || "").trim()
-  if (!t) return "Email wajib diisi."
-  if (!EMAIL_RE.test(t)) return "Format email tidak valid."
-  return ""
-}
-const validatePassword = (v) => {
-  if (!v) return "Password wajib diisi."
-  if (v.length < 6) return "Password minimal 6 karakter."
-  return ""
-}
-
-/* ----------------------------------------------------------------
-   live UTC clock — hero footer
-   ---------------------------------------------------------------- */
-const fmtZ = (d) => {
-  const pad = (n) => String(n).padStart(2, "0")
-  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}Z`
-}
-const useNow = () => {
+/* ────────────────────────────────────────────────────────────
+   Hooks
+   ──────────────────────────────────────────────────────────── */
+const useTickingClock = (ms = 1000) => {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
-    const t = window.setInterval(() => setNow(new Date()), 1000)
-    return () => window.clearInterval(t)
-  }, [])
+    const id = window.setInterval(() => setNow(new Date()), ms)
+    return () => window.clearInterval(id)
+  }, [ms])
   return now
 }
 
-/* ----------------------------------------------------------------
-   theme — same contract as ThemeToggle.jsx (atc-theme key)
-   ---------------------------------------------------------------- */
-const readTheme = () => {
-  try { return localStorage.getItem("atc-theme") === "light" ? "light" : "dark" }
-  catch { return "dark" }
+const useOnline = () => {
+  const [online, setOnline] = useState(
+    () => (typeof navigator !== "undefined" ? navigator.onLine : true)
+  )
+  useEffect(() => {
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener("online", on)
+    window.addEventListener("offline", off)
+    return () => {
+      window.removeEventListener("online", on)
+      window.removeEventListener("offline", off)
+    }
+  }, [])
+  return online
 }
+
 const useTheme = () => {
-  const [theme, setTheme] = useState(readTheme)
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark" }
+    catch { return "dark" }
+  })
   useEffect(() => {
     if (theme === "light") document.documentElement.dataset.theme = "light"
     else document.documentElement.removeAttribute("data-theme")
-    try { localStorage.setItem("atc-theme", theme) } catch {}
+    try { localStorage.setItem(THEME_KEY, theme) }
+    catch { /* private mode — ignore */ }
   }, [theme])
-  return [theme, setTheme]
+  const toggle = useCallback(
+    () => setTheme((t) => (t === "dark" ? "light" : "dark")),
+    []
+  )
+  return [theme, toggle]
 }
 
-/* ----------------------------------------------------------------
-   Hero pane
-   ---------------------------------------------------------------- */
+/* Caps Lock detection — fires on any key event reaching the input. */
+const useCapsLock = () => {
+  const [caps, setCaps] = useState(false)
+  const onKey = useCallback((e) => {
+    if (typeof e.getModifierState === "function") {
+      setCaps(e.getModifierState("CapsLock"))
+    }
+  }, [])
+  return { caps, onKey }
+}
+
+/* Banner state — collapse three setters (info/warn/danger/success/null)
+   into a single reducer so we never end up with two banners at once. */
+const bannerReducer = (_state, action) => {
+  if (action === null) return null
+  return action
+}
+const useBanner = () => useReducer(bannerReducer, null)
+
+/* ────────────────────────────────────────────────────────────
+   Hero pane — single brand lockup + product pitch
+   ──────────────────────────────────────────────────────────── */
 const Hero = ({ online }) => {
-  const now = useNow()
+  const now = useTickingClock()
   return (
     <aside className="lp-hero" aria-hidden="true">
       <div className="lp-lockup">
@@ -107,7 +151,10 @@ const Hero = ({ online }) => {
 
       <div className="lp-pitch">
         <span className="lp-eyebrow">Operational sign-in</span>
-        <h1>Catat posisi, handover, dan jam jaga <em>tanpa friksi.</em></h1>
+        <h1>
+          Catat posisi, handover, dan jam jaga{" "}
+          <em>tanpa friksi.</em>
+        </h1>
         <p>
           Satu tempat untuk Log Position, Handover Mo-to-Mo, dan rekap traffic
           harian — dari menara hingga kantor pusat.
@@ -134,32 +181,70 @@ const Hero = ({ online }) => {
           <span className="lp-dot" />
           <b>{online ? "Sistem operasional" : "Sambungan terputus"}</b>
         </span>
-        <span className="lp-hero-clock">{fmtZ(now)}</span>
+        <span className="lp-hero-clock">{fmtUTC(now)}</span>
       </div>
     </aside>
   )
 }
 
-/* ----------------------------------------------------------------
+/* ────────────────────────────────────────────────────────────
+   Alert banner — single instance, owned by parent
+   ──────────────────────────────────────────────────────────── */
+const ALERT_ICON = {
+  danger: "alert",
+  warn: "wifi-off",
+  success: "check",
+  info: "info",
+}
+
+const Banner = ({ banner, onClose }) => {
+  if (!banner) return null
+  return (
+    <div
+      className={`lp-alert lp-alert--${banner.kind}`}
+      role={banner.kind === "danger" ? "alert" : "status"}
+    >
+      <I n={ALERT_ICON[banner.kind] || "info"} s={16} />
+      <div className="lp-alert-body">
+        <b>{banner.title}</b>
+        <p>{banner.message}</p>
+      </div>
+      <button
+        type="button"
+        className="lp-alert-close"
+        onClick={onClose}
+        aria-label="Tutup notifikasi"
+      >
+        <I n="x" s={14} />
+      </button>
+    </div>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────
    Login form
-   ---------------------------------------------------------------- */
+   ──────────────────────────────────────────────────────────── */
 const LoginForm = ({ online, onLogin }) => {
-  const [email, setEmail]       = useState("")
-  const [pw, setPw]             = useState("")
+  /* ─── form state ─── */
+  const [email,    setEmail]    = useState("")
+  const [pw,       setPw]       = useState("")
   const [remember, setRemember] = useState(true)
-  const [showPw, setShowPw]     = useState(false)
-  const [caps, setCaps]         = useState(false)
+  const [showPw,   setShowPw]   = useState(false)
 
   const [emailErr, setEmailErr] = useState("")
-  const [pwErr, setPwErr]       = useState("")
-  const [banner, setBanner]     = useState(null)
+  const [pwErr,    setPwErr]    = useState("")
+  const [banner,   setBanner]   = useBanner()
   const [submitting, setSubmitting] = useState(false)
   const [resetting,  setResetting]  = useState(false)
+
+  const { caps, onKey } = useCapsLock()
 
   const emailRef = useRef(null)
   const pwRef    = useRef(null)
 
-  // focus first empty field on mount
+  const busy = submitting || resetting
+
+  /* ─── focus first empty field on mount ─── */
   useEffect(() => {
     const t = window.setTimeout(() => {
       (email ? pwRef.current : emailRef.current)?.focus({ preventScroll: true })
@@ -168,7 +253,7 @@ const LoginForm = ({ online, onLogin }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // sync offline banner
+  /* ─── sync offline → banner; clear banner when reconnected ─── */
   useEffect(() => {
     if (!online) {
       setBanner({
@@ -177,19 +262,26 @@ const LoginForm = ({ online, onLogin }) => {
         message: "Sambungkan internet Anda untuk melanjutkan.",
       })
     } else {
+      // Only clear our own offline banner — leave auth-error banners intact
       setBanner((b) => (b && b.title === "Sedang offline" ? null : b))
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
 
-  const handleKey = (e) => {
-    if (typeof e.getModifierState === "function") {
-      setCaps(e.getModifierState("CapsLock"))
-    }
+  /* ─── handlers ─── */
+  const handleEmailChange = (e) => {
+    setEmail(e.target.value)
+    if (emailErr) setEmailErr("")
+  }
+  const handlePwChange = (e) => {
+    setPw(e.target.value)
+    if (pwErr) setPwErr("")
   }
 
   const handleSubmit = useCallback(async (e) => {
     e?.preventDefault?.()
-    if (submitting || resetting) return
+    if (busy) return
+
     if (!online) {
       setBanner({
         kind: "warn",
@@ -198,15 +290,18 @@ const LoginForm = ({ online, onLogin }) => {
       })
       return
     }
+
     const eErr = validateEmail(email)
     const pErr = validatePassword(pw)
-    setEmailErr(eErr); setPwErr(pErr)
+    setEmailErr(eErr)
+    setPwErr(pErr)
     if (eErr || pErr) {
       ;(eErr ? emailRef : pwRef).current?.focus()
       return
     }
 
-    setSubmitting(true); setBanner(null)
+    setSubmitting(true)
+    setBanner(null)
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
@@ -231,10 +326,11 @@ const LoginForm = ({ online, onLogin }) => {
       })
       setSubmitting(false)
     }
-  }, [email, pw, online, submitting, resetting, onLogin])
+  }, [busy, online, email, pw, onLogin, setBanner])
 
   const handleForgot = useCallback(async () => {
-    if (resetting || submitting) return
+    if (busy) return
+
     const eErr = validateEmail(email)
     if (eErr) {
       setEmailErr("Isi email Anda dulu untuk reset password.")
@@ -249,7 +345,9 @@ const LoginForm = ({ online, onLogin }) => {
       })
       return
     }
-    setResetting(true); setBanner(null)
+
+    setResetting(true)
+    setBanner(null)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
@@ -276,18 +374,17 @@ const LoginForm = ({ online, onLogin }) => {
     } finally {
       setResetting(false)
     }
-  }, [email, online, resetting, submitting])
+  }, [busy, email, online, setBanner])
 
-  const formBusy = submitting || resetting
-
+  /* ─── render ─── */
   return (
     <form
       className="lp-form-card"
       onSubmit={handleSubmit}
       noValidate
-      aria-busy={formBusy ? "true" : "false"}
+      aria-busy={busy ? "true" : "false"}
     >
-      {/* Mobile brand — only visible ≤ 980px (see CSS) */}
+      {/* Mobile-only single lockup (hidden ≥ 980px — CSS) */}
       <div className="lp-lockup lp-mobile-lockup">
         <span className="lp-mark" aria-hidden="true" />
         <div className="lp-lockup-text">
@@ -296,40 +393,15 @@ const LoginForm = ({ online, onLogin }) => {
         </div>
       </div>
 
-      <div className="lp-form-eyebrow">Sign in · v5.0</div>
+      <div className="lp-form-eyebrow">Sign in · {VERSION}</div>
       <h2>Masuk ke sistem</h2>
-      <p className="lp-sub">Gunakan email AirNav resmi Anda untuk mengakses dashboard.</p>
+      <p className="lp-sub">
+        Gunakan email AirNav resmi Anda untuk mengakses dashboard.
+      </p>
 
-      {banner && (
-        <div
-          className={`lp-alert lp-alert--${banner.kind}`}
-          role={banner.kind === "danger" ? "alert" : "status"}
-        >
-          <I
-            n={
-              banner.kind === "danger"  ? "alert"
-              : banner.kind === "success" ? "check"
-              : banner.kind === "warn"    ? "wifi-off"
-              : "info"
-            }
-            s={16}
-          />
-          <div className="lp-alert-body">
-            <b>{banner.title}</b>
-            <p>{banner.message}</p>
-          </div>
-          <button
-            type="button"
-            className="lp-alert-close"
-            onClick={() => setBanner(null)}
-            aria-label="Tutup notifikasi"
-          >
-            <I n="x" s={14} />
-          </button>
-        </div>
-      )}
+      <Banner banner={banner} onClose={() => setBanner(null)} />
 
-      {/* email */}
+      {/* email field */}
       <div className="lp-field">
         <div className="lp-field-row">
           <label htmlFor="login-email">Email kerja</label>
@@ -338,15 +410,16 @@ const LoginForm = ({ online, onLogin }) => {
           <input
             ref={emailRef}
             id="login-email"
+            name="email"
             type="email"
             inputMode="email"
             autoComplete="username"
             spellCheck={false}
             autoCapitalize="off"
             value={email}
-            onChange={(e) => { setEmail(e.target.value); if (emailErr) setEmailErr("") }}
+            onChange={handleEmailChange}
             onBlur={(e) => setEmailErr(validateEmail(e.target.value))}
-            disabled={formBusy}
+            disabled={busy}
             placeholder="nama@airnavindonesia.co.id"
             className={`lp-input${emailErr ? " is-invalid" : ""}`}
             aria-invalid={emailErr ? "true" : undefined}
@@ -364,7 +437,7 @@ const LoginForm = ({ online, onLogin }) => {
         </div>
       </div>
 
-      {/* password */}
+      {/* password field */}
       <div className="lp-field">
         <div className="lp-field-row">
           <label htmlFor="login-pw">Password</label>
@@ -372,7 +445,7 @@ const LoginForm = ({ online, onLogin }) => {
             type="button"
             className="lp-field-link"
             onClick={handleForgot}
-            disabled={formBusy}
+            disabled={busy}
           >
             {resetting ? "Mengirim…" : "Lupa password?"}
           </button>
@@ -381,14 +454,15 @@ const LoginForm = ({ online, onLogin }) => {
           <input
             ref={pwRef}
             id="login-pw"
+            name="password"
             type={showPw ? "text" : "password"}
             autoComplete="current-password"
             value={pw}
-            onChange={(e) => { setPw(e.target.value); if (pwErr) setPwErr("") }}
+            onChange={handlePwChange}
             onBlur={(e) => setPwErr(validatePassword(e.target.value))}
-            onKeyDown={handleKey}
-            onKeyUp={handleKey}
-            disabled={formBusy}
+            onKeyDown={onKey}
+            onKeyUp={onKey}
+            disabled={busy}
             placeholder="••••••••"
             className={`lp-input lp-input--trailing${pwErr ? " is-invalid" : ""}`}
             aria-invalid={pwErr ? "true" : undefined}
@@ -400,8 +474,7 @@ const LoginForm = ({ online, onLogin }) => {
             onClick={() => setShowPw((v) => !v)}
             aria-pressed={showPw}
             aria-label={showPw ? "Sembunyikan password" : "Tampilkan password"}
-            disabled={formBusy}
-            tabIndex={0}
+            disabled={busy}
           >
             <I n={showPw ? "eye-off" : "eye"} s={16} />
           </button>
@@ -413,7 +486,7 @@ const LoginForm = ({ online, onLogin }) => {
         >
           {pwErr
             ? <><I n="alert" s={12} /> {pwErr}</>
-            : <span>Minimal 6 karakter.</span>}
+            : <span>Minimal {PW_MIN} karakter.</span>}
         </div>
         {caps && (
           <span className="lp-caps-warn" role="status">
@@ -422,24 +495,25 @@ const LoginForm = ({ online, onLogin }) => {
         )}
       </div>
 
-      {/* remember me */}
+      {/* remember-me */}
       <div className="lp-helper-row">
         <label className="lp-checkbox">
           <input
             type="checkbox"
             checked={remember}
             onChange={(e) => setRemember(e.target.checked)}
-            disabled={formBusy}
+            disabled={busy}
           />
           <span className="lp-checkbox-box" />
           Tetap masuk di perangkat ini
         </label>
       </div>
 
+      {/* primary CTA */}
       <button
         type="submit"
         className="lp-btn-primary"
-        disabled={formBusy || !online}
+        disabled={busy || !online}
         data-loading={submitting ? "true" : "false"}
       >
         {submitting
@@ -454,31 +528,18 @@ const LoginForm = ({ online, onLogin }) => {
             Hubungi admin
           </a>
         </span>
-        <span className="lp-form-meta">v5.0 · {new Date().getFullYear()}</span>
+        <span className="lp-form-meta">{VERSION} · {new Date().getFullYear()}</span>
       </div>
     </form>
   )
 }
 
-/* ----------------------------------------------------------------
-   Login — outer shell (theme toggle, stage layout, network)
-   ---------------------------------------------------------------- */
+/* ────────────────────────────────────────────────────────────
+   Login — outer shell (split layout, theme toggle, online watch)
+   ──────────────────────────────────────────────────────────── */
 export const Login = ({ onLogin }) => {
-  const [theme, setTheme] = useTheme()
-  const [online, setOnline] = useState(
-    typeof navigator !== "undefined" ? navigator.onLine : true
-  )
-
-  useEffect(() => {
-    const onOn  = () => setOnline(true)
-    const onOff = () => setOnline(false)
-    window.addEventListener("online", onOn)
-    window.addEventListener("offline", onOff)
-    return () => {
-      window.removeEventListener("online", onOn)
-      window.removeEventListener("offline", onOff)
-    }
-  }, [])
+  const [theme, toggleTheme] = useTheme()
+  const online = useOnline()
 
   const themeLabel = useMemo(
     () => (theme === "dark" ? "Beralih ke mode terang" : "Beralih ke mode gelap"),
@@ -493,8 +554,8 @@ export const Login = ({ onLogin }) => {
         <button
           className="lp-theme-toggle"
           type="button"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          aria-label="Ganti tema"
+          onClick={toggleTheme}
+          aria-label={themeLabel}
           title={themeLabel}
         >
           <I n={theme === "dark" ? "sun" : "moon"} s={16} />
@@ -505,3 +566,5 @@ export const Login = ({ onLogin }) => {
     </div>
   )
 }
+
+export default Login
