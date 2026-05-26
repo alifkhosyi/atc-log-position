@@ -26,6 +26,9 @@ import {
   getAccessibleBranches,
 } from "../../lib/utils.js"
 import { I } from "../../components/Icons.jsx"
+import { AlertsPanel, computeAlerts } from "../../components/Dashboard/AlertsPanel.jsx"
+import { PositionCard } from "../../components/Dashboard/PositionCard.jsx"
+import { TrafficHarian, buildTraffic7 } from "../../components/Dashboard/TrafficHarian.jsx"
 import "../../styles/dashboard.css"
 
 /* ----------------------------------------------------------------
@@ -47,13 +50,6 @@ const useNow = (ms = 1000) => {
   }, [ms])
   return now
 }
-
-const DOW = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"]
-const dayKey = (d) => {
-  const dt = new Date(d)
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
-}
-const dayLabel = (d) => `${DOW[d.getDay()]} ${pad(d.getDate())}`
 
 /* ----------------------------------------------------------------
    Stats
@@ -96,106 +92,8 @@ const Stats = ({ activeCount, totalLogs, todayTraffic, coverage, coverageSub, sh
 )
 
 /* ----------------------------------------------------------------
-   Alerts — derived from live data
+   ActivePositions — read-only grid of PositionCards
    ---------------------------------------------------------------- */
-const computeAlerts = ({ active, branchUnits, now }) => {
-  const out = []
-
-  // FRMS warning: on-mic ≥ 2 hours
-  active.forEach((l) => {
-    const mins = durMin(l.on_time, now.toISOString())
-    if (mins >= 120) {
-      out.push({
-        kind: "crit",
-        title: `FRMS: ${l.atc_name} on mic > 2 jam`,
-        body: `${l.unit} ${l.sector || ""} — disarankan rotasi (saat ini ${fmtDuration(mins)}).`,
-        act: "Tinjau",
-      })
-    }
-  })
-
-  // Slot kosong: unit yang ada di branch tapi tidak ada active log
-  const activeUnits = new Set(active.map(l => l.unit))
-  ;(branchUnits || []).forEach((u) => {
-    if (!activeUnits.has(u)) {
-      out.push({
-        kind: "info",
-        title: `Slot ${u} kosong`,
-        body: "Belum ada ATC on mic untuk unit ini di shift berjalan.",
-        act: "Buka log",
-      })
-    }
-  })
-
-  return out
-}
-
-const Alerts = ({ items, onAct }) => (
-  <div className="dash-panel">
-    <div className="dash-panel-h">
-      <div className="dash-panel-t"><I n="alert" s={15}/> Alerts &amp; Warnings</div>
-      <span className="dash-panel-counter">{items.length} aktif</span>
-    </div>
-    {items.length === 0 ? (
-      <div className="dash-alerts-empty">
-        <I n="check" s={28}/>
-        <span>Tidak ada peringatan. Semua sistem operasional normal.</span>
-      </div>
-    ) : (
-      <div className="dash-alerts">
-        {items.map((a, i) => (
-          <div key={i} className={`dash-alert-row ${a.kind}`}>
-            <span className="ic"><I n={a.kind === "info" ? "info" : "alert"} s={14}/></span>
-            <div className="body">
-              <b>{a.title}</b>
-              {a.body}
-            </div>
-            <button className="act" onClick={() => onAct?.(a)} type="button">
-              {a.act} →
-            </button>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-)
-
-/* ----------------------------------------------------------------
-   PositionCard — read-only navigation (click → Log Position page)
-   ---------------------------------------------------------------- */
-const PositionCard = ({ log, now, onClick }) => {
-  const mins = durMin(log.on_time, now.toISOString())
-  const isWarn = mins >= 120
-  return (
-    <div
-      className={`dash-pos-card${isWarn ? " is-warn" : ""}`}
-      role="button"
-      tabIndex={0}
-      onClick={() => onClick?.(log)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault(); onClick?.(log)
-        }
-      }}
-      aria-label={`Buka detail ${log.atc_name} di Log Position`}
-    >
-      <div className="dash-pos-row1">
-        <span className="dash-pulse"/>
-        <span className="dash-pos-unit">{log.unit}</span>
-        <span className="dash-pos-sect">· {log.sector}</span>
-      </div>
-      <div className="dash-pos-cwp">{log.cwp}</div>
-      <div className="dash-pos-name">{log.atc_name}</div>
-      <div className={`dash-pos-foot${isWarn ? " is-warn" : ""}`}>
-        <span>
-          {fmtT(log.on_time)} · <b>{fmtDuration(mins)}{isWarn ? " ⚠" : ""}</b>
-        </span>
-        <span className="dash-pos-arrow"><I n="chevron-right" s={14}/></span>
-      </div>
-    </div>
-  )
-}
-
 const ActivePositions = ({ logs, now, onSelect, goLog }) => (
   <div className={`dash-panel${logs.length > 0 ? " is-glow" : ""}`}>
     <div className="dash-panel-h">
@@ -207,11 +105,11 @@ const ActivePositions = ({ logs, now, onSelect, goLog }) => (
         <I n="micOff" s={32}/>
         <span>Belum ada ATC on mic untuk shift ini.</span>
         <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>
-          Input pertama via menu{" "}
+          Sesi dibuat otomatis dari{" "}
           <button type="button" className="dash-link" onClick={goLog}>
-            <b>Log Position</b>
+            <b>Roster ATC</b>
           </button>{" "}
-          di kiri.
+          saat shift dimulai.
         </span>
       </div>
     ) : (
@@ -230,107 +128,7 @@ const ActivePositions = ({ logs, now, onSelect, goLog }) => (
 )
 
 /* ----------------------------------------------------------------
-   Traffic Harian — 7-day stacked bars from real ctx.logs
-   ---------------------------------------------------------------- */
-const buildTraffic7 = (allLogs, now, branchCodes) => {
-  const today = new Date(now)
-  today.setHours(0, 0, 0, 0)
-  const buckets = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(today)
-    d.setDate(d.getDate() - i)
-    buckets.push({
-      date: d,
-      key: dayKey(d),
-      label: dayLabel(d),
-      dep: 0, arr: 0, ovf: 0,
-      today: i === 0,
-    })
-  }
-  const byKey = Object.fromEntries(buckets.map(b => [b.key, b]))
-  allLogs.forEach((l) => {
-    if (branchCodes && !branchCodes.includes(l.branch_code)) return
-    const k = dayKey(l.on_time)
-    const b = byKey[k]
-    if (!b) return
-    b.dep += l.departure_count || 0
-    b.arr += l.arrival_count   || 0
-    b.ovf += l.overfly_count   || 0
-  })
-  return buckets
-}
-
-const TrafficHarian = ({ data }) => {
-  const max = Math.max(1, ...data.map(d => d.dep + d.arr + d.ovf))
-  const total = data.reduce((a, d) => a + d.dep + d.arr + d.ovf, 0)
-  const avg = Math.round(total / data.length)
-  const today = data[data.length - 1]
-  const yesterday = data[data.length - 2]
-  const yTotal = (yesterday?.dep || 0) + (yesterday?.arr || 0) + (yesterday?.ovf || 0)
-  const tTotal = today.dep + today.arr + today.ovf
-  const delta = yTotal === 0 ? null : Math.round(((tTotal - yTotal) / yTotal) * 100)
-
-  return (
-    <div className="dash-panel">
-      <div className="dash-panel-h">
-        <div className="dash-panel-t"><I n="chart" s={15}/> Traffic Harian</div>
-        <span className="dash-panel-counter">7 hari terakhir</span>
-      </div>
-      <div className="dash-traf-wrap">
-        <div className="dash-traf-bars">
-          {data.map((d, i) => {
-            const dh = (d.dep / max) * 100
-            const ah = (d.arr / max) * 100
-            const oh = (d.ovf / max) * 100
-            const dayTotal = d.dep + d.arr + d.ovf
-            return (
-              <div key={i} className={`dash-traf-day${d.today ? " today" : ""}`}>
-                <div className="dash-traf-tip">
-                  <span className="l">{d.label}</span>
-                  <div className="ln"><span>DEP</span><b style={{ color: "var(--accent)" }}>{d.dep}</b></div>
-                  <div className="ln"><span>ARR</span><b style={{ color: "var(--status-warn)" }}>{d.arr}</b></div>
-                  <div className="ln"><span>OVF</span><b style={{ color: "var(--text-faint)" }}>{d.ovf}</b></div>
-                  <div className="ln" style={{ borderTop: "1px solid var(--border)", paddingTop: 4, marginTop: 4 }}>
-                    <span>Total</span><b>{dayTotal}</b>
-                  </div>
-                </div>
-                <div className="dash-traf-stack">
-                  <div className="dash-traf-bar dep" style={{ height: `${dh}%` }}/>
-                  <div className="dash-traf-bar arr" style={{ height: `${ah}%` }}/>
-                  <div className="dash-traf-bar ovf" style={{ height: `${oh}%` }}/>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        <div className="dash-traf-axis">
-          {data.map((d, i) => (
-            <div key={i} className={d.today ? "today" : ""}>{d.label}</div>
-          ))}
-        </div>
-      </div>
-      <div className="dash-traf-foot">
-        <span className="lg"><i style={{ background: "var(--accent)" }}/> DEP</span>
-        <span className="lg"><i style={{ background: "var(--status-warn)" }}/> ARR</span>
-        <span className="lg"><i style={{ background: "var(--text-faint)", opacity: .5 }}/> OVF</span>
-        <span className="summary">
-          Rata-rata <b>{avg} mov/hari</b>
-          {delta !== null && (
-            <>
-              {" · Hari ini "}
-              {delta >= 0
-                ? <span className="up">+{delta}%</span>
-                : <span className="down">{delta}%</span>}
-            </>
-          )}
-        </span>
-      </div>
-    </div>
-  )
-}
-
-/* ----------------------------------------------------------------
-   Timeline — read-only (click row → Log Position page)
+   Timeline — read-only (click row → Daily Report)
    ---------------------------------------------------------------- */
 const Timeline = ({ logs, now, onRowClick }) => (
   <div className="dash-panel">
@@ -449,8 +247,14 @@ export const CabangDash = () => {
   const coverageSub = branchUnits.length > 0 ? branchUnits.join(" · ") : "Tidak ada unit"
 
   const alerts = useMemo(
-    () => computeAlerts({ active, branchUnits, now }),
-    [active, branchUnits, now]
+    () => computeAlerts({
+      active,
+      branchUnits,
+      now,
+      handoverChecklists: ctx.handoverChecklists,
+      branchCode: ctx.user.branch_code,
+    }),
+    [active, branchUnits, now, ctx.handoverChecklists, ctx.user.branch_code]
   )
 
   const traffic7 = useMemo(
@@ -458,8 +262,12 @@ export const CabangDash = () => {
     [ctx.logs, now, myBranches]
   )
 
-  /* All interactions on this read-only page route to Log Position. */
-  const goLog = () => ctx.goPage("log")
+  /* Log Position is deprecated. Dashboard now routes:
+     - position cards / timeline rows → Daily Report (Section G)
+     - alert actions → whatever they declared in `target` */
+  const goReports = () => ctx.goPage("reports")
+  const goRoster  = () => ctx.goPage("roster")
+  const onAlertAct = (a) => ctx.goPage(a?.target || "reports")
 
   return (
     <div className="dash-page">
@@ -489,13 +297,13 @@ export const CabangDash = () => {
         shiftLabel={getShift()}
       />
 
-      <Alerts items={alerts} onAct={goLog} />
+      <AlertsPanel items={alerts} onAct={onAlertAct} />
 
       <ActivePositions
         logs={active}
         now={now}
-        onSelect={goLog}
-        goLog={goLog}
+        onSelect={goRoster}
+        goLog={goRoster}
       />
 
       <TrafficHarian data={traffic7} />
@@ -503,7 +311,7 @@ export const CabangDash = () => {
       <Timeline
         logs={today}
         now={now}
-        onRowClick={goLog}
+        onRowClick={goReports}
       />
     </div>
   )
