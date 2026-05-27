@@ -7,6 +7,8 @@
 import React from "react"
 import { I, RadarLogo } from "./Icons.jsx"
 import { usePendingSessions } from "../hooks/usePendingSessions.js"
+import { useOffRosterCount } from "../hooks/useOffRosterCount.js"
+import { useOvertimeCount } from "../hooks/useOvertimeCount.js"
 import "../styles/section-g.css"
 
 export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
@@ -15,6 +17,16 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
   const { count: pendingCount } = usePendingSessions(
     user.role === "admin" ? null : user.branch_code,
   )
+
+  // Roster ATC badge = off-roster + overtime entries di bulan berjalan.
+  // Hooks own their own short-circuit logic for admin (no branch_code → 0).
+  const offRosterCount = useOffRosterCount(
+    user.role === "admin" ? null : user.branch_code,
+  )
+  const overtimeCount = useOvertimeCount(
+    user.role === "admin" ? null : user.branch_code,
+  )
+  const rosterBadge = offRosterCount + overtimeCount
 
   const groups = user.role === "admin" ? [
     {
@@ -31,7 +43,8 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
     {
       section: "Penjadwalan",
       items: [
-        { id:"roster", label:"Roster ATC", icon:"checklist" },   // ← BARU
+        { id:"roster",    label:"Roster ATC",    icon:"calendar" },
+        { id:"tunjangan", label:"Tunjangan ATC", icon:"wallet" },
       ],
     },
     {
@@ -62,7 +75,8 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
     {
       section: "Penjadwalan",
       items: [
-        { id:"roster", label:"Roster ATC", icon:"checklist" },   // ← BARU
+        { id:"roster",    label:"Roster ATC",    icon:"calendar", badge: rosterBadge, badgeKind: "roster" },
+        { id:"tunjangan", label:"Tunjangan ATC", icon:"wallet" },
       ],
     },
     {
@@ -93,13 +107,16 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
             {!col && <div className="sidebar-section">{g.section}</div>}
             {g.items.map(it => {
               const showBadge = typeof it.badge === "number" && it.badge > 0
+              const badgeAria = it.badgeKind === "roster"
+                ? `${it.badge} entry off-roster atau jam tambahan bulan ini`
+                : `${it.badge} session belum diisi`
               return (
                 <button
                   key={it.id}
                   className={"sidebar-item" + (page === it.id ? " sidebar-item-active" : "")}
                   onClick={() => go(it.id)}
                   title={col
-                    ? `${it.label}${showBadge ? ` — ${it.badge} pending` : ""}`
+                    ? `${it.label}${showBadge ? ` — ${it.badge}` : ""}`
                     : undefined}
                 >
                   <I n={it.icon} s={17}/>
@@ -107,7 +124,7 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
                   {showBadge && (
                     <span
                       className="sidebar-badge"
-                      aria-label={`${it.badge} session belum diisi`}
+                      aria-label={badgeAria}
                     >
                       {it.badge > 99 ? "99+" : it.badge}
                     </span>
