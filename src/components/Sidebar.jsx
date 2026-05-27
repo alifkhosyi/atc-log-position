@@ -43,8 +43,9 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
     {
       section: "Penjadwalan",
       items: [
-        { id:"roster",    label:"Roster ATC",    icon:"calendar" },
-        { id:"tunjangan", label:"Tunjangan ATC", icon:"wallet" },
+        { id:"roster",    label:"Roster ATC",     icon:"calendar" },
+        { id:"tunjangan", label:"Tunjangan ATC",  icon:"wallet" },
+        { id:"rolling",   label:"Rolling Harian", icon:"refresh" },
       ],
     },
     {
@@ -75,8 +76,9 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
     {
       section: "Penjadwalan",
       items: [
-        { id:"roster",    label:"Roster ATC",    icon:"calendar", badge: rosterBadge, badgeKind: "roster" },
-        { id:"tunjangan", label:"Tunjangan ATC", icon:"wallet" },
+        { id:"roster",    label:"Roster ATC",     icon:"calendar", badge: rosterBadge, badgeKind: "roster" },
+        { id:"tunjangan", label:"Tunjangan ATC",  icon:"wallet" },
+        { id:"rolling",   label:"Rolling Harian", icon:"refresh" },
       ],
     },
     {
