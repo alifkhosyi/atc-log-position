@@ -23,8 +23,8 @@ import {
     validateFull, splitBySeverity,
     leaveRangeFromDates,
     listAirports, getAirport, getUnit, getBaselineForMonth,
-    computeAllowanceTable,
-    type PersonnelAllowance,
+    // Step 10: computeAllowanceTable + PersonnelAllowance dipindah ke
+    // src/pages/TunjanganPage.tsx (CAPanel sudah dihapus dari sini).
 } from '../../lib/roster-engine';
 
 // ============================================================
@@ -139,7 +139,7 @@ export default function RosterPage() {
     const [unit, setUnit] = useState('TWR');
     const [year, setYear] = useState(new Date().getFullYear());
     const [month, setMonth] = useState(new Date().getMonth() + 1);
-    const [activeTab, setActiveTab] = useState<'roster' | 'ca'>('roster');
+    // Step 10 cleanup: activeTab state dihapus — CA pindah ke TunjanganPage.
 
     useEffect(() => {
         if (!isAdmin && resolvedFromBranch && resolvedFromBranch !== airportCode) {
@@ -613,33 +613,9 @@ export default function RosterPage() {
                 </div>
             </div>
 
-            {/* TABS */}
-            <div className="roster-tabs" style={{
-                display: 'flex',
-                gap: 4,
-                borderBottom: '1px solid var(--border)',
-                marginBottom: 16,
-            }}>
-                {(['roster', 'ca'] as const).map(t => (
-                    <button
-                        key={t}
-                        onClick={() => setActiveTab(t)}
-                        className="btn"
-                        style={{
-                            border: 'none',
-                            borderBottom: activeTab === t ? '2px solid var(--accent)' : '2px solid transparent',
-                            background: 'transparent',
-                            color: activeTab === t ? 'var(--accent)' : 'var(--text-muted)',
-                            borderRadius: 0,
-                            fontWeight: 600,
-                            padding: '10px 14px',
-                            marginBottom: -1,
-                        }}
-                    >
-                        {t === 'roster' ? 'Roster' : 'Control Allowance'}
-                    </button>
-                ))}
-            </div>
+            {/* Step 10 cleanup: inner Roster/CA tabs removed — CA pindah ke
+                page Tunjangan ATC standalone, dan halaman ini sekarang jadi
+                "Tab 1: Jadwal Bulanan" di shell RosterPage/index.tsx. */}
 
             {/* TOOLBAR */}
             <div className="input-banner">
@@ -717,9 +693,8 @@ export default function RosterPage() {
                 </div>
             )}
 
-            {/* TAB CONTENT */}
-            {activeTab === 'roster' ? (
-                <>
+            {/* Step 10 cleanup: tab CA dihapus, tinggal Roster (Jadwal Bulanan). */}
+            <>
                     {/* Status row */}
                     {roster && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '12px 0' }}>
@@ -956,286 +931,10 @@ export default function RosterPage() {
                         </div>
                     )}
                 </>
-            ) : (
-                <CAPanel
-                    airportCode={airportCode}
-                    unit={unit}
-                    year={year}
-                    month={month}
-                    roster={roster}
-                    rosterStatus={rosterStatus}
-                    dbPersonnel={dbPersonnel}
-                    unitConfig={unitConfig}
-                />
-            )}
         </div>
     );
 }
 
-
-// ============================================================
-// CA PANEL — sub-component untuk tab Control Allowance
-// ============================================================
-
-interface CAPanelProps {
-    airportCode: string;
-    unit: string;
-    year: number;
-    month: number;
-    roster: Record<string, RosterCell[]> | null;
-    rosterStatus: 'DRAFT' | 'FINAL';
-    dbPersonnel: DBPersonnel[];
-    unitConfig: ReturnType<typeof getUnit> | undefined;
-}
-
-function CAPanel(props: CAPanelProps) {
-    const { airportCode, unit, year, month, roster, rosterStatus, dbPersonnel, unitConfig } = props;
-
-    if (!roster) {
-        return (
-            <div className="empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
-                <p>Belum ada roster.</p>
-                <p className="faint text-sm">Buka tab <strong>Roster</strong>, klik Generate dulu.</p>
-            </div>
-        );
-    }
-
-    if (!unitConfig?.rolling) {
-        return (
-            <div className="panel" style={{ marginTop: 12 }}>
-                <div className="panel-body" style={{ padding: 14, color: 'var(--status-warn, #f59e0b)' }}>
-                    Control Allowance memerlukan konfigurasi rolling.
-                    Unit <strong>{airportCode}/{unit}</strong> belum punya rolling table —
-                    tunjangan tidak bisa dihitung.
-                </div>
-            </div>
-        );
-    }
-
-    const cfg = getAirport(airportCode);
-    const airportName = cfg?.airport_name || airportCode;
-
-    const fakeResult = {
-        success: true as const,
-        year, month,
-        daysInMonth: new Date(year, month, 0).getDate(),
-        personnel: dbPersonnel.map(p => ({ id: p.id, initial: p.initial, leaves: [] })),
-        roster,
-        mode: 'external' as const,
-        cutoffDay: 0,
-        requiredPerDay: unitConfig?.min_on_duty_baseline ?? 3,
-        isTni: false,
-    };
-
-    const nameLookup: Record<string, string> = {};
-    for (const p of dbPersonnel) nameLookup[p.id] = p.full_name || p.initial;
-    const nikLookup: Record<string, string> = {};
-
-    const allowance = computeAllowanceTable({
-        airportName,
-        result: fakeResult,
-        unitConfig,
-        priorityOrder: dbPersonnel.map(p => p.id),
-        nameLookup,
-        nikLookup,
-        rosterStatus,
-    });
-
-    if (allowance.error) {
-        return (
-            <div className="panel" style={{ marginTop: 12 }}>
-                <div className="panel-body" style={{ padding: 14, color: 'var(--status-off, #dc2626)' }}>
-                    {allowance.error}
-                </div>
-            </div>
-        );
-    }
-
-    function downloadCSV() {
-        const headers = ['No', 'Inisial', 'Nama', 'Jam Kontrol (jam)', 'Konstanta (Rp/jam)', 'Tunjangan (Rp)'];
-        const lines = [
-            `Control Allowance - ${airportName} ${unit} - ${month}/${year}`,
-            `Status: ${rosterStatus}`,
-            `Konstanta: Rp ${allowance.constant_per_hour.toLocaleString('id-ID')}/jam`,
-            '',
-            headers.join(','),
-            ...allowance.rows.map((r: PersonnelAllowance, i: number) =>
-                [
-                    i + 1, r.initial, `"${r.name}"`,
-                    r.kontrol_hours.toFixed(2),
-                    r.constant_per_hour.toFixed(0),
-                    r.allowance_rp.toFixed(0),
-                ].join(',')
-            ),
-            '',
-            `TOTAL,,,${allowance.summary.total_kontrol_hours.toFixed(2)},,${allowance.summary.total_allowance.toFixed(0)}`,
-        ];
-        const csv = lines.join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `CA_${airportName.replace(/\s+/g, '_')}_${unit}_${year}_${String(month).padStart(2, '0')}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    return (
-        <>
-            {/* Metric cards */}
-            <div className="stats-grid" style={{ marginTop: 12 }}>
-                <div className="stat-card">
-                    <div style={{ flex: 1 }}>
-                        <div className="stat-l">Bandara / Unit</div>
-                        <div className="stat-v" style={{ fontSize: 18 }}>{airportName}</div>
-                        <div className="stat-sub">Unit {unit}</div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div style={{ flex: 1 }}>
-                        <div className="stat-l">
-                            Konstanta {allowance.is_tma && <span className="status-badge status-on" style={{ marginLeft: 4 }}>TMA</span>}
-                        </div>
-                        <div className="stat-v" style={{ fontSize: 18 }}>
-                            Rp {allowance.constant_per_hour.toLocaleString('id-ID')}
-                        </div>
-                        <div className="stat-sub">per jam</div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div style={{ flex: 1 }}>
-                        <div className="stat-l">Total Jam Kontrol</div>
-                        <div className="stat-v" style={{ fontSize: 18 }}>
-                            {allowance.summary.total_kontrol_hours.toFixed(2)}
-                        </div>
-                        <div className="stat-sub">jam</div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div style={{ flex: 1 }}>
-                        <div className="stat-l">Status Roster</div>
-                        <div className="stat-v" style={{
-                            fontSize: 18,
-                            color: rosterStatus === 'FINAL' ? 'var(--status-on)' : 'var(--status-warn)',
-                        }}>
-                            {rosterStatus}
-                        </div>
-                        <div className="stat-sub">
-                            {rosterStatus === 'FINAL' ? 'siap submit' : 'preview saja'}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Banner DRAFT */}
-            {rosterStatus !== 'FINAL' && (
-                <div className="panel" style={{ marginTop: 12, background: 'var(--status-warn-soft, rgba(245,158,11,0.1))' }}>
-                    <div className="panel-body" style={{ padding: 12, color: 'var(--status-warn, #f59e0b)' }}>
-                        <strong>Perhatian:</strong> Roster masih DRAFT.
-                        Tunjangan ini boleh dipakai untuk preview, tapi jangan submit ke HR/finance
-                        sebelum roster di-mark FINAL di tab Roster.
-                    </div>
-                </div>
-            )}
-
-            {/* Domain rule */}
-            <div className="panel" style={{ marginTop: 12, background: 'var(--accent-soft)' }}>
-                <div className="panel-body" style={{ padding: 12, color: 'var(--accent)' }}>
-                    <strong>Jam Kontrol</strong> = waktu Controller + Assistant per personel
-                    (waktu Istirahat tidak dihitung). Tunjangan = Jam Kontrol × Konstanta.
-                </div>
-            </div>
-
-            {/* Warnings */}
-            {allowance.warnings.length > 0 && (
-                <div className="panel" style={{ marginTop: 12 }}>
-                    <details>
-                        <summary className="panel-header" style={{ cursor: 'pointer' }}>
-                            <h2 className="panel-title">{allowance.warnings.length} validation warning</h2>
-                        </summary>
-                        <div className="panel-body" style={{ paddingTop: 0 }}>
-                            <ul style={{ margin: 0, paddingLeft: 20, fontSize: 'var(--fs-sm, 13px)', color: 'var(--status-warn, #f59e0b)' }}>
-                                {allowance.warnings.map((w, i) => <li key={i}>{w}</li>)}
-                            </ul>
-                        </div>
-                    </details>
-                </div>
-            )}
-
-            {/* CA Table */}
-            <div className="panel" style={{ marginTop: 12 }}>
-                <div className="panel-header">
-                    <h2 className="panel-title">Tabel Tunjangan</h2>
-                    <span className="panel-counter">{allowance.summary.n_personnel} personel</span>
-                </div>
-                <div className="panel-body" style={{ padding: 0 }}>
-                    <div className="table-wrap">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th style={{ width: 50 }}>No</th>
-                                    <th>Inisial</th>
-                                    <th>Nama Lengkap</th>
-                                    <th style={{ textAlign: 'right' }}>Jam Kontrol</th>
-                                    <th style={{ textAlign: 'right' }}>Konstanta (Rp/jam)</th>
-                                    <th style={{ textAlign: 'right' }}>Tunjangan (Rp)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {allowance.rows.map((r: PersonnelAllowance, i: number) => (
-                                    <tr key={r.personnel_id}>
-                                        <td>{i + 1}</td>
-                                        <td><strong>{r.initial}</strong></td>
-                                        <td>{r.name}</td>
-                                        <td className="mono" style={{ textAlign: 'right' }}>
-                                            {r.kontrol_hours.toFixed(2)} jam
-                                            <div className="faint" style={{ fontSize: 10 }}>
-                                                ({r.kontrol_minutes.toLocaleString('id-ID')} mnt)
-                                            </div>
-                                        </td>
-                                        <td className="mono" style={{ textAlign: 'right' }}>
-                                            {r.constant_per_hour.toLocaleString('id-ID')}
-                                        </td>
-                                        <td className="mono" style={{
-                                            textAlign: 'right', fontWeight: 700,
-                                            color: 'var(--status-on, #16a34a)',
-                                        }}>
-                                            Rp {Math.round(r.allowance_rp).toLocaleString('id-ID')}
-                                        </td>
-                                    </tr>
-                                ))}
-                                <tr style={{
-                                    background: 'var(--status-on-soft, rgba(34,197,94,0.08))',
-                                    borderTop: '2px solid var(--status-on, #22c55e)',
-                                    fontWeight: 700,
-                                }}>
-                                    <td colSpan={3} style={{ textAlign: 'right' }}>TOTAL</td>
-                                    <td className="mono" style={{ textAlign: 'right' }}>
-                                        {allowance.summary.total_kontrol_hours.toFixed(2)} jam
-                                    </td>
-                                    <td/>
-                                    <td className="mono" style={{
-                                        textAlign: 'right',
-                                        color: 'var(--status-on, #16a34a)',
-                                    }}>
-                                        Rp {Math.round(allowance.summary.total_allowance).toLocaleString('id-ID')}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <div className="faint text-sm" style={{ marginTop: 8 }}>
-                Rata-rata Rp {Math.round(allowance.summary.avg_allowance).toLocaleString('id-ID')} per personel.
-            </div>
-
-            <div style={{ marginTop: 12 }}>
-                <button className="btn btn-primary" onClick={downloadCSV}>
-                    Download CSV
-                </button>
-            </div>
-        </>
-    );
-}
+// Step 10 cleanup: CAPanel function (~270 lines) sudah dihapus.
+// Logic-nya pindah ke src/pages/TunjanganPage.tsx sebagai standalone
+// page, dengan tambahan kolom Jam Advance + Jam Extend.
