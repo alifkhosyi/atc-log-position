@@ -1,18 +1,31 @@
 /**
- * Public entrypoint untuk roster-engine.
+ * Public API for src/lib/roster-engine/.
  *
- * Section 1 (Foundation): types + dates + reference data loader.
- * Section 2+ akan menambah: generator, FRMS, swap, rolling, CA.
+ * Generator + FRMS + Swap + Templates. Roster-specific only.
+ *
+ * Untuk shared types: import dari ../shared.
+ * Untuk airport reference data: import dari ../airport-data.
+ * Untuk rolling intra-shift: import dari ../rolling-engine.
+ * Untuk control allowance: import dari ../ca-engine.
  */
 
 export * from './types';
-export * from './date-utils';
-export * from './airport-config-loader';
-export * from './templates';
-export * from './greedy';
-export * from './generator';
-export * from './frms-rules';
-export * from './frms-validator';
-export * from './rolling';
-export * from './swap';
-export * from './control-allowance';
+export { generateRoster } from './generator';
+export type { GenerateRosterOptions } from './generator';
+export { swapShift } from './swap';
+export type { SwapResult } from './swap';
+export {
+    validateFull, splitBySeverity,
+    FRMS_SHIFT_HOURS,
+    validateMinimumPersonnel, validateMaxConsecutiveDays,
+    validateMinDaysOffPerWeek, validateMaxHoursPerWeek,
+    validateNoLeaveAssignedWork, validateShiftDuration,
+} from './frms-validator';
+export {
+    type ServiceClass,
+    DEFAULT_LIMITS,
+    getMaxConsecutiveDays, getMaxHoursPerWeek, getMaxShiftHours,
+    getMinRestAfterMaxConsecutiveHours,
+    computePersonnelNeeds,
+} from './frms-rules';
+export { getTemplate } from './templates';
