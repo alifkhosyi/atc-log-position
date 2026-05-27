@@ -123,14 +123,40 @@ export interface PersonnelAllowance {
     kontrol_minutes: number;
     kontrol_hours: number;
     constant_per_hour: number;
-    allowance_rp: number;
+    allowance_rp: number;       // regular only (kontrol_hours × constant)
+
+    // Step 9 — Jam Tambahan (Advance/Extend) additions.
+    // Default 0 kalau tidak ada data overtime. Rate SAMA dengan reguler.
+    advance_minutes: number;
+    extend_minutes: number;
+    advance_hours: number;
+    extend_hours: number;
+    total_hours: number;        // kontrol_hours + advance_hours + extend_hours
+    total_allowance_rp: number; // total_hours × constant
 }
 
 export interface AllowanceSummary {
     n_personnel: number;
-    total_kontrol_hours: number;
-    total_allowance: number;
-    avg_allowance: number;
+    total_kontrol_hours: number;     // regular only
+    total_advance_hours: number;     // NEW
+    total_extend_hours: number;      // NEW
+    total_hours_all: number;         // NEW: regular + advance + extend
+    total_allowance: number;         // regular only — legacy field, retained
+    total_allowance_all: number;     // NEW: regular + overtime tunjangan
+    avg_allowance: number;           // avg regular per personnel (legacy)
+}
+
+/**
+ * Step 9 — Jam Tambahan input shape. Match dengan row di
+ * public.atc_overtime (lihat supabase/migrations/20260527_overtime.sql).
+ *
+ * Optional di ComputeAllowanceOptions — kalau caller tidak kirim,
+ * advance/extend semua 0 dan total_* sama dengan regular_*.
+ */
+export interface OvertimeInput {
+    personnel_id: string;
+    type: 'ADVANCE' | 'EXTEND';
+    duration_min: number;
 }
 
 function validateInputs(
@@ -237,6 +263,8 @@ export interface ComputeAllowanceOptions {
     nameLookup?: Record<string, string>;
     nikLookup?: Record<string, string>;
     rosterStatus?: string;
+    /** Jam Tambahan rows. Optional — default [] (semua personel 0 menit). */
+    overtime?: OvertimeInput[];
 }
 
 export interface AllowanceResult {
@@ -253,16 +281,29 @@ export function computeAllowanceTable(opts: ComputeAllowanceOptions): AllowanceR
         airportName, result, unitConfig, priorityOrder,
         nameLookup = {}, nikLookup = {},
         rosterStatus = 'DRAFT',
+        overtime = [],
     } = opts;
 
     // Constant lookup
     const constInfo = getCAConstant(airportName);
     if (!constInfo) {
         return {
-            rows: [], summary: { n_personnel: 0, total_kontrol_hours: 0, total_allowance: 0, avg_allowance: 0 },
+            rows: [], summary: emptySummary(),
             constant_per_hour: 0, is_tma: false, warnings: [],
             error: `Konstanta tidak ditemukan untuk '${airportName}'`,
         };
+    }
+
+    // Step 9 — aggregate overtime per personnel_id.
+    // Note: overtime.personnel_id is DB UUID, but engine kontrolMin is keyed by
+    // `initial`. Caller (TunjanganPage) maps both via nameLookup. We try BOTH
+    // keys when looking up — first by initial, fallback by personnel_id.
+    const otByPersonnel: Record<string, { adv: number; ext: number }> = {};
+    for (const o of overtime) {
+        const key = o.personnel_id;
+        if (!otByPersonnel[key]) otByPersonnel[key] = { adv: 0, ext: 0 };
+        if (o.type === 'ADVANCE') otByPersonnel[key].adv += o.duration_min;
+        if (o.type === 'EXTEND')  otByPersonnel[key].ext += o.duration_min;
     }
 
     // Compute kontrol minutes: prefer monthly_rolling kalau bisa, fallback ke roster direct
@@ -297,6 +338,13 @@ export function computeAllowanceTable(opts: ComputeAllowanceOptions): AllowanceR
     for (const [ini, minutes] of entries) {
         const hours = minutes / 60.0;
         const allowance = hours * constant;
+        // Overtime lookup: try by initial first (engine key), then by ID-like
+        // (in case caller passes DB uuid as personnel_id — defensive fallback).
+        const ot = otByPersonnel[ini] || { adv: 0, ext: 0 };
+        const advHours = ot.adv / 60.0;
+        const extHours = ot.ext / 60.0;
+        const totalHours = hours + advHours + extHours;
+        const totalRp = totalHours * constant;
         rows.push({
             personnel_id: ini,
             initial: ini,
@@ -305,6 +353,12 @@ export function computeAllowanceTable(opts: ComputeAllowanceOptions): AllowanceR
             kontrol_hours: hours,
             constant_per_hour: constant,
             allowance_rp: allowance,
+            advance_minutes: ot.adv,
+            extend_minutes: ot.ext,
+            advance_hours: advHours,
+            extend_hours: extHours,
+            total_hours: totalHours,
+            total_allowance_rp: totalRp,
         });
     }
 
@@ -321,16 +375,35 @@ export function computeAllowanceTable(opts: ComputeAllowanceOptions): AllowanceR
     };
 }
 
+function emptySummary(): AllowanceSummary {
+    return {
+        n_personnel: 0,
+        total_kontrol_hours: 0,
+        total_advance_hours: 0,
+        total_extend_hours: 0,
+        total_hours_all: 0,
+        total_allowance: 0,
+        total_allowance_all: 0,
+        avg_allowance: 0,
+    };
+}
+
 export function summarizeAllowance(rows: PersonnelAllowance[]): AllowanceSummary {
-    if (rows.length === 0) {
-        return { n_personnel: 0, total_kontrol_hours: 0, total_allowance: 0, avg_allowance: 0 };
-    }
-    const totalRp = rows.reduce((s, r) => s + r.allowance_rp, 0);
-    const totalHours = rows.reduce((s, r) => s + r.kontrol_hours, 0);
+    if (rows.length === 0) return emptySummary();
+    const totalRp        = rows.reduce((s, r) => s + r.allowance_rp, 0);
+    const totalRpAll     = rows.reduce((s, r) => s + r.total_allowance_rp, 0);
+    const totalHours     = rows.reduce((s, r) => s + r.kontrol_hours, 0);
+    const totalAdvHours  = rows.reduce((s, r) => s + r.advance_hours, 0);
+    const totalExtHours  = rows.reduce((s, r) => s + r.extend_hours, 0);
+    const totalHoursAll  = rows.reduce((s, r) => s + r.total_hours, 0);
     return {
         n_personnel: rows.length,
         total_kontrol_hours: totalHours,
+        total_advance_hours: totalAdvHours,
+        total_extend_hours: totalExtHours,
+        total_hours_all: totalHoursAll,
         total_allowance: totalRp,
+        total_allowance_all: totalRpAll,
         avg_allowance: totalRp / rows.length,
     };
 }

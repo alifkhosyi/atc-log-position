@@ -40,6 +40,7 @@ import {
 import {
   computeAllowanceTable,
   type PersonnelAllowance,
+  type OvertimeInput,
 } from "../lib/roster-engine/control-allowance"
 import type { RosterCell } from "../lib/roster-engine/types"
 import "../styles/tunjangan.css"
@@ -145,6 +146,14 @@ export default function TunjanganPage() {
   const [rosterStatus, setRosterStatus] = useState<"DRAFT" | "FINAL" | "NONE">("NONE")
   const [loading, setLoading] = useState(false)
 
+  /* ── Overtime entries (step 9) ── */
+  interface OvertimeRow {
+    personnel_id: string
+    type: "ADVANCE" | "EXTEND"
+    duration_min: number
+  }
+  const [overtime, setOvertime] = useState<OvertimeRow[]>([])
+
   /* ── Airport meta ── */
   const airport = useMemo(() => getAirport(airportCode), [airportCode])
   const airportName = airport?.airport_name || airportCode
@@ -185,31 +194,58 @@ export default function TunjanganPage() {
     return () => ctrl.abort()
   }, [user, isAdmin, userBranchCode, ctx?.personnel])
 
-  /* ── Load roster (status + cells) ── */
-  const loadRoster = useCallback(async () => {
+  /* ── Load roster (status + cells) + overtime in parallel ── */
+  const loadAll = useCallback(async () => {
     if (!airportCode || !unit || !year || !month) return
     setLoading(true)
     const ctrl = new AbortController()
     try {
-      const { data: rRow } = await supabase
-        .from("atc_rosters")
-        .select("id, status")
-        .eq("airport_code", airportCode)
-        .eq("unit", unit)
-        .eq("year", year)
-        .eq("month", month)
-        .abortSignal(ctrl.signal)
-        .maybeSingle()
+      const monthStart = `${year}-${String(month).padStart(2, "0")}-01`
+      const lastDay = new Date(year, month, 0).getDate()
+      const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`
+
+      // Parallel: roster + overtime (overtime independent of roster status)
+      const [rosterRes, otRes] = await Promise.all([
+        supabase
+          .from("atc_rosters")
+          .select("id, status")
+          .eq("airport_code", airportCode)
+          .eq("unit", unit)
+          .eq("year", year)
+          .eq("month", month)
+          .abortSignal(ctrl.signal)
+          .maybeSingle(),
+        supabase
+          .from("atc_overtime")
+          .select("personnel_id, type, duration_min")
+          .eq("airport_code", airportCode)
+          .eq("unit", unit)
+          .gte("date", monthStart)
+          .lte("date", monthEnd)
+          .abortSignal(ctrl.signal),
+      ])
 
       if (ctrl.signal.aborted) return
 
-      if (!rRow) {
+      // Process overtime first — independent of roster
+      if (otRes.error) {
+        // empty / no rows ≠ error
+        if (!/no rows/i.test(otRes.error.message)) {
+          // badge non-critical; don't toast for fetch issues
+        }
+        setOvertime([])
+      } else {
+        setOvertime((otRes.data as OvertimeRow[]) || [])
+      }
+
+      // Process roster
+      if (!rosterRes.data) {
         setRoster(null)
         setRosterStatus("NONE")
         return
       }
 
-      const r = rRow as DBRoster
+      const r = rosterRes.data as DBRoster
 
       const { data: cells } = await supabase
         .from("atc_roster_cells")
@@ -234,17 +270,20 @@ export default function TunjanganPage() {
       if (e?.name === "AbortError") return
       // BUKAN error: empty data → empty state. Toast hanya untuk genuine error.
       if (e?.message && !/no rows/i.test(e.message)) {
-        toastRef.current?.error?.("Gagal memuat roster", e.message)
+        toastRef.current?.error?.("Gagal memuat data", e.message)
       }
       setRoster(null)
       setRosterStatus("NONE")
+      setOvertime([])
     } finally {
       setLoading(false)
     }
     return () => ctrl.abort()
   }, [airportCode, unit, year, month])
 
-  useEffect(() => { loadRoster() }, [loadRoster])
+  useEffect(() => { loadAll() }, [loadAll])
+  // Alias for backward compat with onClick handlers
+  const loadRoster = loadAll
 
   /* ── Allowance computation ── */
   const allowance = useMemo(() => {
@@ -272,6 +311,17 @@ export default function TunjanganPage() {
       if (p.nik) nikLookup[p.id] = p.nik
     }
 
+    // Overtime DB rows pakai personnel_id (uuid). Engine keying pakai
+    // `initial` ATAU id (engine pakai keys dari kontrolMin yang akhirnya
+    // jadi personnel_id di output). Karena fakeResult.personnel.id pakai
+    // p.id (uuid), engine return rows keyed by uuid juga. Jadi overtime
+    // langsung match by personnel_id (uuid). ✓
+    const otInput: OvertimeInput[] = overtime.map(o => ({
+      personnel_id: o.personnel_id,
+      type: o.type,
+      duration_min: o.duration_min,
+    }))
+
     return computeAllowanceTable({
       airportName,
       result: fakeResult,
@@ -280,29 +330,38 @@ export default function TunjanganPage() {
       nameLookup,
       nikLookup,
       rosterStatus: rosterStatus === "NONE" ? "DRAFT" : rosterStatus,
+      overtime: otInput,
     })
-  }, [roster, unitConfig, dbPersonnel, year, month, airportName, rosterStatus])
+  }, [roster, unitConfig, dbPersonnel, year, month, airportName, rosterStatus, overtime])
 
-  /* ── Derived stats (with Advance/Extend placeholders = 0 in step 4) ── */
-  const totalOvertimeHours = 0  // ← real value di step 9
-  const totalOvertimeEntries = 0
+  /* ── Derived stats (with real Advance/Extend totals — step 9) ── */
+  const totalOvertimeHours = useMemo(
+    () => overtime.reduce((s, o) => s + o.duration_min, 0) / 60,
+    [overtime]
+  )
+  const totalOvertimeEntries = overtime.length
+  const uniqueOvertimePersonnel = useMemo(
+    () => new Set(overtime.map(o => o.personnel_id)).size,
+    [overtime]
+  )
   const stats = useMemo(() => {
     if (!allowance) return null
     return {
       personel: allowance.rows.length,
-      jamTotal: allowance.summary.total_kontrol_hours + totalOvertimeHours,
+      jamTotal: allowance.summary.total_hours_all,
       jamTambahan: totalOvertimeHours,
       jamTambahanEntries: totalOvertimeEntries,
-      totalRp: allowance.summary.total_allowance,
+      uniquePersonnel: uniqueOvertimePersonnel,
+      totalRp: allowance.summary.total_allowance_all,
       rate: allowance.constant_per_hour,
     }
-  }, [allowance])
+  }, [allowance, totalOvertimeHours, totalOvertimeEntries, uniqueOvertimePersonnel])
 
   /* ── Export CSV ── */
   const downloadCSV = () => {
     if (!allowance) return
     const headers = [
-      "No", "Inisial", "Nama", "Hari Aktif",
+      "No", "Inisial", "Nama",
       "Jam Reguler", "Jam Advance", "Jam Extend",
       "Total Jam", "Rate (Rp/jam)", "Total (Rp)",
     ]
@@ -313,23 +372,18 @@ export default function TunjanganPage() {
       "",
       headers.join(","),
       ...allowance.rows.map((r: PersonnelAllowance, i: number) => {
-        // Days active = inferred dari kontrol_minutes / daily kontrol (best-effort)
-        const daysActive = "—"
-        const advance = 0  // step 9
-        const extend = 0   // step 9
-        const totalH = r.kontrol_hours + advance + extend
         return [
-          i + 1, r.initial, `"${r.name}"`, daysActive,
+          i + 1, r.initial, `"${r.name}"`,
           r.kontrol_hours.toFixed(2),
-          advance.toFixed(2),
-          extend.toFixed(2),
-          totalH.toFixed(2),
+          r.advance_hours.toFixed(2),
+          r.extend_hours.toFixed(2),
+          r.total_hours.toFixed(2),
           r.constant_per_hour.toFixed(0),
-          Math.round(totalH * r.constant_per_hour).toString(),
+          Math.round(r.total_allowance_rp).toString(),
         ].join(",")
       }),
       "",
-      `TOTAL,,,,${allowance.summary.total_kontrol_hours.toFixed(2)},${(0).toFixed(2)},${(0).toFixed(2)},${(allowance.summary.total_kontrol_hours + totalOvertimeHours).toFixed(2)},,${Math.round(allowance.summary.total_allowance).toLocaleString("id-ID").replace(/\./g, "")}`,
+      `TOTAL,,,${allowance.summary.total_kontrol_hours.toFixed(2)},${allowance.summary.total_advance_hours.toFixed(2)},${allowance.summary.total_extend_hours.toFixed(2)},${allowance.summary.total_hours_all.toFixed(2)},,${Math.round(allowance.summary.total_allowance_all).toString()}`,
     ]
     const csv = lines.join("\n")
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
@@ -450,7 +504,10 @@ export default function TunjanganPage() {
             <div>
               <div className="tj-stat-l">Jam Tambahan</div>
               <div className="tj-stat-v">{stats.jamTambahan.toFixed(2)} j</div>
-              <div className="tj-stat-s">{stats.jamTambahanEntries} entries</div>
+              <div className="tj-stat-s">
+                {stats.jamTambahanEntries} entries
+                {stats.uniquePersonnel > 0 ? ` · ${stats.uniquePersonnel} personel` : ""}
+              </div>
             </div>
           </div>
           <div className="tj-stat">
@@ -499,8 +556,10 @@ export default function TunjanganPage() {
             <div className="tj-source-line">
               <span className="tj-source-badge">SOURCE</span>
               <span>
-                Dihitung dari roster {rosterStatus} {MONTHS[month - 1]} {year}.
-                Kolom Jam Tambahan masih placeholder (wire di step 9).
+                Dihitung dari roster <b>{rosterStatus}</b> {MONTHS[month - 1]} {year}
+                {totalOvertimeEntries > 0
+                  ? ` + ${totalOvertimeEntries} entry jam tambahan`
+                  : " (belum ada jam tambahan bulan ini)"}.
               </span>
               <span className="tj-faint" style={{ marginLeft: "auto" }}>
                 Edit data sumber di{" "}
@@ -525,23 +584,20 @@ export default function TunjanganPage() {
                 </thead>
                 <tbody>
                   {allowance.rows.map((r: PersonnelAllowance, i: number) => {
-                    const advance = 0  // step 9
-                    const extend = 0   // step 9
-                    const totalH = r.kontrol_hours + advance + extend
                     return (
                       <tr key={r.personnel_id}>
                         <td className="no mono">{i + 1}</td>
                         <td className="name">
                           {r.name}
-                          <span className="nik">{r.initial}{r.personnel_id ? " · " + r.personnel_id.slice(0, 8) : ""}</span>
+                          <span className="nik">{r.initial}{r.personnel_id && r.initial !== r.personnel_id ? " · " + r.personnel_id.slice(0, 8) : ""}</span>
                         </td>
                         <td className="num">—</td>
                         <td className="num">{r.kontrol_hours.toFixed(2)}</td>
-                        <td className="num col-adv">{formatHours(advance)}</td>
-                        <td className="num col-ext">{formatHours(extend)}</td>
-                        <td className="num total-jam">{totalH.toFixed(2)}</td>
+                        <td className="num col-adv">{formatHours(r.advance_hours)}</td>
+                        <td className="num col-ext">{formatHours(r.extend_hours)}</td>
+                        <td className="num total-jam">{r.total_hours.toFixed(2)}</td>
                         <td className="num">{r.constant_per_hour.toLocaleString("id-ID")}</td>
-                        <td className="num total-rp">{formatRp(totalH * r.constant_per_hour)}</td>
+                        <td className="num total-rp">{formatRp(r.total_allowance_rp)}</td>
                       </tr>
                     )
                   })}
@@ -551,13 +607,13 @@ export default function TunjanganPage() {
                     <td className="label" colSpan={2}>Total seluruh personel</td>
                     <td className="num">—</td>
                     <td className="num">{allowance.summary.total_kontrol_hours.toFixed(2)}</td>
-                    <td className="num col-adv">{(0).toFixed(2)}</td>
-                    <td className="num col-ext">{(0).toFixed(2)}</td>
+                    <td className="num col-adv">{allowance.summary.total_advance_hours.toFixed(2)}</td>
+                    <td className="num col-ext">{allowance.summary.total_extend_hours.toFixed(2)}</td>
                     <td className="num grand total-jam">
-                      {(allowance.summary.total_kontrol_hours + totalOvertimeHours).toFixed(2)}
+                      {allowance.summary.total_hours_all.toFixed(2)}
                     </td>
                     <td className="num faint">—</td>
-                    <td className="num grand">{formatRp(allowance.summary.total_allowance)}</td>
+                    <td className="num grand">{formatRp(allowance.summary.total_allowance_all)}</td>
                   </tr>
                 </tfoot>
               </table>
