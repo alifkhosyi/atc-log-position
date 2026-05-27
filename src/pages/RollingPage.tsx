@@ -155,6 +155,13 @@ export default function RollingPage() {
     [airport, unit]
   )
 
+  // Set document.title so the print-to-PDF flow gets a sensible default filename
+  useEffect(() => {
+    const prev = document.title
+    document.title = `Rolling ${airportCode} ${unit} ${date} — ATC Log Position`
+    return () => { document.title = prev }
+  }, [airportCode, unit, date])
+
   /* ── Personnel (from context) — deduped by initial for engine ── */
   const dbPersonnel = useMemo<DBPersonnel[]>(() => {
     const branchFilter = isAdmin ? null : userBranchCode
