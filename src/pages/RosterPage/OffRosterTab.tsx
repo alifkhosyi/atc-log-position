@@ -217,7 +217,7 @@ export default function OffRosterTab() {
 
       const { data, error } = await supabase
         .from("atc_leaves")
-        .select("*, personnel:atc_personnel(initial, full_name)")
+        .select("*, personnel:personnel(initial, full_name)")
         .eq("airport_code", airportCode)
         .eq("unit", unit)
         .lte("start_date", monthEnd)

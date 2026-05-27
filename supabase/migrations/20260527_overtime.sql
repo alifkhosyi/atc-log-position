@@ -29,7 +29,7 @@
 -- 1) Table ---------------------------------------------------------
 create table if not exists public.atc_overtime (
   id            uuid        primary key default gen_random_uuid(),
-  personnel_id  uuid        not null references public.atc_personnel(id) on delete restrict,
+  personnel_id  uuid        not null references public.personnel(id) on delete restrict,
   airport_code  text        not null,
   unit          text        not null,            -- TWR | APP | ACC
   date          date        not null,

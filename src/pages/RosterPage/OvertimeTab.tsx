@@ -205,7 +205,7 @@ export default function OvertimeTab() {
 
       const { data, error } = await supabase
         .from("atc_overtime")
-        .select("*, personnel:atc_personnel(initial, full_name)")
+        .select("*, personnel:personnel(initial, full_name)")
         .eq("airport_code", airportCode)
         .eq("unit", unit)
         .gte("date", monthStart)

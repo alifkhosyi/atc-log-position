@@ -15,7 +15,7 @@ export const OVERTIME_TYPES: OvertimeType[] = ["ADVANCE", "EXTEND"]
 
 /**
  * Row di tabel atc_overtime. `personnel` adalah join optional dari
- * atc_personnel(initial, full_name) — di-load via Supabase select.
+ * personnel(initial, full_name) — di-load via Supabase select.
  */
 export interface OvertimeEntry {
   id: string
