@@ -10,10 +10,10 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../supabase';
-import { useApp } from '../lib/context.jsx';
+import { supabase } from '../../supabase';
+import { useApp } from '../../lib/context.jsx';
 // Phase 3 fix N-03: CSS tokens untuk shift & leave colors
-import '../styles/roster-tokens.css';
+import '../../styles/roster-tokens.css';
 
 import {
     type Personnel, type RosterCell, type LeaveRange,
@@ -25,7 +25,7 @@ import {
     listAirports, getAirport, getUnit, getBaselineForMonth,
     computeAllowanceTable,
     type PersonnelAllowance,
-} from '../lib/roster-engine';
+} from '../../lib/roster-engine';
 
 // ============================================================
 // COLOR HELPERS — pakai CSS tokens dari roster-tokens.css (N-03)

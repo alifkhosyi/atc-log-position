@@ -46,8 +46,8 @@ import { AdminAudit }         from "./pages/admin/Audit.jsx"
 import Reports from "./Reports.jsx"
 import AdminReportMonitoring from "./AdminReportMonitoring.jsx"
 
-// === Roster (BARU — atc_roster engine) ===
-import RosterPage from "./pages/RosterPage.tsx"
+// === Roster (BARU — atc_roster engine, 3-tab shell) ===
+import RosterPage from "./pages/RosterPage/index.tsx"
 // === Tunjangan ATC (extract dari CAPanel) ===
 import TunjanganPage from "./pages/TunjanganPage.tsx"
 
