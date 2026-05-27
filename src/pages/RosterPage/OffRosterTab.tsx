@@ -31,7 +31,7 @@ import { useConfirm } from "../../components/ConfirmDialog.jsx"
 import { I } from "../../components/Icons.jsx"
 import {
   listAirports, getAirport,
-} from "../../lib/roster-engine/airport-config-loader"
+} from "../../lib/airport-data"
 
 /* ----------------------------------------------------------------
    Types — local DB row shapes

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+// Split-engine: loader pindah ke ../../airport-data/.
 import {
     deriveAirportCode,
     listAirports,
@@ -7,7 +8,7 @@ import {
     getBaselineForMonth,
     getCAConstant,
     listCAConstants,
-} from '../airport-config-loader';
+} from '../../airport-data/loader';
 
 describe('deriveAirportCode', () => {
     it('uppers + replaces spaces', () => {

@@ -36,13 +36,13 @@ import {
   getAirport,
   getUnit,
   getCAConstant,
-} from "../lib/roster-engine/airport-config-loader"
+} from "../lib/airport-data"
 import {
   computeAllowanceTable,
   type PersonnelAllowance,
   type OvertimeInput,
-} from "../lib/roster-engine/control-allowance"
-import type { RosterCell } from "../lib/roster-engine/types"
+} from "../lib/ca-engine"
+import type { RosterCell } from "../lib/shared"
 import "../styles/tunjangan.css"
 
 /* ----------------------------------------------------------------

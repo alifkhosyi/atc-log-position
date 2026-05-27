@@ -15,17 +15,21 @@ import { useApp } from '../../lib/context.jsx';
 // Phase 3 fix N-03: CSS tokens untuk shift & leave colors
 import '../../styles/roster-tokens.css';
 
+// Split-engine refactor: shared types from shared/, airport data from
+// airport-data/, roster logic from roster-engine/.
+// CA + rolling sudah pindah ke folder masing-masing (lihat
+// SPLIT_ENGINE_HANDOFF.md). TunjanganPage handle CA.
+import type { Personnel, RosterCell, LeaveRange } from '../../lib/shared';
+import { leaveRangeFromDates } from '../../lib/shared';
 import {
-    type Personnel, type RosterCell, type LeaveRange,
-    type FrmsIssue,
     generateRoster,
     swapShift,
     validateFull, splitBySeverity,
-    leaveRangeFromDates,
-    listAirports, getAirport, getUnit, getBaselineForMonth,
-    // Step 10: computeAllowanceTable + PersonnelAllowance dipindah ke
-    // src/pages/TunjanganPage.tsx (CAPanel sudah dihapus dari sini).
+    type FrmsIssue,
 } from '../../lib/roster-engine';
+import {
+    listAirports, getAirport, getUnit, getBaselineForMonth,
+} from '../../lib/airport-data';
 
 // ============================================================
 // COLOR HELPERS — pakai CSS tokens dari roster-tokens.css (N-03)

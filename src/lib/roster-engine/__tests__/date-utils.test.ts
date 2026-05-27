@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+// Split-engine: date-utils + shared types pindah ke ../../shared/.
 import {
     daysInMonth,
     toISODate,
@@ -10,8 +11,8 @@ import {
     leaveCoversDay,
     personnelIsOnLeave,
     personnelLeaveCategory,
-} from '../date-utils';
-import type { LeaveRange } from '../types';
+} from '../../shared/date-utils';
+import type { LeaveRange } from '../../shared/types';
 
 describe('daysInMonth', () => {
     it('returns 30 for June 2026', () => {

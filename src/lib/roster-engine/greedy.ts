@@ -13,9 +13,9 @@
  *   5. Sort & pick top required_per_day
  */
 
-import type { Personnel, RosterCell } from './types';
-import { SHIFT_TOKENS, isLeaveStatus, isOffStatus } from './types';
-import { personnelIsOnLeave } from './date-utils';
+import type { Personnel, RosterCell } from '../shared/types';
+import { SHIFT_TOKENS, isLeaveStatus, isOffStatus } from '../shared/types';
+import { personnelIsOnLeave } from '../shared/date-utils';
 
 export interface GreedyState {
     consec_work: number;

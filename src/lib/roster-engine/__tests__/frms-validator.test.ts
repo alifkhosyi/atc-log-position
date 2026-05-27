@@ -10,8 +10,9 @@ import {
     getMaxConsecutiveDays, getMaxHoursPerWeek, getMaxShiftHours,
     computePersonnelNeeds,
 } from '../frms-rules';
-import { leaveRangeFromDates } from '../date-utils';
-import type { Personnel, RosterCell } from '../types';
+// Split-engine: date-utils + shared types pindah ke ../../shared/.
+import { leaveRangeFromDates } from '../../shared/date-utils';
+import type { Personnel, RosterCell } from '../../shared/types';
 
 function makePersonnel(ids: string[]): Personnel[] {
     return ids.map(id => ({ id, initial: id, leaves: [] }));

@@ -15,7 +15,7 @@
 // auto-fill filename di Save dialog.
 // ============================================================
 
-import type { DailyRolling, RecapEntry } from "../roster-engine/rolling"
+import type { DailyRolling, RecapEntry } from "../rolling-engine"
 
 export interface ExportRollingPDFOptions {
   airportCode: string

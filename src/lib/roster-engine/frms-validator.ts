@@ -6,8 +6,9 @@
  * Returns FrmsIssue[] dengan severity 'error' (hard reject) atau 'warning'.
  */
 
-import type { Personnel, RosterCell, FrmsIssue } from './types';
-import { personnelIsOnLeave } from './date-utils';
+import type { Personnel, RosterCell } from '../shared/types';
+import type { FrmsIssue } from './types';
+import { personnelIsOnLeave } from '../shared/date-utils';
 import {
     type ServiceClass,
     DEFAULT_LIMITS,

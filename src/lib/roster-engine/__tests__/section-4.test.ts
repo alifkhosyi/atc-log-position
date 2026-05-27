@@ -1,19 +1,21 @@
 import { describe, it, expect } from 'vitest';
+// Split-engine: rolling pindah ke rolling-engine/, ca-engine, airport-data,
+// shared types & date-utils ke shared/.
 import {
     computeSlotTimes, computeDailyRolling, computeMonthlyRolling,
     computeRecap, ROLLING_PATTERN, assignPersonnelToABC,
-} from '../rolling';
+} from '../../rolling-engine';
 import { swapShift } from '../swap';
 import {
     kontrolMinutesPerShift, computeAllowanceTable, summarizeAllowance,
-} from '../control-allowance';
+} from '../../ca-engine';
 import { generateRoster } from '../generator';
-import { getAirport, getUnit } from '../airport-config-loader';
-import { leaveRangeFromDates } from '../date-utils';
+import { getAirport, getUnit } from '../../airport-data';
+import { leaveRangeFromDates } from '../../shared/date-utils';
 import {
     POSITION_KONTROL, POSITION_ASISTEN, POSITION_ISTIRAHAT,
-} from '../types';
-import type { Personnel, RosterCell } from '../types';
+} from '../../airport-data/types';
+import type { Personnel, RosterCell } from '../../shared/types';
 
 function makePersonnel(ids: string[]): Personnel[] {
     return ids.map(id => ({ id, initial: id, leaves: [] }));

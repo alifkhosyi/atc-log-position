@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { generateRoster } from '../generator';
 import { getTemplate } from '../templates';
-import { leaveRangeFromDates } from '../date-utils';
-import type { Personnel } from '../types';
-import { SHIFT_TOKENS } from '../types';
+// Split-engine: date-utils + shared types pindah ke ../../shared/.
+import { leaveRangeFromDates } from '../../shared/date-utils';
+import type { Personnel } from '../../shared/types';
+import { SHIFT_TOKENS } from '../../shared/types';
 
 function makePersonnel(ids: string[]): Personnel[] {
     return ids.map(id => ({ id, initial: id, leaves: [] }));

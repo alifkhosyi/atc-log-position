@@ -16,11 +16,15 @@
  */
 
 import type {
-    Personnel, RosterCell, GenerateResult, RosterMode,
-} from './types';
-import { SHIFT_TOKENS, isLeaveStatus } from './types';
-import { daysInMonth as daysInMonthCalendar } from './date-utils';
-import { personnelIsOnLeave, personnelLeaveCategory, personnelIsOnLeaveEntireMonth, personnelHasAnyLeave } from './date-utils';
+    Personnel, RosterCell,
+} from '../shared/types';
+import { SHIFT_TOKENS, isLeaveStatus } from '../shared/types';
+import type { GenerateResult, RosterMode } from './types';
+import {
+    daysInMonth as daysInMonthCalendar,
+    personnelIsOnLeave, personnelLeaveCategory,
+    personnelIsOnLeaveEntireMonth, personnelHasAnyLeave,
+} from '../shared/date-utils';
 import { getTemplate } from './templates';
 import { assignDayGreedy, type GreedyState } from './greedy';
 

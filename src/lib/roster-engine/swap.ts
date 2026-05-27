@@ -14,8 +14,9 @@
  *     pelanggaran FRMS BARU untuk A atau B
  */
 
-import type { Personnel, RosterCell, FrmsIssue } from './types';
-import { SHIFT_TOKENS, isLeaveStatus } from './types';
+import type { Personnel, RosterCell } from '../shared/types';
+import { SHIFT_TOKENS, isLeaveStatus } from '../shared/types';
+import type { FrmsIssue } from './types';
 import { type ServiceClass } from './frms-rules';
 import { validateFull, splitBySeverity } from './frms-validator';
 
