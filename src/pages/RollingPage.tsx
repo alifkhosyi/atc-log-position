@@ -417,27 +417,268 @@ export default function RollingPage() {
         </button>
       </div>
 
-      {/* Body (step 5+6 placeholder — grid+empty di step 7+8) */}
-      <div className="rl-placeholder">
-        <div className="rl-placeholder-ic"><I n="refresh" s={32}/></div>
-        <h2>Step 5+6: data + engine wired</h2>
-        <p>
-          Status: <b>roster {rosterStatus}</b> · personnel {dbPersonnel.length} ·{" "}
-          cells loaded {Object.keys(cellsByPersonnelId).length} ·{" "}
-          rolling config {unitConfig?.rolling ? "✓" : "✗"} ·{" "}
-          daily rolling untuk hari {selectedDay}:{" "}
-          {dailyRolling ? `${dailyRolling.on_duty.length} on-duty, ${dailyRolling.slots.length} slots` : "tidak tersedia"}
-        </p>
-        {recap && (
-          <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-            Recap keys: {Object.keys(recap).join(", ")} ·{" "}
-            Personnel lookup by initial: {Object.keys(personnelByInitial).length}
-          </p>
-        )}
-        <p style={{ fontSize: 12, color: "var(--text-faint)" }}>
-          Grid + empty states di step 7+8, PDF export di step 9.
-        </p>
-      </div>
+      {/* Body — empty states first, then grid */}
+      {renderBody({
+        loading,
+        rosterStatus,
+        unitConfig,
+        airport,
+        dailyRolling,
+        recap,
+        personnelByInitial,
+        selectedDay,
+        goRoster: () => ctx?.goPage?.("roster"),
+      })}
     </div>
   )
+}
+
+/* ----------------------------------------------------------------
+   Body renderer — empty states + grid
+   ---------------------------------------------------------------- */
+type UnitConfigLike = ReturnType<NonNullable<ReturnType<typeof getAirport>>["units"]["find"]>
+
+function renderBody(opts: {
+  loading: boolean
+  rosterStatus: RosterStatusUi
+  unitConfig: UnitConfigLike | undefined
+  airport: ReturnType<typeof getAirport>
+  dailyRolling: DailyRolling | null
+  recap: ReturnType<typeof computeRecap> | null
+  personnelByInitial: Record<string, DBPersonnel>
+  selectedDay: number
+  goRoster: () => void
+}) {
+  const {
+    loading, rosterStatus, unitConfig, airport, dailyRolling,
+    recap, personnelByInitial, selectedDay, goRoster,
+  } = opts
+
+  // Empty state #1: roster belum dibuat
+  if (rosterStatus === "NONE") {
+    return (
+      <div className="rl-empty">
+        <div className="rl-empty-ic"><I n="clock" s={32}/></div>
+        <h3>Belum ada roster untuk bulan ini</h3>
+        <p>
+          Rolling Harian hanya bisa dirender setelah roster bulanan dibuat
+          di <b>Roster ATC → Jadwal Bulanan</b>. Generate dulu, baru rolling
+          bisa tampil per tanggal.
+        </p>
+        <button className="rl-btn rl-btn-primary" type="button" onClick={goRoster}>
+          → Buka Roster ATC
+        </button>
+      </div>
+    )
+  }
+
+  // Empty state #2: unit tidak punya rolling config
+  if (!unitConfig?.rolling) {
+    return (
+      <div className="rl-empty">
+        <div className="rl-empty-ic info"><I n="info" s={32}/></div>
+        <h3>Cabang ini belum punya pola rolling</h3>
+        <p>
+          Unit <b>{unitConfig?.unit || "—"}</b>{airport ? ` di ${airport.airport_name}` : ""}{" "}
+          belum dikonfigurasi dengan rolling pattern. Hubungi admin pusat
+          untuk konfigurasi <code>units[i].rolling</code> di airport-configs.
+        </p>
+      </div>
+    )
+  }
+
+  // Empty state #3: ada roster tapi tanggal ini tidak ada on-duty (rare config)
+  // atau personnel tidak match nPersonnel rule
+  if (!dailyRolling) {
+    const reasonNotice = (() => {
+      // Engine returns null kalau on_duty count != nPersonnel.
+      // Bisa karena: hari yang dipilih tidak ada shift I, ATAU personnel
+      // kurang/lebih.
+      return (
+        <>
+          Engine tidak menghasilkan rolling untuk tanggal ini. Kemungkinan
+          besar tidak ada personnel di shift <b>I</b> tanggal {selectedDay},
+          atau jumlah personnel on-duty tidak sesuai pola rolling
+          ({unitConfig.rolling?.n_personnel ?? 3} orang).
+        </>
+      )
+    })()
+    return (
+      <div className="rl-empty">
+        <div className="rl-empty-ic"><I n="alert" s={32}/></div>
+        <h3>Rolling tidak tersedia untuk tanggal ini</h3>
+        <p>{reasonNotice}</p>
+        {rosterStatus === "DRAFT" && (
+          <p style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
+            Roster masih DRAFT — cek lagi di <b>Roster ATC</b> apakah personnel
+            sudah di-assign shift I untuk tanggal ini.
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // ─── Render grid ───
+  return (
+    <>
+      {loading && (
+        <div className="rl-notice">
+          <I n="refresh" s={14}/>
+          <span>Memuat data roster…</span>
+        </div>
+      )}
+      <RollingGrid
+        daily={dailyRolling}
+        recap={recap}
+        personnelByInitial={personnelByInitial}
+        unitConfig={unitConfig}
+      />
+      <RollingLegend/>
+    </>
+  )
+}
+
+/* ----------------------------------------------------------------
+   RollingGrid — Personnel × Slot table dengan color cell
+   ---------------------------------------------------------------- */
+function RollingGrid(props: {
+  daily: DailyRolling
+  recap: ReturnType<typeof computeRecap> | null
+  personnelByInitial: Record<string, DBPersonnel>
+  unitConfig: UnitConfigLike | undefined
+}) {
+  const { daily, recap, personnelByInitial, unitConfig } = props
+  const { on_duty, slots } = daily
+
+  // Header utk shift section
+  const startTime = slots[0]?.start_utc ?? "—"
+  const endTime = slots[slots.length - 1]?.end_utc ?? "—"
+  const shiftLabel = unitConfig?.rolling
+    ? `Shift I · ${startTime} – ${endTime} · ${on_duty.length} personnel on-duty`
+    : `${on_duty.length} personnel on-duty`
+
+  return (
+    <div className="rl-shift">
+      <div className="rl-shift-h">
+        <div className="rl-shift-title">
+          <span className="token">Shift I</span>
+          {shiftLabel.replace(/^Shift I · /, "")}
+        </div>
+        <span className="rl-shift-meta">
+          {slots.length} slot · {slots[0]?.duration_min ?? "?"} menit/slot (default)
+        </span>
+      </div>
+
+      <div className="rl-grid-scroll">
+        <table className="rl-grid">
+          <thead>
+            <tr>
+              <th className="col-name">Personnel</th>
+              {slots.map((s, i) => (
+                <th key={i}>
+                  {s.start_utc}<br/>{s.end_utc}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {on_duty.map(ini => {
+              const p = personnelByInitial[ini]
+              const fullName = p?.full_name || ini
+              return (
+                <tr key={ini}>
+                  <td className="col-name">
+                    {fullName}
+                    <span className="initial">{ini}</span>
+                  </td>
+                  {slots.map((s, i) => {
+                    const pos = s.assignments[ini] || "—"
+                    const cls = positionClass(pos)
+                    const label = positionLabel(pos)
+                    const tip = `${fullName} — ${pos} — ${s.start_utc}–${s.end_utc}`
+                    return (
+                      <td key={i}>
+                        <span
+                          className={`rl-cell ${cls}`}
+                          title={tip}
+                        >
+                          {label}
+                        </span>
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {recap && <RecapFooter recap={recap} onDuty={on_duty}/>}
+    </div>
+  )
+}
+
+function RecapFooter(props: {
+  recap: ReturnType<typeof computeRecap>
+  onDuty: string[]
+}) {
+  if (!props.recap) return null
+  // Compute per-personnel totals; show average across on_duty.
+  const ids = props.onDuty
+  if (ids.length === 0) return null
+  const avgK = ids.reduce((s, i) => s + (props.recap?.[i]?.["Kontrol"] || 0), 0) / ids.length
+  const avgA = ids.reduce((s, i) => s + (props.recap?.[i]?.["Asisten"] || 0), 0) / ids.length
+  const avgR = ids.reduce((s, i) => s + (props.recap?.[i]?.["Istirahat"] || 0), 0) / ids.length
+
+  const minToH = (min: number) => (min / 60).toFixed(1)
+
+  return (
+    <div className="rl-shift-recap">
+      <span><span className="swatch kontrol"/> Kontrol <b>{minToH(avgK)} jam</b></span>
+      <span><span className="swatch asisten"/> Asisten <b>{minToH(avgA)} jam</b></span>
+      <span><span className="swatch istirahat"/> Istirahat <b>{minToH(avgR)} jam</b></span>
+      <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-faint)" }}>
+        Rata-rata per personnel ({ids.length} orang)
+      </span>
+    </div>
+  )
+}
+
+function RollingLegend() {
+  return (
+    <div className="rl-legend">
+      <span className="rl-legend-item">
+        <span className="swatch" style={{ background: "var(--status-on-soft)", border: "1px solid var(--status-on)" }}/>
+        <b>KONTROL</b> — Mic aktif, kontrol traffic
+      </span>
+      <span className="rl-legend-item">
+        <span className="swatch" style={{ background: "var(--status-warn-soft)", border: "1px solid var(--status-warn)" }}/>
+        <b>ASISTEN</b> — Support kontrol, koordinasi
+      </span>
+      <span className="rl-legend-item">
+        <span className="swatch" style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}/>
+        <b>ISTIRAHAT</b> — Off-mic, rest period
+      </span>
+    </div>
+  )
+}
+
+/* ----------------------------------------------------------------
+   Helpers untuk RollingGrid
+   ---------------------------------------------------------------- */
+function positionClass(pos: string): string {
+  const p = pos.toLowerCase()
+  if (p === "kontrol")    return "kontrol"
+  if (p === "asisten")    return "asisten"
+  if (p === "istirahat")  return "istirahat"
+  return ""
+}
+
+function positionLabel(pos: string): string {
+  const p = pos.toLowerCase()
+  if (p === "kontrol")    return "KON"
+  if (p === "asisten")    return "ASS"
+  if (p === "istirahat")  return "IST"
+  return pos
 }
