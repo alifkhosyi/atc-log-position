@@ -1,0 +1,403 @@
+/* ============================================================
+   src/styles/rolling.css
+   ──────────────────────────────────────────────────────────
+   Scoped styles untuk src/pages/RollingPage.tsx (Rolling Harian MVP).
+   Mirror pattern dari src/styles/tunjangan.css.
+   Token-only — no new tokens invented.
+   ============================================================ */
+
+.rl-page{
+  padding: 28px 32px 60px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+@media (max-width: 880px){ .rl-page{ padding: 20px 16px 60px; } }
+
+/* ────────────── Topbar ────────────── */
+.rl-topbar{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.rl-topbar h1{
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+.rl-topbar-sub{
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-faint);
+  letter-spacing: .04em;
+  display: flex; flex-wrap: wrap; gap: 4px 12px;
+}
+.rl-topbar-sub b{ color: var(--text-muted); font-weight: 500; }
+.rl-sep{ color: var(--text-faint); }
+
+.rl-pill{
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-family: var(--font-sans, var(--font));
+}
+.rl-pill::before{
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.rl-pill.draft{ background: var(--status-warn-soft); color: var(--status-warn); }
+.rl-pill.final{ background: var(--status-on-soft); color: var(--status-on); }
+.rl-pill.none{  background: var(--surface-3); color: var(--text-faint); }
+
+/* ────────────── Toolbar ────────────── */
+.rl-toolbar{
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg, 12px);
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+.rl-field{ display: flex; flex-direction: column; gap: 4px; min-width: 140px; }
+.rl-field-date{ min-width: 220px; }
+.rl-field label{
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.rl-field select,
+.rl-field input{
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  padding: 7px 10px;
+  color: var(--text);
+  font: 13px var(--font);
+  height: 34px;
+}
+.rl-field select:focus,
+.rl-field input:focus{
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.rl-date-row{
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.rl-date-row input{ flex: 1; }
+.rl-date-nav{
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  color: var(--text);
+  cursor: pointer;
+  font: 600 16px var(--font);
+  width: 32px;
+  height: 34px;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s, border-color .15s;
+}
+.rl-date-nav:hover{
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+
+.rl-spacer{ flex: 1; }
+
+.rl-btn{
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  color: var(--text);
+  padding: 0 14px;
+  height: 34px;
+  font: 500 13px var(--font);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background .15s, border-color .15s, color .15s, opacity .15s;
+}
+.rl-btn:hover:not(:disabled){
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+.rl-btn:disabled{ opacity: .5; cursor: not-allowed; }
+.rl-btn-primary{
+  background: var(--accent);
+  color: #0a0e1a;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+[data-theme="light"] .rl-btn-primary{ color: #ffffff; }
+.rl-btn-primary:hover:not(:disabled){ filter: brightness(1.08); background: var(--accent); }
+
+/* ────────────── Placeholder (step 3+4 only — replaced step 7) ────────────── */
+.rl-placeholder{
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg, 12px);
+  padding: 48px 32px;
+  text-align: center;
+}
+.rl-placeholder-ic{
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 64px; height: 64px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 50%;
+  margin: 0 auto 16px;
+}
+.rl-placeholder h2{
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.rl-placeholder p{
+  color: var(--text-muted);
+  max-width: 60ch;
+  margin: 0 auto 8px;
+}
+
+/* ────────────── Empty state (full-page) ────────────── */
+.rl-empty{
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg, 12px);
+  padding: 48px 32px;
+  text-align: center;
+}
+.rl-empty-ic{
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 64px; height: 64px;
+  background: var(--status-warn-soft);
+  color: var(--status-warn);
+  border-radius: 50%;
+  margin: 0 auto 16px;
+}
+.rl-empty-ic.info{
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.rl-empty h3{
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.rl-empty p{
+  color: var(--text-muted);
+  max-width: 50ch;
+  margin: 0 auto 18px;
+}
+
+/* ────────────── Shift section ────────────── */
+.rl-shift{
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg, 12px);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.rl-shift-h{
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rl-shift-title{
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--text);
+}
+.rl-shift-title .token{
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--r-sm, 4px);
+  background: var(--accent-soft);
+  color: var(--accent);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.rl-shift-meta{
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-faint);
+  letter-spacing: .04em;
+}
+
+/* ────────────── Grid table ────────────── */
+.rl-grid-scroll{ overflow-x: auto; }
+.rl-grid{
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+.rl-grid thead th{
+  text-align: center;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.rl-grid thead th.col-name{
+  text-align: left;
+  padding-left: 14px;
+  min-width: 180px;
+  background: var(--surface-2);
+  position: sticky;
+  left: 0;
+  z-index: 3;
+}
+.rl-grid tbody td{
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-right: 1px solid var(--border-subtle);
+}
+.rl-grid tbody td.col-name{
+  position: sticky;
+  left: 0;
+  text-align: left;
+  padding-left: 14px;
+  font-family: var(--font);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-1);
+  z-index: 1;
+  min-width: 180px;
+}
+.rl-grid tbody td.col-name .initial{
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 1px;
+  font-weight: 400;
+}
+.rl-grid tbody tr:last-child td{ border-bottom: 0; }
+.rl-grid tbody tr:hover td{ background: var(--surface-2); }
+.rl-grid tbody tr:hover td.col-name{ background: var(--surface-3); }
+
+/* Cell positions */
+.rl-cell{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: var(--r-sm, 4px);
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  min-width: 70px;
+  font-weight: 600;
+}
+.rl-cell.kontrol{
+  background: var(--status-on-soft);
+  color: var(--status-on);
+}
+.rl-cell.asisten{
+  background: var(--status-warn-soft);
+  color: var(--status-warn);
+}
+.rl-cell.istirahat{
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+/* Shift recap footer */
+.rl-shift-recap{
+  background: var(--surface-2);
+  border-top: 1px solid var(--border-subtle);
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.rl-shift-recap b{ color: var(--text); font-weight: 600; }
+.rl-shift-recap .swatch{
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.rl-shift-recap .swatch.kontrol{ background: var(--status-on); }
+.rl-shift-recap .swatch.asisten{ background: var(--status-warn); }
+.rl-shift-recap .swatch.istirahat{ background: var(--text-faint); opacity: .4; }
+
+/* ────────────── Legend ────────────── */
+.rl-legend{
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg, 12px);
+  padding: 14px 18px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  align-items: center;
+}
+.rl-legend-item{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.rl-legend-item b{ color: var(--text); font-weight: 600; }
+.rl-legend-item .swatch{
+  display: inline-block;
+  width: 14px; height: 14px;
+  border-radius: 3px;
+}
+
+/* ────────────── Notice (e.g. "kurang personnel") ────────────── */
+.rl-notice{
+  background: var(--status-warn-soft);
+  color: var(--status-warn);
+  border: 1px solid var(--status-warn);
+  border-radius: var(--r-md, 8px);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rl-notice b{ color: var(--text); font-weight: 600; }
