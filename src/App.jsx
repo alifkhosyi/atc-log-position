@@ -48,6 +48,8 @@ import AdminReportMonitoring from "./AdminReportMonitoring.jsx"
 
 // === Roster (BARU — atc_roster engine) ===
 import RosterPage from "./pages/RosterPage.tsx"
+// === Tunjangan ATC (extract dari CAPanel) ===
+import TunjanganPage from "./pages/TunjanganPage.tsx"
 
 // ── Page routing map ──
 const PAGES_CABANG = {
@@ -59,6 +61,7 @@ const PAGES_CABANG = {
   ho_to_mo:         CabangHoToMo,
   reports:          Reports,
   roster:           RosterPage,    // ← BARU
+  tunjangan:        TunjanganPage, // ← BARU (step 4)
 }
 const PAGES_ADMIN = {
   dashboard:     AdminDash,
@@ -71,6 +74,7 @@ const PAGES_ADMIN = {
   export:        AdminExport,
   audit:         AdminAudit,
   roster:        RosterPage,       // ← BARU
+  tunjangan:     TunjanganPage,    // ← BARU (step 4)
 }
 
 // ── App shell (inside providers) ──
