@@ -86,7 +86,7 @@ export const AppProvider = ({ children }) => {
     let all = [], from = 0, batchSize = 1000
     while (true) {
       const { data } = await supabase.from("personnel")
-        .select("id,name,branch_code").eq("is_active", true).order("name")
+        .select("id,name,branch_code,unit").eq("is_active", true).order("name")
         .range(from, from + batchSize - 1)
       if (!data || data.length === 0) break
       all = all.concat(data)
