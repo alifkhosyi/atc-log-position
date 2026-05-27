@@ -29,18 +29,26 @@ export function deriveAirportCode(name: string): string {
 
 /**
  * Returns AirportConfig dengan `airport_code` ter-derive.
+ * Also carries `branch_code` (ICAO 4-letter) bila tersedia di JSON
+ * untuk bridging dengan Supabase `branches.code`.
  * Cached at module load.
  */
 const _airports: AirportConfig[] = (airportConfigsRaw as any[]).map(entry => ({
     airport_code: deriveAirportCode(entry.airport_name),
     airport_name: entry.airport_name,
+    branch_code: entry.branch_code,  // ICAO 4-letter (e.g. 'WARR'), opsional
     is_tma: entry.is_tma ?? false,
     units: entry.units,
 }));
 
+// Index by name-derived code (e.g. 'SURABAYA') AND by ICAO branch code (e.g. 'WARR')
 const _airportsByCode: Record<string, AirportConfig> = {};
+const _airportsByBranchCode: Record<string, AirportConfig> = {};
 for (const a of _airports) {
     _airportsByCode[a.airport_code] = a;
+    if (a.branch_code) {
+        _airportsByBranchCode[a.branch_code.toUpperCase()] = a;
+    }
 }
 
 /** Returns all 73 airport configs. */
@@ -48,9 +56,26 @@ export function listAirports(): AirportConfig[] {
     return _airports;
 }
 
-/** Lookup airport by code (UPPER, e.g. 'AMBON'). Returns undefined kalau ga ada. */
+/**
+ * Lookup airport. Handles:
+ *   1. Name-derived code (e.g. 'SURABAYA', 'ACEH')
+ *   2. ICAO branch code (e.g. 'WARR', 'WAPP')
+ *
+ * Returns undefined kalau ga ada di kedua index.
+ */
 export function getAirport(code: string): AirportConfig | undefined {
-    return _airportsByCode[code.toUpperCase()];
+    if (!code) return undefined;
+    const upper = code.toUpperCase();
+    return _airportsByCode[upper] ?? _airportsByBranchCode[upper];
+}
+
+/**
+ * Lookup airport spesifik via ICAO branch code (e.g. 'WARR').
+ * Returns undefined kalau ICAO belum di-map di airport-configs.json.
+ */
+export function getAirportByBranchCode(branchCode: string): AirportConfig | undefined {
+    if (!branchCode) return undefined;
+    return _airportsByBranchCode[branchCode.toUpperCase()];
 }
 
 /** Find unit di airport. Returns first unit kalau unit name ga match. */

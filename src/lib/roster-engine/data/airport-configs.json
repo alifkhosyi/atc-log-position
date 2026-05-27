@@ -464,7 +464,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WITT"
   },
   {
     "airport_name": "Ambon",
@@ -1345,7 +1346,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAPP"
   },
   {
     "airport_name": "Bandung",
@@ -1641,7 +1643,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WICC"
   },
   {
     "airport_name": "Banjarmasin",
@@ -2357,7 +2360,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAOO"
   },
   {
     "airport_name": "Banyuwangi",
@@ -2752,7 +2756,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WADY"
   },
   {
     "airport_name": "Batam",
@@ -3687,7 +3692,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIDD"
   },
   {
     "airport_name": "Bengkulu",
@@ -4082,7 +4088,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIGG"
   },
   {
     "airport_name": "Berau",
@@ -4477,7 +4484,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAQT"
   },
   {
     "airport_name": "Biak",
@@ -4836,7 +4844,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WABB"
   },
   {
     "airport_name": "Bima",
@@ -5107,7 +5116,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WADB"
   },
   {
     "airport_name": "Balikpapan",
@@ -6443,7 +6453,8 @@
           "_slot_duration_note": "Auto-estimated from shift window 22:00–07:04 (544 min) / 8 slots = 68 min/slot. Last slot gets +0 min remainder. NEEDS CONFIRMATION from operations team."
         }
       }
-    ]
+    ],
+    "branch_code": "WALL"
   },
   {
     "airport_name": "Cilacap",
@@ -6668,7 +6679,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAHL"
   },
   {
     "airport_name": "Cirebon",
@@ -10064,7 +10076,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WADD"
   },
   {
     "airport_name": "Ende",
@@ -10335,7 +10348,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WATE"
   },
   {
     "airport_name": "Gunung Sitoli",
@@ -10606,7 +10620,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIMB"
   },
   {
     "airport_name": "Gorontalo",
@@ -10965,7 +10980,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAMG"
   },
   {
     "airport_name": "Halim",
@@ -11540,7 +11556,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIHH"
   },
   {
     "airport_name": "Jambi",
@@ -11899,7 +11916,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIJJ"
   },
   {
     "airport_name": "Jatsc ACC",
@@ -19604,7 +19622,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIII"
   },
   {
     "airport_name": "Jatsc APP",
@@ -25964,7 +25983,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIII"
   },
   {
     "airport_name": "Kendari",
@@ -26746,7 +26766,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAWW"
   },
   {
     "airport_name": "Kertajati",
@@ -27141,7 +27162,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WICA"
   },
   {
     "airport_name": "Ketapang",
@@ -27376,7 +27398,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIOK"
   },
   {
     "airport_name": "Kupang",
@@ -28266,7 +28289,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WATT"
   },
   {
     "airport_name": "Labuan Bajo",
@@ -28625,7 +28649,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WATO"
   },
   {
     "airport_name": "Lampung",
@@ -29056,7 +29081,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WILL"
   },
   {
     "airport_name": "Lombok",
@@ -29616,7 +29642,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WADL"
   },
   {
     "airport_name": "Luwuk",
@@ -29959,7 +29986,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAFW"
   },
   {
     "airport_name": "Malang",
@@ -30710,7 +30738,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAQM"
   },
   {
     "airport_name": "Manado",
@@ -31816,7 +31845,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAMM"
   },
   {
     "airport_name": "Manokwari",
@@ -32139,7 +32169,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAUU"
   },
   {
     "airport_name": "Matak",
@@ -32410,7 +32441,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIDM"
   },
   {
     "airport_name": "Matsc",
@@ -38910,7 +38942,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAAA"
   },
   {
     "airport_name": "Maumere",
@@ -39145,7 +39178,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WATC"
   },
   {
     "airport_name": "Medan",
@@ -41479,7 +41513,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIMM"
   },
   {
     "airport_name": "Merauke",
@@ -41874,7 +41909,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAKK"
   },
   {
     "airport_name": "Nabire",
@@ -42233,7 +42269,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WABI"
   },
   {
     "airport_name": "Natuna",
@@ -42819,7 +42856,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAJO"
   },
   {
     "airport_name": "Pangkal Pinang",
@@ -43214,7 +43252,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIKK"
   },
   {
     "airport_name": "Padang",
@@ -43717,7 +43756,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIEE"
   },
   {
     "airport_name": "Palangkaraya",
@@ -44112,7 +44152,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAGG"
   },
   {
     "airport_name": "Palu",
@@ -44507,7 +44548,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAFF"
   },
   {
     "airport_name": "Pangandaran",
@@ -44778,7 +44820,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WICN"
   },
   {
     "airport_name": "Pangkalan Bun",
@@ -45065,7 +45108,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAGI"
   },
   {
     "airport_name": "Pekanbaru",
@@ -46290,7 +46334,8 @@
           "_slot_duration_note": "Auto-estimated from shift window 23:00–07:00 (480 min) / 8 slots = 60 min/slot. Last slot gets +0 min remainder. NEEDS CONFIRMATION from operations team."
         }
       }
-    ]
+    ],
+    "branch_code": "WIBB"
   },
   {
     "airport_name": "Palembang",
@@ -48293,7 +48338,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIPP"
   },
   {
     "airport_name": "Pontianak",
@@ -49518,7 +49564,8 @@
           "_slot_duration_note": "Auto-estimated from shift window 22:00–04:56 (416 min) / 8 slots = 52 min/slot. Last slot gets +0 min remainder. NEEDS CONFIRMATION from operations team."
         }
       }
-    ]
+    ],
+    "branch_code": "WIOO"
   },
   {
     "airport_name": "Rengat",
@@ -49825,7 +49872,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIBJ"
   },
   {
     "airport_name": "Samarinda",
@@ -50184,7 +50232,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WALS"
   },
   {
     "airport_name": "Sampit",
@@ -50431,7 +50480,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAGS"
   },
   {
     "airport_name": "Surabaya",
@@ -52930,7 +52980,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WARR"
   },
   {
     "airport_name": "Semarang",
@@ -53748,7 +53799,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAHS"
   },
   {
     "airport_name": "Sentani",
@@ -55682,7 +55734,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAJJ"
   },
   {
     "airport_name": "Silangit",
@@ -56266,7 +56319,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAHQ"
   },
   {
     "airport_name": "Sorong",
@@ -56661,7 +56715,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WASS"
   },
   {
     "airport_name": "Sumbawa",
@@ -56908,7 +56963,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WADS"
   },
   {
     "airport_name": "Sumenep",
@@ -57179,7 +57235,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WART"
   },
   {
     "airport_name": "Tanjung Pinang",
@@ -58969,7 +59026,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIDN"
   },
   {
     "airport_name": "Tambolaka",
@@ -59204,7 +59262,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WADT"
   },
   {
     "airport_name": "Tanah Merah",
@@ -59491,7 +59550,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAKT"
   },
   {
     "airport_name": "Tanjung Pandan",
@@ -59922,7 +59982,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WIKT"
   },
   {
     "airport_name": "Tarakan",
@@ -60632,7 +60693,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAQQ"
   },
   {
     "airport_name": "Tasikmalaya",
@@ -61227,7 +61289,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAEE"
   },
   {
     "airport_name": "Timika",
@@ -61694,7 +61757,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAYY"
   },
   {
     "airport_name": "Tual",
@@ -61965,7 +62029,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAPF"
   },
   {
     "airport_name": "Waingapu",
@@ -62236,7 +62301,8 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WADW"
   },
   {
     "airport_name": "Wamena",
@@ -62559,6 +62625,7 @@
           ]
         }
       }
-    ]
+    ],
+    "branch_code": "WAVV"
   }
 ]

@@ -174,8 +174,9 @@ export interface UnitConfig {
 }
 
 export interface AirportConfig {
-    airport_code: string;          // 'AMBON', 'OKSIBIL'
+    airport_code: string;          // 'AMBON', 'OKSIBIL' (derived from name)
     airport_name: string;          // 'Ambon', 'Oksibil'
+    branch_code?: string;          // ICAO 4-letter ('WARR', 'WAPP'), bridges ke Supabase branches.code
     is_tma?: boolean;
     units: UnitConfig[];
 }
