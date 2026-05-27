@@ -26,6 +26,7 @@ import {
   type DailyRolling,
 } from "../lib/roster-engine/rolling"
 import type { RosterCell, GenerateResult } from "../lib/roster-engine/types"
+import { exportRollingPDF } from "../lib/rolling-pdf/exportRollingPDF"
 import "../styles/rolling.css"
 
 /* ----------------------------------------------------------------
@@ -410,8 +411,34 @@ export default function RollingPage() {
         <button
           className="rl-btn rl-btn-primary"
           type="button"
-          disabled
-          title="PDF export wired di step 9"
+          disabled={!dailyRolling || !airport}
+          title={dailyRolling
+            ? "Buka print dialog — pilih 'Save as PDF' untuk simpan file"
+            : "Belum ada rolling untuk diekspor"}
+          onClick={() => {
+            if (!dailyRolling || !airport) return
+            const nameByKey: Record<string, string> = {}
+            for (const ini of dailyRolling.on_duty) {
+              nameByKey[ini] = personnelByInitial[ini]?.full_name || ini
+            }
+            const ok = exportRollingPDF({
+              airportCode,
+              airportName: airport.airport_name,
+              unit,
+              date,
+              dateLong: fmtDateLong(date),
+              rosterStatus,
+              daily: dailyRolling,
+              recap,
+              personnelNameByKey: nameByKey,
+            })
+            if (!ok) {
+              toastRef.current?.warn?.(
+                "Popup terblokir",
+                "Izinkan popup untuk print → Save as PDF.",
+              )
+            }
+          }}
         >
           <I n="download" s={14}/> Export PDF
         </button>
