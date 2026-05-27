@@ -50,6 +50,8 @@ import AdminReportMonitoring from "./AdminReportMonitoring.jsx"
 import RosterPage from "./pages/RosterPage/index.tsx"
 // === Tunjangan ATC (extract dari CAPanel) ===
 import TunjanganPage from "./pages/TunjanganPage.tsx"
+// === Rolling Harian (read-only MVP) ===
+import RollingPage from "./pages/RollingPage.tsx"
 
 // ── Page routing map ──
 const PAGES_CABANG = {
@@ -62,6 +64,7 @@ const PAGES_CABANG = {
   reports:          Reports,
   roster:           RosterPage,    // ← BARU
   tunjangan:        TunjanganPage, // ← BARU (step 4)
+  rolling:          RollingPage,   // ← BARU (rolling step 2)
 }
 const PAGES_ADMIN = {
   dashboard:     AdminDash,
@@ -75,6 +78,7 @@ const PAGES_ADMIN = {
   audit:         AdminAudit,
   roster:        RosterPage,       // ← BARU
   tunjangan:     TunjanganPage,    // ← BARU (step 4)
+  rolling:       RollingPage,      // ← BARU (rolling step 2)
 }
 
 // ── App shell (inside providers) ──
