@@ -193,11 +193,11 @@ export default function OvertimeTab() {
   const [filter, setFilter] = useState<Filter>("ALL")
   const [personnelFilter, setPersonnelFilter] = useState<string>("")  // "" = all
 
-  /* ── Load entries untuk current period ── */
-  const loadEntries = useCallback(async () => {
+  /* ── Load entries untuk current period (signal-owned by useEffect) ── */
+  const loadEntriesWithSignal = useCallback(async (signal: AbortSignal) => {
     if (!airportCode || !unit || !year || !month) return
+    if (signal.aborted) return
     setLoading(true)
-    const ctrl = new AbortController()
     try {
       const monthStart = `${year}-${String(month).padStart(2, "0")}-01`
       const lastDay = new Date(year, month, 0).getDate()
@@ -211,11 +211,10 @@ export default function OvertimeTab() {
         .gte("date", monthStart)
         .lte("date", monthEnd)
         .order("date", { ascending: false })
-        .abortSignal(ctrl.signal)
+        .abortSignal(signal)
 
-      if (ctrl.signal.aborted) return
+      if (signal.aborted) return
       if (error) {
-        // empty / no rows ≠ error
         if (!/no rows/i.test(error.message)) {
           toastRef.current?.error?.("Gagal memuat jam tambahan", error.message)
         }
@@ -224,16 +223,25 @@ export default function OvertimeTab() {
       }
       setEntries((data as OvertimeEntry[]) || [])
     } catch (e: any) {
-      if (e?.name === "AbortError") return
+      if (e?.name === "AbortError" || signal.aborted) return
       toastRef.current?.error?.("Gagal memuat", e?.message || String(e))
       setEntries([])
     } finally {
-      setLoading(false)
+      if (!signal.aborted) setLoading(false)
     }
-    return () => ctrl.abort()
   }, [airportCode, unit, year, month])
 
-  useEffect(() => { loadEntries() }, [loadEntries])
+  useEffect(() => {
+    const ctrl = new AbortController()
+    loadEntriesWithSignal(ctrl.signal)
+    return () => ctrl.abort()
+  }, [loadEntriesWithSignal])
+
+  // One-shot reload for buttons / post-mutation refresh.
+  const loadEntries = useCallback(() => {
+    const ctrl = new AbortController()
+    loadEntriesWithSignal(ctrl.signal)
+  }, [loadEntriesWithSignal])
 
   /* ── Summary ── */
   const summary = useMemo(() => computeMonthSummary(entries), [entries])

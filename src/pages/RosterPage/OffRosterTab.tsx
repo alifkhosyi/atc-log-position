@@ -205,11 +205,11 @@ export default function OffRosterTab() {
   type Filter = "ALL" | LeaveCategory | "CROSS_MONTH"
   const [filter, setFilter] = useState<Filter>("ALL")
 
-  /* ── Load leaves yang touches bulan ini ── */
-  const loadLeaves = useCallback(async () => {
+  /* ── Load leaves yang touches bulan ini (signal-owned by useEffect) ── */
+  const loadLeavesWithSignal = useCallback(async (signal: AbortSignal) => {
     if (!airportCode || !unit || !year || !month) return
+    if (signal.aborted) return
     setLoading(true)
-    const ctrl = new AbortController()
     try {
       const monthStart = `${year}-${String(month).padStart(2, "0")}-01`
       const lastDay = new Date(year, month, 0).getDate()
@@ -223,11 +223,10 @@ export default function OffRosterTab() {
         .lte("start_date", monthEnd)
         .gte("end_date", monthStart)
         .order("start_date")
-        .abortSignal(ctrl.signal)
+        .abortSignal(signal)
 
-      if (ctrl.signal.aborted) return
+      if (signal.aborted) return
       if (error) {
-        // empty / no rows ≠ error
         if (!/no rows/i.test(error.message)) {
           toastRef.current?.error?.("Gagal memuat off-roster", error.message)
         }
@@ -236,16 +235,27 @@ export default function OffRosterTab() {
       }
       setLeaves((data as DBLeave[]) || [])
     } catch (e: any) {
-      if (e?.name === "AbortError") return
+      if (e?.name === "AbortError" || signal.aborted) return
       toastRef.current?.error?.("Gagal memuat", e?.message || String(e))
       setLeaves([])
     } finally {
-      setLoading(false)
+      if (!signal.aborted) setLoading(false)
     }
-    return () => ctrl.abort()
   }, [airportCode, unit, year, month])
 
-  useEffect(() => { loadLeaves() }, [loadLeaves])
+  // useEffect OWNS the AbortController — proper cleanup on dep change/unmount.
+  useEffect(() => {
+    const ctrl = new AbortController()
+    loadLeavesWithSignal(ctrl.signal)
+    return () => ctrl.abort()
+  }, [loadLeavesWithSignal])
+
+  // One-shot reload for the Reload button / post-mutation refresh.
+  const loadLeaves = useCallback(() => {
+    const ctrl = new AbortController()
+    loadLeavesWithSignal(ctrl.signal)
+    // No cleanup — one-shot. Abort if a newer auto-load fires.
+  }, [loadLeavesWithSignal])
 
   /* ── Stats ── */
   const stats = useMemo(() => {

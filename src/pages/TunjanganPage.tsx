@@ -194,11 +194,11 @@ export default function TunjanganPage() {
     return () => ctrl.abort()
   }, [user, isAdmin, userBranchCode, ctx?.personnel])
 
-  /* ── Load roster (status + cells) + overtime in parallel ── */
-  const loadAll = useCallback(async () => {
+  /* ── Load roster + overtime in parallel (signal-owned by useEffect) ── */
+  const loadAllWithSignal = useCallback(async (signal: AbortSignal) => {
     if (!airportCode || !unit || !year || !month) return
+    if (signal.aborted) return
     setLoading(true)
-    const ctrl = new AbortController()
     try {
       const monthStart = `${year}-${String(month).padStart(2, "0")}-01`
       const lastDay = new Date(year, month, 0).getDate()
@@ -213,7 +213,7 @@ export default function TunjanganPage() {
           .eq("unit", unit)
           .eq("year", year)
           .eq("month", month)
-          .abortSignal(ctrl.signal)
+          .abortSignal(signal)
           .maybeSingle(),
         supabase
           .from("atc_overtime")
@@ -222,17 +222,14 @@ export default function TunjanganPage() {
           .eq("unit", unit)
           .gte("date", monthStart)
           .lte("date", monthEnd)
-          .abortSignal(ctrl.signal),
+          .abortSignal(signal),
       ])
 
-      if (ctrl.signal.aborted) return
+      if (signal.aborted) return
 
       // Process overtime first — independent of roster
       if (otRes.error) {
-        // empty / no rows ≠ error
-        if (!/no rows/i.test(otRes.error.message)) {
-          // badge non-critical; don't toast for fetch issues
-        }
+        // empty / no rows ≠ error; badge non-critical, no toast for fetch issues
         setOvertime([])
       } else {
         setOvertime((otRes.data as OvertimeRow[]) || [])
@@ -251,9 +248,9 @@ export default function TunjanganPage() {
         .from("atc_roster_cells")
         .select("personnel_id, day, status, locked")
         .eq("roster_id", r.id)
-        .abortSignal(ctrl.signal)
+        .abortSignal(signal)
 
-      if (ctrl.signal.aborted) return
+      if (signal.aborted) return
 
       if (cells && cells.length > 0) {
         const grouped: Record<string, RosterCell[]> = {}
@@ -267,7 +264,7 @@ export default function TunjanganPage() {
       }
       setRosterStatus(r.status)
     } catch (e: any) {
-      if (e?.name === "AbortError") return
+      if (e?.name === "AbortError" || signal.aborted) return
       // BUKAN error: empty data → empty state. Toast hanya untuk genuine error.
       if (e?.message && !/no rows/i.test(e.message)) {
         toastRef.current?.error?.("Gagal memuat data", e.message)
@@ -276,14 +273,21 @@ export default function TunjanganPage() {
       setRosterStatus("NONE")
       setOvertime([])
     } finally {
-      setLoading(false)
+      if (!signal.aborted) setLoading(false)
     }
-    return () => ctrl.abort()
   }, [airportCode, unit, year, month])
 
-  useEffect(() => { loadAll() }, [loadAll])
-  // Alias for backward compat with onClick handlers
-  const loadRoster = loadAll
+  useEffect(() => {
+    const ctrl = new AbortController()
+    loadAllWithSignal(ctrl.signal)
+    return () => ctrl.abort()
+  }, [loadAllWithSignal])
+
+  // One-shot reload for the Reload button.
+  const loadRoster = useCallback(() => {
+    const ctrl = new AbortController()
+    loadAllWithSignal(ctrl.signal)
+  }, [loadAllWithSignal])
 
   /* ── Allowance computation ── */
   const allowance = useMemo(() => {
