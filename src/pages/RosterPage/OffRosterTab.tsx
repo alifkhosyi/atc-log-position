@@ -32,26 +32,12 @@ import { I } from "../../components/Icons.jsx"
 import {
   listAirports, getAirport,
 } from "../../lib/airport-data"
+import type { DBLeave } from "../../lib/shared"
 
 /* ----------------------------------------------------------------
-   Types — local DB row shapes
+   Types — DBLeave dipindah ke src/lib/shared/db-types.ts (cleanup #3)
    ---------------------------------------------------------------- */
 type LeaveCategory = "CUTI" | "SAKIT" | "DIKLAT" | "OTHERS"
-
-interface DBLeave {
-  id: string
-  personnel_id: string
-  airport_code: string
-  unit: string
-  start_date: string  // YYYY-MM-DD
-  end_date: string
-  category: LeaveCategory
-  note?: string | null
-  personnel?: {
-    initial?: string
-    full_name?: string
-  } | null
-}
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",

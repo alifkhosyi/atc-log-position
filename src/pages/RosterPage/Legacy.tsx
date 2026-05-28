@@ -19,7 +19,7 @@ import '../../styles/roster-tokens.css';
 // airport-data/, roster logic from roster-engine/.
 // CA + rolling sudah pindah ke folder masing-masing (lihat
 // SPLIT_ENGINE_HANDOFF.md). TunjanganPage handle CA.
-import type { Personnel, RosterCell, LeaveRange } from '../../lib/shared';
+import type { Personnel, RosterCell, LeaveRange, DBLeave } from '../../lib/shared';
 import { leaveRangeFromDates } from '../../lib/shared';
 import {
     generateRoster,
@@ -89,16 +89,8 @@ interface DBPersonnel {
     priority_order?: number;
 }
 
-interface DBLeave {
-    id: string;
-    personnel_id: string;
-    airport_code: string;
-    unit: string;
-    start_date: string;
-    end_date: string;
-    category: 'CUTI' | 'SAKIT' | 'DIKLAT' | 'OTHERS';
-    note?: string;
-}
+// DBLeave dipindah ke src/lib/shared/db-types.ts (split-engine cleanup #3).
+// Import via shared di atas. Definisi disini sudah dihapus untuk dedupe.
 
 interface RosterRow {
     id: string;
