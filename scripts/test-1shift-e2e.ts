@@ -313,14 +313,24 @@ function runScenario(cabang: CabangSpec, scenarioName: string, opts: ScenarioOpt
           slotDurations: twrUnit.rolling.slot_durations,
           nPersonnel: twrUnit.rolling.n_personnel,
         })
-        const days = Object.keys(monthly)
-        out.rolling.days_with_rolling = days.length
-        out.rolling.days_skipped = DAYS_IN_MONTH - days.length
-        if (days.length > 0) {
-          const sample = monthly[Number(days[0])]
-          out.rolling.sample_day = sample.day
-          out.rolling.sample_on_duty = sample.on_duty
-          out.rolling.sample_n_slots = sample.slots.length
+        // Multi-shift aware: monthly[day] = Record<shiftToken, DailyRolling>
+        // Count days yang punya ≥1 shift token entry.
+        const dayKeys = Object.keys(monthly).filter(
+          k => Object.keys(monthly[Number(k)] || {}).length > 0
+        )
+        out.rolling.days_with_rolling = dayKeys.length
+        out.rolling.days_skipped = DAYS_IN_MONTH - dayKeys.length
+        if (dayKeys.length > 0) {
+          const firstDay = Number(dayKeys[0])
+          const byShift = monthly[firstDay]
+          // Pick primary shift token (I if exists, else first)
+          const tokens = Object.keys(byShift)
+          const primary = byShift["I"] || byShift[tokens[0]]
+          if (primary) {
+            out.rolling.sample_day = primary.day
+            out.rolling.sample_on_duty = primary.on_duty
+            out.rolling.sample_n_slots = primary.slots.length
+          }
         }
       } catch (e: any) {
         out.rolling.error = e?.message || String(e)
