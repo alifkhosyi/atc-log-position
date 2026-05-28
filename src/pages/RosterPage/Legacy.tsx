@@ -565,27 +565,14 @@ export default function RosterPage() {
     // ============================================================
     return (
         <div className="page-content">
-            {/* TOPBAR */}
-            <div className="topbar">
-                <div>
-                    <h1 className="topbar-title">Roster ATC</h1>
-                    <p className="topbar-sub">
-                        Generate jadwal bulanan personel ATC
-                        {!isAdmin && branchDisplayName && (
-                            <> — Cabang <strong style={{ color: 'var(--text)' }}>{branchDisplayName}</strong></>
-                        )}
-                    </p>
-                </div>
-                <div className="topbar-actions">
-                    <span className="status-pill-info">
-                        <strong style={{ color: 'var(--text)', margin: '0 4px' }}>{dbPersonnel.length}</strong> personel
-                    </span>
-                </div>
-            </div>
+            {/* TOPBAR di-HAPUS (cleanup #2) — judul "Roster ATC" sudah ada
+                di sidebar item + tab indicator. Personnel count + branch
+                info di-pindah ke toolbar/status row di bawah supaya tidak
+                duplikat 3× di layar.
 
-            {/* Step 10 cleanup: inner Roster/CA tabs removed — CA pindah ke
-                page Tunjangan ATC standalone, dan halaman ini sekarang jadi
-                "Tab 1: Jadwal Bulanan" di shell RosterPage/index.tsx. */}
+                Note (cleanup #2 step 10): inner Roster/CA tabs removed — CA
+                pindah ke page Tunjangan ATC standalone, halaman ini sekarang
+                jadi "Tab 1: Jadwal Bulanan" di shell RosterPage/index.tsx. */}
 
             {/* TOOLBAR */}
             <div className="input-banner">
