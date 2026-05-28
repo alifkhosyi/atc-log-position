@@ -153,12 +153,24 @@ export default function OffRosterTab() {
     [airport]
   )
 
-  // Personnel from context (already loaded by AppProvider)
+  // Personnel from context (already loaded by AppProvider).
+  // Filter by branch + unit + is_active — mirror Legacy.tsx (line 222-226)
+  // supaya Off-Roster dropdown scope ke unit yang dipilih. Sebelumnya:
+  // TWR tab tampil semua branch personnel (TWR+APP) → MO bisa pilih APP
+  // person sambil unit=TWR → leave tersimpan unit-mismatch → Legacy roster
+  // generator silent-skip karena `personnel.find(pp => pp.id === lv.personnel_id)`
+  // tidak ketemu (personnel TWR list tidak include APP person).
   const dbPersonnel = useMemo<DBPersonnel[]>(() => {
     const branchFilter = isAdmin ? null : userBranchCode
     const ctxPersonnel: any[] = ctx?.personnel || []
     return ctxPersonnel
-      .filter((p: any) => !branchFilter || p.branch_code === branchFilter)
+      .filter((p: any) => {
+        if (branchFilter && p.branch_code !== branchFilter) return false
+        // p.unit boleh null/undefined (legacy data), kalau set HARUS match.
+        if (p.unit && p.unit !== unit) return false
+        if (p.is_active === false) return false
+        return true
+      })
       .map((p: any, i: number) => {
         const name = p.name || p.full_name || ""
         const rawInit = p.initial && !isUuidLike(p.initial) ? p.initial : null
@@ -168,7 +180,7 @@ export default function OffRosterTab() {
           branch_code: p.branch_code,
         }
       })
-  }, [isAdmin, userBranchCode, ctx?.personnel])
+  }, [isAdmin, userBranchCode, unit, ctx?.personnel])
 
   // Leaves state
   const [leaves, setLeaves] = useState<DBLeave[]>([])

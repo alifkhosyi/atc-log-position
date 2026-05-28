@@ -163,19 +163,30 @@ export default function OvertimeTab() {
 
   const locked = isMonthLocked(year, month)
 
-  // Personnel
+  // Personnel — filter by branch + unit + is_active.
+  // Mirror Legacy.tsx filter (line 222-226) supaya dropdown personnel
+  // tab Jam Tambahan scope ke unit yang dipilih (bukan ALL branch).
+  // Sebelumnya: TWR tab tampil APP+TWR personnel sekaligus → MO bisa
+  // pilih APP person sambil unit=TWR → insert dengan unit mismatch
+  // → Legacy roster gen silent-skip karena personnel.unit ≠ tab unit.
   const dbPersonnel = useMemo<DBPersonnel[]>(() => {
     const branchFilter = isAdmin ? null : userBranchCode
     const ctxPersonnel: any[] = ctx?.personnel || []
     return ctxPersonnel
-      .filter((p: any) => !branchFilter || p.branch_code === branchFilter)
+      .filter((p: any) => {
+        if (branchFilter && p.branch_code !== branchFilter) return false
+        // p.unit boleh null/undefined (legacy data), kalau set HARUS match.
+        if (p.unit && p.unit !== unit) return false
+        if (p.is_active === false) return false
+        return true
+      })
       .map((p: any, i: number) => {
         const name = p.name || p.full_name || ""
         const rawInit = p.initial && !isUuidLike(p.initial) ? p.initial : null
         const initial = rawInit || deriveDisplayInitial(name, `P${i + 1}`)
         return { id: p.id, full_name: name, initial, branch_code: p.branch_code }
       })
-  }, [isAdmin, userBranchCode, ctx?.personnel])
+  }, [isAdmin, userBranchCode, unit, ctx?.personnel])
 
   // Data state
   const [entries, setEntries] = useState<OvertimeEntry[]>([])
