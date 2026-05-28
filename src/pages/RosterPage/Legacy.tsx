@@ -652,27 +652,47 @@ export default function RosterPage() {
 
             {/* Step 10 cleanup: tab CA dihapus, tinggal Roster (Jadwal Bulanan). */}
             <>
-                    {/* Status row */}
+                    {/* Status strip — cleanup #1: konsisten dengan TunjanganPage
+                        + RollingPage. Pill kiri (status pill style), info tengah
+                        (mode + personnel + branch), tombol Mark FINAL / Revert
+                        di kanan. */}
                     {roster && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', margin: '12px 0' }}>
-                            <span className={'status-badge ' + (rosterStatus === 'FINAL' ? 'status-on' : 'status-off')}>
-                                {rosterStatus === 'FINAL' ? 'FINAL' : 'DRAFT'}
-                            </span>
-                            <span className="faint text-sm">Mode: {mode || '—'}</span>
-                            {rosterStatus === 'DRAFT' ? (
-                                <button className="btn btn-sm btn-primary" onClick={handleMarkFinal} disabled={frmsErrors.length > 0}>
-                                    Mark FINAL
-                                </button>
-                            ) : (
-                                <button className="btn btn-sm" onClick={handleRevert}>
-                                    Revert ke DRAFT
-                                </button>
-                            )}
-                            {swapSelection && (
-                                <span className="status-badge" style={{ background: 'var(--status-warn-soft)', color: 'var(--status-warn)' }}>
-                                    Klik cell ke-2 di hari yang sama untuk swap, atau klik ulang untuk batal
+                        <div className="rs-strip">
+                            <div className="rs-strip-left">
+                                <span className={'rs-pill ' + (rosterStatus === 'FINAL' ? 'final' : 'draft')}>
+                                    Roster · {rosterStatus === 'FINAL' ? 'FINAL' : 'DRAFT'}
                                 </span>
-                            )}
+                                <span className="rs-meta">
+                                    <b>{dbPersonnel.length}</b> personel
+                                    {!isAdmin && branchDisplayName && (
+                                        <> · cabang <b>{branchDisplayName}</b></>
+                                    )}
+                                    {mode && <> · mode <code>{mode}</code></>}
+                                </span>
+                            </div>
+                            <div className="rs-strip-right">
+                                {rosterStatus === 'DRAFT' ? (
+                                    <button
+                                        className="btn btn-sm btn-primary"
+                                        onClick={handleMarkFinal}
+                                        disabled={frmsErrors.length > 0}
+                                        title={frmsErrors.length > 0
+                                            ? `Fix ${frmsErrors.length} FRMS error dulu sebelum FINAL`
+                                            : 'Mark roster ini sebagai FINAL'}
+                                    >
+                                        ✓ Mark FINAL
+                                    </button>
+                                ) : (
+                                    <button className="btn btn-sm" onClick={handleRevert}>
+                                        ↩ Revert ke DRAFT
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    {swapSelection && (
+                        <div className="rs-swap-notice">
+                            Klik cell ke-2 di hari yang sama untuk swap, atau klik ulang untuk batal.
                         </div>
                     )}
 
