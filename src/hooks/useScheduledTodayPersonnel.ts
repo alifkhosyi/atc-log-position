@@ -107,12 +107,23 @@ export function useScheduledTodayPersonnel(
         const statusByUnit: Record<string, "FINAL" | "DRAFT" | "NONE"> = {}
 
         // Loop per unit (TWR, APP, ACC sesuai airport config)
+        //
+        // FIX: atc_rosters.airport_code disimpan sebagai engine-derived
+        // name (mis. "BANJARMASIN", "SURABAYA") oleh Legacy.tsx saat
+        // generate, BUKAN ICAO ("WAOO", "WARR"). Lihat
+        // Legacy.tsx → resolvedFromBranch → setAirportCode →
+        // .insert({ airport_code: airportCode, ... }).
+        //
+        // Query pakai airport.airport_code (= "BANJARMASIN") supaya
+        // konsisten dengan RollingPage yang sudah jalan.
+        const rosterAirportKey = airport.airport_code
+
         for (const unitCfg of airport.units) {
           // Fetch roster id untuk (cabang, unit, year, month)
           const { data: roster, error: rErr } = await supabase
             .from("atc_rosters")
             .select("id, status")
-            .eq("airport_code", branchCode)
+            .eq("airport_code", rosterAirportKey)
             .eq("unit", unitCfg.unit)
             .eq("year", year)
             .eq("month", month)
