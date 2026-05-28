@@ -123,7 +123,9 @@ export function computeKontrolMinutesFromRoster(
     const totals: Record<string, number> = {};
     for (let day = 1; day <= result.daysInMonth; day++) {
         for (const ini of Object.keys(result.roster)) {
-            if (SHIFT_SET.has(result.roster[ini][day - 1].status)) {
+            const cell = result.roster[ini]?.[day - 1];
+            if (!cell) continue; // defensive: sparse roster slot
+            if (SHIFT_SET.has(cell.status)) {
                 totals[ini] = (totals[ini] || 0) + perShift;
             }
         }

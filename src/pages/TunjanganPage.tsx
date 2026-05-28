@@ -253,10 +253,22 @@ export default function TunjanganPage() {
       if (signal.aborted) return
 
       if (cells && cells.length > 0) {
+        // FIX: pre-fill array with default cells untuk SEMUA hari supaya tidak
+        // ada sparse slot. Sparse array bikin engine (control-allowance.ts
+        // line 126, rolling.ts line 291) throw TypeError saat akses
+        // roster[ini][day-1].status karena slot undefined.
+        const daysInMonthLocal = new Date(year, month, 0).getDate()
         const grouped: Record<string, RosterCell[]> = {}
         for (const c of cells as DBRosterCell[]) {
-          if (!grouped[c.personnel_id]) grouped[c.personnel_id] = []
-          grouped[c.personnel_id][c.day - 1] = { status: c.status, locked: !!c.locked }
+          if (!grouped[c.personnel_id]) {
+            grouped[c.personnel_id] = Array.from(
+              { length: daysInMonthLocal },
+              () => ({ status: "-", locked: false } as RosterCell),
+            )
+          }
+          if (c.day >= 1 && c.day <= daysInMonthLocal) {
+            grouped[c.personnel_id][c.day - 1] = { status: c.status, locked: !!c.locked }
+          }
         }
         setRoster(grouped)
       } else {

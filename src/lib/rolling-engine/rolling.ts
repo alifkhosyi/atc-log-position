@@ -285,10 +285,15 @@ export function computeMonthlyRolling(
 
     const monthly: MonthlyRolling = {};
     for (let day = 1; day <= result.daysInMonth; day++) {
-        // Group personnel by shift token di hari ini
+        // Group personnel by shift token di hari ini.
+        // Defensive: `result.roster[ini]` bisa sparse array kalau sumber data
+        // dari DB (mis. TunjanganPage build dari atc_roster_cells) — skip
+        // slot undefined supaya tidak crash render path.
         const byShiftToken: Record<string, string[]> = {};
         for (const ini of Object.keys(result.roster)) {
-            const status = result.roster[ini][day - 1].status;
+            const cell = result.roster[ini]?.[day - 1];
+            if (!cell) continue; // sparse roster slot
+            const status = cell.status;
             if (SHIFT_TOKEN_SET.has(status)) {
                 if (!byShiftToken[status]) byShiftToken[status] = [];
                 byShiftToken[status].push(ini);
