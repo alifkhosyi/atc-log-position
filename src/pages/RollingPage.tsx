@@ -300,9 +300,12 @@ export default function RollingPage() {
     }
   }, [cellsByPersonnelId, dbPersonnel, year, month, unitConfig?.min_on_duty_baseline])
 
-  /* ── Engine: compute monthly rolling, slice to selectedDay ── */
-  const dailyRolling = useMemo<DailyRolling | null>(() => {
-    if (!fakeResult || !unitConfig?.rolling) return null
+  /* ── Engine: compute monthly rolling, slice to selectedDay ──
+     Multi-shift aware: dayRollingByShift = Record<shiftToken, DailyRolling>.
+     Single-shift cabang punya { 'I': ... }, multi-shift TMA bisa punya
+     { 'I': ..., 'II': ..., 'III': ..., ... }. */
+  const dayRollingByShift = useMemo<Record<string, DailyRolling>>(() => {
+    if (!fakeResult || !unitConfig?.rolling) return {}
     const r = unitConfig.rolling
     const priorityOrder = fakeResult.personnel.map(p => p.id)
 
@@ -317,19 +320,44 @@ export default function RollingPage() {
         slotDurations: r.slot_durations,
         nPersonnel: r.n_personnel,
       })
-      return monthly[selectedDay] || null
+      return monthly[selectedDay] || {}
     } catch (e: any) {
       // Engine throwing here means config is malformed. Log only — no toast.
       console.warn("[rolling] computeMonthlyRolling threw:", e)
-      return null
+      return {}
     }
   }, [fakeResult, unitConfig, selectedDay])
 
-  /* ── Recap (per personnel: kontrol/asisten/istirahat menit) ── */
-  const recap = useMemo(() => {
-    if (!dailyRolling) return null
-    return computeRecap(dailyRolling)
-  }, [dailyRolling])
+  /* ── Ordered shift tokens for stable render order ── */
+  const shiftTokensOrdered = useMemo<string[]>(() => {
+    const order = ["I", "II", "III", "IV", "V"]
+    return Object.keys(dayRollingByShift).sort((a, b) => {
+      const ia = order.indexOf(a)
+      const ib = order.indexOf(b)
+      if (ia === -1 && ib === -1) return a.localeCompare(b)
+      if (ia === -1) return 1
+      if (ib === -1) return -1
+      return ia - ib
+    })
+  }, [dayRollingByShift])
+
+  /* ── Recap per shift token (per personnel: kontrol/asisten/istirahat menit) ── */
+  const recapByShift = useMemo<Record<string, ReturnType<typeof computeRecap>>>(() => {
+    const out: Record<string, ReturnType<typeof computeRecap>> = {}
+    for (const tok of shiftTokensOrdered) {
+      const daily = dayRollingByShift[tok]
+      if (daily) out[tok] = computeRecap(daily)
+    }
+    return out
+  }, [dayRollingByShift, shiftTokensOrdered])
+
+  /* ── Primary daily (untuk PDF export + check empty) ── */
+  const primaryDaily = useMemo<DailyRolling | null>(() => {
+    if (shiftTokensOrdered.length === 0) return null
+    return dayRollingByShift[shiftTokensOrdered[0]] || null
+  }, [dayRollingByShift, shiftTokensOrdered])
+
+  const hasAnyRolling = shiftTokensOrdered.length > 0
 
   /* ── Personnel lookup (initial → DBPersonnel) for display ── */
   const personnelByInitial = useMemo(() => {
@@ -419,16 +447,24 @@ export default function RollingPage() {
         <button
           className="rl-btn rl-btn-primary"
           type="button"
-          disabled={!dailyRolling || !airport}
-          title={dailyRolling
+          disabled={!primaryDaily || !airport}
+          title={primaryDaily
             ? "Buka print dialog — pilih 'Save as PDF' untuk simpan file"
             : "Belum ada rolling untuk diekspor"}
           onClick={() => {
-            if (!dailyRolling || !airport) return
+            if (!primaryDaily || !airport) return
             const nameByKey: Record<string, string> = {}
-            for (const ini of dailyRolling.on_duty) {
-              nameByKey[ini] = personnelByInitial[ini]?.full_name || ini
+            // Collect on-duty across SEMUA shift token agar PDF complete
+            // walaupun saat ini PDF helper render 1 shift only (primary).
+            // Phase 2: extend PDF helper untuk multi-shift section.
+            for (const tok of shiftTokensOrdered) {
+              const d = dayRollingByShift[tok]
+              if (!d) continue
+              for (const ini of d.on_duty) {
+                nameByKey[ini] = personnelByInitial[ini]?.full_name || ini
+              }
             }
+            const primaryRecap = recapByShift[primaryDaily.shift_token || "I"] || null
             const ok = exportRollingPDF({
               airportCode,
               airportName: airport.airport_name,
@@ -436,8 +472,8 @@ export default function RollingPage() {
               date,
               dateLong: fmtDateLong(date),
               rosterStatus,
-              daily: dailyRolling,
-              recap,
+              daily: primaryDaily,
+              recap: primaryRecap,
               personnelNameByKey: nameByKey,
             })
             if (!ok) {
@@ -458,8 +494,10 @@ export default function RollingPage() {
         rosterStatus,
         unitConfig,
         airport,
-        dailyRolling,
-        recap,
+        dayRollingByShift,
+        shiftTokensOrdered,
+        recapByShift,
+        hasAnyRolling,
         personnelByInitial,
         selectedDay,
         goRoster: () => ctx?.goPage?.("roster"),
@@ -478,15 +516,18 @@ function renderBody(opts: {
   rosterStatus: RosterStatusUi
   unitConfig: UnitConfigLike | undefined
   airport: ReturnType<typeof getAirport>
-  dailyRolling: DailyRolling | null
-  recap: ReturnType<typeof computeRecap> | null
+  dayRollingByShift: Record<string, DailyRolling>
+  shiftTokensOrdered: string[]
+  recapByShift: Record<string, ReturnType<typeof computeRecap>>
+  hasAnyRolling: boolean
   personnelByInitial: Record<string, DBPersonnel>
   selectedDay: number
   goRoster: () => void
 }) {
   const {
-    loading, rosterStatus, unitConfig, airport, dailyRolling,
-    recap, personnelByInitial, selectedDay, goRoster,
+    loading, rosterStatus, unitConfig, airport,
+    dayRollingByShift, shiftTokensOrdered, recapByShift, hasAnyRolling,
+    personnelByInitial, selectedDay, goRoster,
   } = opts
 
   // Empty state #1: roster belum dibuat
@@ -522,38 +563,30 @@ function renderBody(opts: {
     )
   }
 
-  // Empty state #3: ada roster tapi tanggal ini tidak ada on-duty (rare config)
-  // atau personnel tidak match nPersonnel rule
-  if (!dailyRolling) {
-    const reasonNotice = (() => {
-      // Engine returns null kalau on_duty count != nPersonnel.
-      // Bisa karena: hari yang dipilih tidak ada shift I, ATAU personnel
-      // kurang/lebih.
-      return (
-        <>
-          Engine tidak menghasilkan rolling untuk tanggal ini. Kemungkinan
-          besar tidak ada personnel di shift <b>I</b> tanggal {selectedDay},
-          atau jumlah personnel on-duty tidak sesuai pola rolling
-          ({unitConfig.rolling?.n_personnel ?? 3} orang).
-        </>
-      )
-    })()
+  // Empty state #3: ada roster tapi tanggal ini sama sekali tidak ada
+  // shift token apapun (semua personnel off/cuti hari ini).
+  if (!hasAnyRolling) {
     return (
       <div className="rl-empty">
         <div className="rl-empty-ic"><I n="alert" s={32}/></div>
         <h3>Rolling tidak tersedia untuk tanggal ini</h3>
-        <p>{reasonNotice}</p>
+        <p>
+          Engine tidak menghasilkan rolling untuk tanggal {selectedDay}.
+          Kemungkinan tidak ada personnel on-duty (semua off / cuti) di
+          hari ini, atau roster belum di-generate dengan shift token
+          (I/II/III/IV/V).
+        </p>
         {rosterStatus === "DRAFT" && (
           <p style={{ fontSize: 12.5, color: "var(--text-faint)" }}>
             Roster masih DRAFT — cek lagi di <b>Roster ATC</b> apakah personnel
-            sudah di-assign shift I untuk tanggal ini.
+            sudah di-assign shift untuk tanggal ini.
           </p>
         )}
       </div>
     )
   }
 
-  // ─── Render grid ───
+  // ─── Render grid: 1 section per shift token (I/II/III/IV/V) ───
   return (
     <>
       {loading && (
@@ -562,12 +595,20 @@ function renderBody(opts: {
           <span>Memuat data roster…</span>
         </div>
       )}
-      <RollingGrid
-        daily={dailyRolling}
-        recap={recap}
-        personnelByInitial={personnelByInitial}
-        unitConfig={unitConfig}
-      />
+      {shiftTokensOrdered.map(token => {
+        const daily = dayRollingByShift[token]
+        if (!daily) return null
+        return (
+          <RollingGrid
+            key={token}
+            daily={daily}
+            shiftToken={token}
+            recap={recapByShift[token] || null}
+            personnelByInitial={personnelByInitial}
+            unitConfig={unitConfig}
+          />
+        )
+      })}
       <RollingLegend/>
     </>
   )
@@ -578,26 +619,28 @@ function renderBody(opts: {
    ---------------------------------------------------------------- */
 function RollingGrid(props: {
   daily: DailyRolling
+  shiftToken?: string
   recap: ReturnType<typeof computeRecap> | null
   personnelByInitial: Record<string, DBPersonnel>
   unitConfig: UnitConfigLike | undefined
 }) {
-  const { daily, recap, personnelByInitial, unitConfig } = props
+  const { daily, shiftToken, recap, personnelByInitial, unitConfig } = props
   const { on_duty, slots } = daily
 
   // Header utk shift section
   const startTime = slots[0]?.start_utc ?? "—"
   const endTime = slots[slots.length - 1]?.end_utc ?? "—"
-  const shiftLabel = unitConfig?.rolling
-    ? `Shift I · ${startTime} – ${endTime} · ${on_duty.length} personnel on-duty`
+  const tokenLabel = shiftToken || daily.shift_token || "I"
+  const subInfo = unitConfig?.rolling
+    ? `${startTime} – ${endTime} · ${on_duty.length} personnel on-duty`
     : `${on_duty.length} personnel on-duty`
 
   return (
     <div className="rl-shift">
       <div className="rl-shift-h">
         <div className="rl-shift-title">
-          <span className="token">Shift I</span>
-          {shiftLabel.replace(/^Shift I · /, "")}
+          <span className="token">Shift {tokenLabel}</span>
+          {subInfo}
         </div>
         <span className="rl-shift-meta">
           {slots.length} slot · {slots[0]?.duration_min ?? "?"} menit/slot (default)
