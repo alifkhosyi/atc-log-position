@@ -28,6 +28,14 @@
        .dash-pos-cwp / .dash-pos-name / .dash-pos-foot
        .dash-pos-arrow / .dash-pos-empty
        .dash-pos-action  (Off Mic / Delete row inside card)
+     .dash-sched-units     — Posisi Aktif (scheduled / roster source)
+       .dash-sched-unit / .dash-sched-unit-h
+         .dash-sched-unit-name / .dash-sched-unit-count
+       .dash-sched-shift (.is-active)
+         .dash-sched-shift-h / .dash-sched-shift-label
+         .dash-sched-shift-time / .dash-sched-shift-active
+       .dash-sched-list / .dash-sched-person
+         .dash-sched-initial / .dash-sched-name
      .dash-traf-wrap       — Traffic Harian chart
        .dash-traf-bars / .dash-traf-day (.today) / .dash-traf-stack
        .dash-traf-bar (.dep|.arr|.ovf) / .dash-traf-tip
@@ -393,6 +401,121 @@
   padding: 4px 10px; font-size: 11.5px;
 }
 
+/* ───────── POSISI AKTIF — SCHEDULED (roster source) ─────────
+   Replaces position_logs-based card grid. Layout: per-unit column
+   stacked vertically, each unit contains 1..N shift blocks
+   ("Shift I / II / III"), each shift lists scheduled personnel
+   sebagai chip-style row (initial + full name).
+
+   Tokens dipakai (no new tokens):
+     --surface-1/-2/-3, --accent / --accent-soft,
+     --status-on, --text / --text-muted / --text-faint, --mono
+   ──────────────────────────────────────────────────────────── */
+.dash-sched-units{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 14px 16px;
+}
+.dash-sched-unit{
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.dash-sched-unit-h{
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--surface-3);
+}
+.dash-sched-unit-name{
+  font-family: var(--font-mono, var(--mono));
+  font-size: 12px; font-weight: 700;
+  color: var(--status-on);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.dash-sched-unit-count{
+  font-size: 11px; color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.dash-sched-shift{
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--surface-3);
+  border-left: 2px solid var(--surface-3);
+  border-radius: 6px;
+  transition: border-color .15s, background .15s;
+}
+.dash-sched-shift.is-active{
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+.dash-sched-shift-h{
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.dash-sched-shift-label{
+  font-family: var(--font-mono, var(--mono));
+  font-size: 11px; font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.dash-sched-shift-time{
+  font-size: 11px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dash-sched-shift-active{
+  margin-left: auto;
+  font-family: var(--font-mono, var(--mono));
+  font-size: 9.5px; font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.12em;
+  padding: 2px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+}
+
+.dash-sched-list{
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.dash-sched-person{
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background .15s;
+}
+.dash-sched-person:hover{
+  background: var(--surface-2);
+}
+.dash-sched-initial{
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-mono, var(--mono));
+  font-size: 10.5px; font-weight: 700;
+  border-radius: 50%;
+  letter-spacing: 0.04em;
+}
+.dash-sched-shift.is-active .dash-sched-initial{
+  background: var(--accent);
+  color: #0a0e1a;
+}
+.dash-sched-name{
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* ───────── TRAFFIC HARIAN ───────── */
 .dash-traf-wrap{ padding: 16px 20px 0; }
 .dash-traf-bars{
@@ -583,6 +706,7 @@
   .dash-topbar{ flex-direction: column; align-items: stretch; }
   .dash-topbar-actions{ width: 100%; }
   .dash-topbar-actions .dash-btn{ flex: 1; justify-content: center; }
+  .dash-sched-units{ grid-template-columns: 1fr; }
 }
 @media (max-width: 480px){
   .dash-stats{ grid-template-columns: 1fr; }
