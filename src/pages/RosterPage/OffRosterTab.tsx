@@ -201,9 +201,18 @@ export default function OffRosterTab() {
       const lastDay = new Date(year, month, 0).getDate()
       const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`
 
-      const { data, error } = await supabase
+      // FK relation atc_leaves.personnel_id → personnel.id tidak
+      // terdefinisi di Supabase, jadi PostgREST embed join via
+      // alias-syntax (initial, full_name) return 400 Bad Request.
+      // Lagipula column `full_name` tidak ada di personnel (canonical
+      // column adalah `name`). Solusi: split jadi 2 query.
+      //   1. Query atc_leaves tanpa embed
+      //   2. Query personnel by IN ids, build map, attach ke setiap row
+      // dengan shape { initial, full_name } supaya consumer di UI
+      // (`lv.personnel?.full_name || lv.personnel?.initial`) tetap kerja.
+      const { data: rawLeaves, error } = await supabase
         .from("atc_leaves")
-        .select("*, personnel:personnel(initial, full_name)")
+        .select("*")
         .eq("airport_code", airportCode)
         .eq("unit", unit)
         .lte("start_date", monthEnd)
@@ -219,7 +228,32 @@ export default function OffRosterTab() {
         setLeaves([])
         return
       }
-      setLeaves((data as DBLeave[]) || [])
+
+      // Lookup personnel names secara terpisah (no FK = no embed)
+      const personnelIds = [
+        ...new Set((rawLeaves || []).map((r: any) => r.personnel_id)),
+      ]
+      const personnelMap: Record<string, { initial: string; full_name: string }> = {}
+      if (personnelIds.length > 0) {
+        const { data: persons } = await supabase
+          .from("personnel")
+          .select("id, initial, name")
+          .in("id", personnelIds)
+          .abortSignal(signal)
+        if (signal.aborted) return
+        for (const p of (persons || []) as any[]) {
+          personnelMap[p.id] = {
+            initial: p.initial || "",
+            full_name: p.name || "",  // personnel.name → attach as full_name
+          }
+        }
+      }
+
+      const merged: DBLeave[] = (rawLeaves || []).map((r: any) => ({
+        ...r,
+        personnel: personnelMap[r.personnel_id] || { initial: "", full_name: "" },
+      }))
+      setLeaves(merged)
     } catch (e: any) {
       if (e?.name === "AbortError" || signal.aborted) return
       toastRef.current?.error?.("Gagal memuat", e?.message || String(e))
