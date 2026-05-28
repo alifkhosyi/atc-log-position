@@ -30,6 +30,7 @@ import { getCAConstant } from '../airport-data/loader';
 import {
     computeMonthlyRolling, computeRecap,
     type DailyRolling,
+    type MonthlyRolling,
 } from '../rolling-engine';
 
 const SHIFT_SET = new Set<string>(SHIFT_TOKENS as readonly string[]);
@@ -79,18 +80,28 @@ export function kontrolMinutesPerShift(rolling: RollingConfig | null | undefined
 /**
  * Hitung total menit Jam Kontrol per personel sepanjang bulan,
  * via monthly_rolling (lebih akurat per-slot).
+ *
+ * Multi-shift aware: iterate over SEMUA shift token group per hari
+ * (I/II/III/IV/V), bukan hanya hari yang punya shift 'I'. Untuk
+ * single-shift cabang, behavior identik dengan implementasi lama
+ * (cuma 1 shift token per hari).
  */
 export function computeMonthlyKontrolMinutes(
-    monthlyRolling: Record<number, DailyRolling>,
+    monthlyRolling: MonthlyRolling,
 ): Record<string, number> {
     const totals: Record<string, number> = {};
-    for (const dailyKey of Object.keys(monthlyRolling)) {
-        const daily = monthlyRolling[Number(dailyKey)];
-        const recap = computeRecap(daily);
-        for (const [ini, posdata] of Object.entries(recap)) {
-            const kontrol = posdata[POSITION_KONTROL] || 0;
-            const asisten = posdata[POSITION_ASISTEN] || 0;
-            totals[ini] = (totals[ini] || 0) + kontrol + asisten;
+    for (const dayKey of Object.keys(monthlyRolling)) {
+        const byShift = monthlyRolling[Number(dayKey)];
+        if (!byShift) continue;
+        for (const shiftToken of Object.keys(byShift)) {
+            const daily = byShift[shiftToken];
+            if (!daily) continue;
+            const recap = computeRecap(daily);
+            for (const [ini, posdata] of Object.entries(recap)) {
+                const kontrol = posdata[POSITION_KONTROL] || 0;
+                const asisten = posdata[POSITION_ASISTEN] || 0;
+                totals[ini] = (totals[ini] || 0) + kontrol + asisten;
+            }
         }
     }
     return totals;

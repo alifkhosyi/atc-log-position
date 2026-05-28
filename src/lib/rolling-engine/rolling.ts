@@ -19,6 +19,7 @@
 import type {
     DailyRolling, TimeSlot,
     RecapEntry,
+    MonthlyRolling,
     ComputeSlotTimesOptions,
     ComputeDailyRollingOptions,
     ComputeMonthlyRollingOptions,
@@ -29,6 +30,9 @@ import {
 import {
     POSITION_KONTROL, POSITION_ASISTEN, POSITION_ISTIRAHAT,
 } from '../airport-data/types';
+import { SHIFT_TOKENS } from '../shared/types';
+
+const SHIFT_TOKEN_SET = new Set<string>(SHIFT_TOKENS as readonly string[]);
 
 // ============================================================
 // SLOT TIMES
@@ -162,9 +166,114 @@ export function computeDailyRolling(opts: ComputeDailyRollingOptions): DailyRoll
 // MONTHLY ROLLING
 // ============================================================
 
+/**
+ * Generate adaptive positions[][] pattern berdasarkan actual personnel count.
+ *
+ * Strategi:
+ * - Kalau `configPositions` sudah match nPersonnel (inner length sama),
+ *   pakai apa adanya (preserve cabang-specific operational config).
+ * - Else generate default rotation untuk 2/3/4 personnel.
+ * - Untuk 1 personnel: solo Kontrol full shift.
+ * - Untuk 5+ personnel: simplified pattern (idx 0 Kontrol, 1 Asisten,
+ *   sisanya Istirahat).
+ */
+export function generateAdaptivePositions(
+    nPersonnel: number,
+    nSlots: number,
+    configPositions?: string[][],
+): string[][] {
+    if (
+        configPositions
+        && configPositions.length > 0
+        && configPositions[0].length === nPersonnel
+    ) {
+        // Config already matches actual personnel count — preserve operational truth.
+        // Make sure length === nSlots (truncate or extend by repeating the cycle).
+        if (configPositions.length === nSlots) return configPositions;
+        const out: string[][] = [];
+        for (let i = 0; i < nSlots; i++) {
+            out.push(configPositions[i % configPositions.length]);
+        }
+        return out;
+    }
+
+    if (nPersonnel <= 0) return [];
+
+    if (nPersonnel === 1) {
+        return Array.from({ length: nSlots }, () => [POSITION_KONTROL]);
+    }
+
+    if (nPersonnel === 2) {
+        return Array.from(
+            { length: nSlots },
+            (_, i) => i % 2 === 0
+                ? [POSITION_KONTROL, POSITION_ISTIRAHAT]
+                : [POSITION_ISTIRAHAT, POSITION_KONTROL],
+        );
+    }
+
+    if (nPersonnel === 3) {
+        const pattern = [
+            [POSITION_KONTROL, POSITION_ASISTEN, POSITION_ISTIRAHAT],
+            [POSITION_ASISTEN, POSITION_ISTIRAHAT, POSITION_KONTROL],
+            [POSITION_ISTIRAHAT, POSITION_KONTROL, POSITION_ASISTEN],
+        ];
+        return Array.from({ length: nSlots }, (_, i) => pattern[i % 3]);
+    }
+
+    if (nPersonnel === 4) {
+        // 4-personnel default rotation: 1 Kontrol + 1 Asisten + 2 Istirahat
+        // dengan posisi rotating biar adil. Ops cabang TMA bisa override
+        // via config positions kalau pola berbeda.
+        const pattern = [
+            [POSITION_KONTROL, POSITION_ASISTEN, POSITION_ISTIRAHAT, POSITION_ISTIRAHAT],
+            [POSITION_ISTIRAHAT, POSITION_KONTROL, POSITION_ASISTEN, POSITION_ISTIRAHAT],
+            [POSITION_ISTIRAHAT, POSITION_ISTIRAHAT, POSITION_KONTROL, POSITION_ASISTEN],
+            [POSITION_ASISTEN, POSITION_ISTIRAHAT, POSITION_ISTIRAHAT, POSITION_KONTROL],
+        ];
+        return Array.from({ length: nSlots }, (_, i) => pattern[i % 4]);
+    }
+
+    // 5+ personnel: simplified — idx 0 Kontrol, idx 1 Asisten, sisanya Istirahat.
+    // Cabang TMA besar dengan operasional khusus disarankan provide explicit
+    // `rolling.positions` di airport-configs.json.
+    const baseSlot = Array.from(
+        { length: nPersonnel },
+        (_, idx) => idx === 0
+            ? POSITION_KONTROL
+            : idx === 1
+                ? POSITION_ASISTEN
+                : POSITION_ISTIRAHAT,
+    );
+    return Array.from({ length: nSlots }, () => baseSlot);
+}
+
+/**
+ * Compute rolling untuk seluruh bulan, group by shift token.
+ *
+ * Output: `MonthlyRolling = Record<day, Record<shiftToken, DailyRolling>>`.
+ *
+ * Algoritme:
+ *   1. Untuk setiap hari, group personnel berdasarkan shift token mereka.
+ *      Personnel yang status-nya bukan SHIFT_TOKEN ('-'/CUTI/SAKIT/dst)
+ *      di-skip.
+ *   2. Untuk setiap shift group dengan ≥1 personnel, compute daily
+ *      rolling SEPARATE dengan adaptive nPersonnel (= actual count
+ *      group ini, bukan strict config nPersonnel).
+ *   3. Positions pattern: pakai config kalau cocok, else generate default.
+ *   4. Hari tanpa shift token apapun → tidak masuk hasil.
+ *
+ * Multi-shift TMA cabang (Surabaya/Denpasar/dst) bakal punya multiple
+ * entries per hari (shift I + II + III + IV + V). Single-shift cabang
+ * cuma punya 'I' entry per hari aktif.
+ *
+ * Catatan: parameter legacy `nPersonnel` di opts sudah TIDAK strict —
+ * cuma dipakai sebagai fallback untuk pilih positions default. Engine
+ * sekarang adaptive based on actual on-duty count.
+ */
 export function computeMonthlyRolling(
     opts: ComputeMonthlyRollingOptions,
-): Record<number, DailyRolling> {
+): MonthlyRolling {
     const {
         result, priorityOrder,
         shiftStartUtc = '21:00',
@@ -172,30 +281,125 @@ export function computeMonthlyRolling(
         slotDurationMin = SLOT_DURATION_MIN,
         positionsPerSlot,
         slotDurations,
-        nPersonnel,
     } = opts;
 
-    const nPers = nPersonnel ?? (positionsPerSlot && positionsPerSlot.length > 0
-        ? positionsPerSlot[0].length
-        : 3);
-
-    const monthly: Record<number, DailyRolling> = {};
+    const monthly: MonthlyRolling = {};
     for (let day = 1; day <= result.daysInMonth; day++) {
-        const onDuty: string[] = [];
+        // Group personnel by shift token di hari ini
+        const byShiftToken: Record<string, string[]> = {};
         for (const ini of Object.keys(result.roster)) {
-            if (result.roster[ini][day - 1].status === 'I') {
-                onDuty.push(ini);
+            const status = result.roster[ini][day - 1].status;
+            if (SHIFT_TOKEN_SET.has(status)) {
+                if (!byShiftToken[status]) byShiftToken[status] = [];
+                byShiftToken[status].push(ini);
             }
         }
-        if (onDuty.length === nPers) {
-            monthly[day] = computeDailyRolling({
-                day, onDutyInitials: onDuty, priorityOrder,
-                shiftStartUtc, nSlots, slotDurationMin,
-                positionsPerSlot, slotDurations, nPersonnel: nPers,
-            });
+
+        if (Object.keys(byShiftToken).length === 0) continue;
+
+        const dayRolling: Record<string, DailyRolling> = {};
+        for (const [shiftToken, onDutyList] of Object.entries(byShiftToken)) {
+            if (onDutyList.length === 0) continue;
+            try {
+                const adaptivePositions = generateAdaptivePositions(
+                    onDutyList.length,
+                    nSlots,
+                    positionsPerSlot,
+                );
+                const daily = computeDailyRolling({
+                    day,
+                    onDutyInitials: onDutyList,
+                    priorityOrder,
+                    shiftStartUtc,
+                    nSlots,
+                    slotDurationMin,
+                    positionsPerSlot: adaptivePositions,
+                    slotDurations,
+                    nPersonnel: onDutyList.length,
+                });
+                // Tag shift token onto the DailyRolling for downstream consumers.
+                daily.shift_token = shiftToken;
+                dayRolling[shiftToken] = daily;
+            } catch (e) {
+                // Defensive: log + continue. Shouldn't happen since we pass
+                // adaptive positions matching onDutyList.length, but if
+                // anything throws we skip this shift slot for this day.
+                console.warn(
+                    `[rolling] day ${day} shift ${shiftToken} failed:`,
+                    (e as Error)?.message || e,
+                );
+            }
+        }
+
+        if (Object.keys(dayRolling).length > 0) {
+            monthly[day] = dayRolling;
         }
     }
     return monthly;
+}
+
+// ============================================================
+// MONTHLY ROLLING HELPERS (multi-shift aware)
+// ============================================================
+
+/**
+ * Get DailyRolling untuk hari + shift token spesifik.
+ * Returns null kalau tidak ada.
+ */
+export function getRollingForShift(
+    monthly: MonthlyRolling,
+    day: number,
+    shiftToken: string,
+): DailyRolling | null {
+    return monthly[day]?.[shiftToken] ?? null;
+}
+
+/**
+ * Get all DailyRolling entries untuk hari spesifik (semua shift token).
+ * Returns empty object kalau hari tidak punya rolling.
+ */
+export function getRollingForDay(
+    monthly: MonthlyRolling,
+    day: number,
+): Record<string, DailyRolling> {
+    return monthly[day] ?? {};
+}
+
+/**
+ * Get list shift tokens yang ada di hari spesifik.
+ * Sort by shift order (I < II < III < IV < V) untuk display consistency.
+ */
+export function getShiftTokensForDay(
+    monthly: MonthlyRolling,
+    day: number,
+): string[] {
+    const dayData = monthly[day];
+    if (!dayData) return [];
+    return Object.keys(dayData).sort((a, b) => {
+        const order = ['I', 'II', 'III', 'IV', 'V'];
+        const ia = order.indexOf(a);
+        const ib = order.indexOf(b);
+        if (ia === -1 && ib === -1) return a.localeCompare(b);
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+    });
+}
+
+/**
+ * Backward-compat: get the "primary" DailyRolling untuk hari spesifik.
+ * Returns shift 'I' kalau ada, else first shift di sort order.
+ * Untuk single-shift cabang ini behavior identik dengan old API.
+ */
+export function getPrimaryRollingForDay(
+    monthly: MonthlyRolling,
+    day: number,
+): DailyRolling | null {
+    const dayData = monthly[day];
+    if (!dayData) return null;
+    if (dayData['I']) return dayData['I'];
+    const tokens = getShiftTokensForDay(monthly, day);
+    return tokens.length > 0 ? dayData[tokens[0]] : null;
 }
 
 // ============================================================

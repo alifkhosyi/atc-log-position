@@ -47,7 +47,30 @@ export interface DailyRolling {
     /** N initial sorted by priority_order: [A, B, (C)]. */
     on_duty: string[];
     slots: TimeSlot[];
+    /**
+     * Shift token yang dirolling-kan. 'I' untuk single-shift cabang
+     * (default), 'II'/'III'/'IV'/'V' untuk multi-shift cabang TMA.
+     * Optional supaya backward-compat dengan caller lama.
+     */
+    shift_token?: string;
 }
+
+/**
+ * Multi-shift aware monthly rolling shape.
+ *
+ * Outer key:  day number (1..31)
+ * Inner key:  shift token ('I'/'II'/'III'/'IV'/'V')
+ * Value:      DailyRolling untuk shift token tsb di hari tsb
+ *
+ * Untuk single-shift cabang (kebanyakan), outer per-day object
+ * cuma punya 1 entry: `{ 'I': DailyRolling }`. Untuk multi-shift
+ * TMA cabang (Surabaya/Denpasar/dst), bisa punya 2-5 entries
+ * tergantung shift tokens yang di-detect di hari tsb.
+ *
+ * Hari yang sama sekali tidak ada personnel on-duty (semua off/cuti)
+ * tidak masuk outer map.
+ */
+export type MonthlyRolling = Record<number, Record<string, DailyRolling>>;
 
 // ============================================================
 // COMPUTE OPTIONS

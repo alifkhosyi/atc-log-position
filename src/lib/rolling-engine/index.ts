@@ -11,4 +11,9 @@ export {
     computeRecap,
     computeSlotTimes,
     assignPersonnelToABC,
+    generateAdaptivePositions,
+    getRollingForShift,
+    getRollingForDay,
+    getShiftTokensForDay,
+    getPrimaryRollingForDay,
 } from './rolling';
