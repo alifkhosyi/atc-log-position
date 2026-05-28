@@ -176,9 +176,8 @@ export default function RosterPage() {
     const [info, setInfo] = useState('');
     const [swapSelection, setSwapSelection] = useState<{ personnelId: string; day: number } | null>(null);
 
-    const [leaveForm, setLeaveForm] = useState({
-        personnelId: '', startDate: '', endDate: '', category: 'CUTI' as DBLeave['category'],
-    });
+    // leaveForm state DIHAPUS — form sudah pindah ke Tab Off-Roster.
+    // dbLeaves (di atas) tetap di-load untuk engine generator.
 
     const daysInMonth = useMemo(() => new Date(year, month, 0).getDate(), [year, month]);
 
@@ -566,33 +565,8 @@ export default function RosterPage() {
         setInfo('Roster di-revert ke DRAFT.');
     }
 
-    async function handleAddLeave() {
-        if (!leaveForm.personnelId || !leaveForm.startDate || !leaveForm.endDate) {
-            setError('Pilih personel + tanggal mulai + tanggal selesai.');
-            return;
-        }
-        if (leaveForm.endDate < leaveForm.startDate) {
-            setError('Tanggal selesai sebelum tanggal mulai.');
-            return;
-        }
-        const { error: err } = await supabase.from('atc_leaves').insert({
-            personnel_id: leaveForm.personnelId,
-            airport_code: airportCode, unit,
-            start_date: leaveForm.startDate,
-            end_date: leaveForm.endDate,
-            category: leaveForm.category,
-        });
-        if (err) { setError(err.message); return; }
-        setInfo(`Cuti ditambahkan untuk ${leaveForm.personnelId} (${leaveForm.startDate} – ${leaveForm.endDate}).`);
-        setLeaveForm({ personnelId: '', startDate: '', endDate: '', category: 'CUTI' });
-        const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
-        const lastDay = new Date(year, month, 0).getDate();
-        const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-        const { data } = await supabase.from('atc_leaves').select('*')
-            .eq('airport_code', airportCode).eq('unit', unit)
-            .lte('start_date', monthEnd).gte('end_date', monthStart);
-        if (data) setDbLeaves(data as DBLeave[]);
-    }
+    // handleAddLeave() DIHAPUS — operasi CRUD Off-Roster sudah pindah ke
+    // src/pages/RosterPage/OffRosterTab.tsx (Tab 2 di shell).
 
     // ============================================================
     // RENDER
@@ -750,62 +724,11 @@ export default function RosterPage() {
                         </div>
                     )}
 
-                    {/* Add leave form */}
-                    <div className="panel">
-                        <details>
-                            <summary className="panel-header" style={{ cursor: 'pointer' }}>
-                                <h2 className="panel-title">Tambah Cuti / Off-Roster</h2>
-                            </summary>
-                            <div className="panel-body" style={{ paddingTop: 0 }}>
-                                <div className="quick-row">
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label>Personel</label>
-                                        <select
-                                            value={leaveForm.personnelId}
-                                            onChange={e => setLeaveForm({ ...leaveForm, personnelId: e.target.value })}
-                                        >
-                                            <option value="">— Pilih personel —</option>
-                                            {dbPersonnel.map(p => (
-                                                <option key={p.id} value={p.id}>
-                                                    {p.initial}{p.full_name ? ` — ${p.full_name}` : ''}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label>Tanggal Mulai</label>
-                                        <input type="date"
-                                               value={leaveForm.startDate}
-                                               onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })}/>
-                                    </div>
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label>Tanggal Selesai</label>
-                                        <input type="date"
-                                               value={leaveForm.endDate}
-                                               onChange={e => setLeaveForm({ ...leaveForm, endDate: e.target.value })}/>
-                                    </div>
-                                    <div className="field" style={{ margin: 0 }}>
-                                        <label>Kategori</label>
-                                        <select
-                                            value={leaveForm.category}
-                                            onChange={e => setLeaveForm({ ...leaveForm, category: e.target.value as DBLeave['category'] })}
-                                        >
-                                            <option value="CUTI">Cuti</option>
-                                            <option value="SAKIT">Sakit</option>
-                                            <option value="DIKLAT">Diklat</option>
-                                            <option value="OTHERS">Lainnya</option>
-                                        </select>
-                                    </div>
-                                    <button className="btn btn-primary btn-sm" onClick={handleAddLeave}>
-                                        Tambah
-                                    </button>
-                                </div>
-                                <p className="faint text-sm" style={{ marginTop: 8 }}>
-                                    Cuti boleh lintas bulan — engine otomatis tracking ke bulan berikutnya.
-                                </p>
-                            </div>
-                        </details>
-                    </div>
+                    {/* Form "Tambah Cuti / Off-Roster" sengaja DIHAPUS dari sini.
+                        Sudah pindah ke Tab 2 (Off-Roster) — flow penuh dengan
+                        stats strip, filter, edit, delete. Data dbLeaves di sini
+                        tetap di-load dari Supabase untuk engine generator yang
+                        butuh tahu siapa cuti hari apa. */}
 
                     {/* Roster table */}
                     {roster ? (
