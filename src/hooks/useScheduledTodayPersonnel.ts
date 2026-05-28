@@ -140,10 +140,13 @@ export function useScheduledTodayPersonnel(
           statusByUnit[unitCfg.unit] =
             (roster.status as "FINAL" | "DRAFT") || "DRAFT"
 
-          // Fetch cells hari ini, join personnel(name)
+          // Fetch cells hari ini (TANPA join — FK relation
+          // atc_roster_cells.personnel_id → personnel.id tidak terdefinisi
+          // di Supabase, jadi PostgREST embed join return 400. Solusi:
+          // query cells dulu, terus query personnel.name terpisah by IN ids.
           const { data: cells, error: cErr } = await supabase
             .from("atc_roster_cells")
-            .select("personnel_id, status, personnel:personnel(name)")
+            .select("personnel_id, status")
             .eq("roster_id", roster.id)
             .eq("day", day)
             .abortSignal(ctrl.signal)
@@ -151,18 +154,34 @@ export function useScheduledTodayPersonnel(
           if (ctrl.signal.aborted) return
           if (cErr) continue  // skip kalau error, no toast
 
-          const unitGroup: Record<string, ScheduledPerson[]> = {}
-          for (const c of cells || []) {
-            const status = (c as any).status as string
-            if (!SHIFT_TOKENS.has(status)) continue  // skip '-', CUTI, dst.
+          // Filter shift token + collect personnel IDs untuk lookup nama
+          const validCells = (cells || []).filter(
+            (c: any) => SHIFT_TOKENS.has(c.status as string)
+          )
+          const personnelIds = [...new Set(validCells.map((c: any) => c.personnel_id))]
 
-            // personnel(name) join: bisa null kalau personnel sudah dihapus
-            const joinedPerson = (c as any).personnel
-            const fullName: string =
-              (joinedPerson && joinedPerson.name) || (c as any).personnel_id || "—"
+          // Query personnel names secara terpisah
+          const nameMap: Record<string, string> = {}
+          if (personnelIds.length > 0) {
+            const { data: persons } = await supabase
+              .from("personnel")
+              .select("id, name")
+              .in("id", personnelIds)
+              .abortSignal(ctrl.signal)
+            if (ctrl.signal.aborted) return
+            for (const p of persons || []) {
+              nameMap[(p as any).id] = (p as any).name
+            }
+          }
+
+          const unitGroup: Record<string, ScheduledPerson[]> = {}
+          for (const c of validCells) {
+            const status = (c as any).status as string
+            const pid = (c as any).personnel_id as string
+            const fullName: string = nameMap[pid] || pid || "—"
 
             const sp: ScheduledPerson = {
-              personnel_id: (c as any).personnel_id,
+              personnel_id: pid,
               name: fullName,
               initial: deriveInitial(fullName),
               unit: unitCfg.unit,
