@@ -325,23 +325,24 @@ export function generateRoster(opts: GenerateRosterOptions): GenerateResult {
     }
 
     // Order personnel by priorityOrder so pattern row 0 → highest priority
-    // personnel. Personnel without priority go to bottom and get truncated
-    // when baselinePattern.length < personnel.length.
+    // personnel. Stable assignment: personnel ke-i selalu dapat pattern
+    // baselinePattern[i % length] (modulo loop) — repeat untuk overflow.
     const orderedPersonnel = [...personnel].sort((a, b) => {
         const ia = priorityOrder.indexOf(a.id);
         const ib = priorityOrder.indexOf(b.id);
         return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
     });
 
-    // ---- MULTI-SHIFT VIEW-ONLY PATH ----
+    // ---- MULTI-SHIFT VIEW-ONLY PATH (PERMISSIVE) ----
+    // Permissive: selalu apply baseline kalau ada, auto-fit via modulo loop.
+    //  - personnel.length > baseline.length → repeat pattern (parallel teams)
+    //  - personnel.length < baseline.length → first N pattern dipakai
+    //  - personnel.length == baseline.length → 1:1 mapping (original behavior)
     if (isMultiShift && baselinePattern && baselinePattern.length > 0) {
-        // Take first N personnel (by priority); extra personnel stay '-' all month.
-        // This handles airports where Supabase has more personnel than JSON pattern.
-        const N = Math.min(baselinePattern.length, orderedPersonnel.length);
         let ok = true;
-        for (let i = 0; i < N; i++) {
+        for (let i = 0; i < orderedPersonnel.length; i++) {
             const p = orderedPersonnel[i];
-            const pat = baselinePattern[i];
+            const pat = baselinePattern[i % baselinePattern.length];
             if (pat.length < daysInMonth) { ok = false; break; }
             for (let d = 1; d <= daysInMonth; d++) {
                 const cell = roster[p.id][d - 1];
@@ -360,15 +361,14 @@ export function generateRoster(opts: GenerateRosterOptions): GenerateResult {
         }
     }
 
-    // ---- PATH 1: airport-provided baseline (single-shift) ----
+    // ---- PATH 1: airport-provided baseline (single-shift, PERMISSIVE) ----
     if (baselinePattern && !hasPartialLeave
         && fullyActive.length === personnel.length
         && baselinePattern.length > 0) {
-        const N = Math.min(baselinePattern.length, orderedPersonnel.length);
         let ok = true;
-        for (let i = 0; i < N; i++) {
+        for (let i = 0; i < orderedPersonnel.length; i++) {
             const p = orderedPersonnel[i];
-            const pat = baselinePattern[i];
+            const pat = baselinePattern[i % baselinePattern.length];
             if (pat.length < daysInMonth) { ok = false; break; }
             for (let d = 1; d <= daysInMonth; d++) {
                 const cell = roster[p.id][d - 1];
