@@ -813,7 +813,17 @@ export default function RosterPage() {
                                                     </td>
                                                     {(roster[p.id] || Array.from({ length: daysInMonth }, () => ({ status: '-', locked: false }))).map((c, i) => {
                                                         const isSelected = swapSelection?.personnelId === p.id && swapSelection?.day === i + 1;
-                                                        const symbol = c.status === '-' ? '' : (c.status.length > 1 ? c.status[0] : c.status);
+                                                        // Display rules:
+                                                        //   '-'                  → ''
+                                                        //   SHIFT_TOKEN (I..V)   → full token (max 3 char fits 30px col)
+                                                        //   LEAVE_TOKEN / TNI    → first char only (CUTI→C, SAKIT→S, DIKLAT→D, OTHERS→O, TNI→T)
+                                                        // Sebelumnya semua status >1 char di-truncate ke char[0],
+                                                        // bikin "II"/"III"/"IV" semua tampil "I" → pattern shift
+                                                        // tidak terbaca, user cuma bisa bedakan via warna cellBg.
+                                                        const symbol =
+                                                            c.status === '-' ? '' :
+                                                            SHIFT_TOKEN[c.status] ? c.status :
+                                                            c.status[0];
                                                         return (
                                                             <td
                                                                 key={i}
