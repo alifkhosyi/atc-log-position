@@ -314,12 +314,22 @@ export const CabangDash = () => {
   const alerts = useMemo(
     () => computeAlerts({
       active,
-      branchUnits,
       now,
       handoverChecklists: ctx.handoverChecklists,
       branchCode: ctx.user.branch_code,
+      scheduledByUnit: scheduled.byUnit,
+      emptyScheduledUnits: scheduled.emptyUnits,
+      rosterStatusByUnit: scheduled.rosterStatusByUnit,
     }),
-    [active, branchUnits, now, ctx.handoverChecklists, ctx.user.branch_code]
+    [
+      active,
+      now,
+      ctx.handoverChecklists,
+      ctx.user.branch_code,
+      scheduled.byUnit,
+      scheduled.emptyUnits,
+      scheduled.rosterStatusByUnit,
+    ]
   )
 
   const traffic7 = useMemo(

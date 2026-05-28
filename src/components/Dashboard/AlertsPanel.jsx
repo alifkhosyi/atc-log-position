@@ -39,19 +39,27 @@ const fmtDuration = (mins) => {
        now:                 Date — "right now" tick
        handoverChecklists:  handover_checklists rows (any branch)
        branchCode:          string — current branch_code
+
+       // Dashboard scheduled-personnel signals (BARU — Opsi A):
+       scheduledByUnit:     Record<unit, Record<shiftToken, Personnel[]>>
+       emptyScheduledUnits: string[]   — unit yang roster ada tapi 0 personnel hari ini
+       rosterStatusByUnit:  Record<unit, 'FINAL'|'DRAFT'|'NONE'>
      }
-   Output: Array<{ kind:"crit"|"info", title, body, act, target }>
+   Output: Array<{ kind:"crit"|"info"|"warn", title, body, act, target }>
    ---------------------------------------------------------------- */
 export const computeAlerts = ({
   active = [],
-  branchUnits = [],
   now,
   handoverChecklists = [],
   branchCode,
+  scheduledByUnit = {},
+  emptyScheduledUnits = [],
+  rosterStatusByUnit = {},
 }) => {
   const out = []
 
-  // FRMS warning: on-mic ≥ 2 hours
+  // FRMS warning: on-mic ≥ 2 hours (cuma jalan kalau ada position_logs aktif —
+  // bisa diabaikan kalau alur position_logs sudah deprecated)
   active.forEach((l) => {
     const mins = durMin(l.on_time, now.toISOString())
     if (mins >= 120) {
@@ -64,6 +72,39 @@ export const computeAlerts = ({
       })
     }
   })
+
+  // Roster status: kalau ada unit yang roster bulan ini masih DRAFT/NONE,
+  // jadwal hari ini belum valid sebagai source of truth.
+  for (const [unit, status] of Object.entries(rosterStatusByUnit)) {
+    if (status === "NONE") {
+      out.push({
+        kind: "warn",
+        title: `Roster ${unit} belum dibuat`,
+        body: "Generate roster bulan ini di Roster ATC supaya jadwal hari ini valid.",
+        act: "Buka Roster ATC",
+        target: "roster",
+      })
+    } else if (status === "DRAFT") {
+      out.push({
+        kind: "info",
+        title: `Roster ${unit} masih DRAFT`,
+        body: "Mark FINAL di Roster ATC supaya jadwal hari ini siap pakai.",
+        act: "Buka Roster ATC",
+        target: "roster",
+      })
+    }
+  }
+
+  // Empty unit: roster ada tapi tidak ada personnel scheduled hari ini di unit
+  for (const unit of emptyScheduledUnits) {
+    out.push({
+      kind: "info",
+      title: `Tidak ada personnel terjadwal di ${unit} hari ini`,
+      body: "Cek roster bulan ini untuk konfirmasi.",
+      act: "Lihat roster",
+      target: "roster",
+    })
+  }
 
   // Handover not ready: no checklist saved for today/branch
   const today = new Date(now); today.setHours(0, 0, 0, 0)
@@ -83,19 +124,9 @@ export const computeAlerts = ({
     })
   }
 
-  // Coverage gap: branch unit without any active log
-  const activeUnits = new Set(active.map((l) => l.unit))
-  ;(branchUnits || []).forEach((u) => {
-    if (!activeUnits.has(u)) {
-      out.push({
-        kind: "info",
-        title: `Slot ${u} kosong`,
-        body: "Belum ada ATC on mic untuk unit ini di shift berjalan.",
-        act: "Lihat roster",
-        target: "roster",
-      })
-    }
-  })
+  // Note: alert "Slot {U} kosong" yang lama (berdasarkan position_logs) sudah
+  // DIHAPUS. Diganti dengan "Tidak ada personnel terjadwal" di atas, yang
+  // sumbernya dari roster (source of truth yang benar).
 
   return out
 }
