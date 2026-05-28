@@ -203,9 +203,17 @@ export default function OvertimeTab() {
       const lastDay = new Date(year, month, 0).getDate()
       const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`
 
-      const { data, error } = await supabase
+      // Same root cause dengan OffRosterTab + Dashboard hook:
+      // FK relation atc_overtime.personnel_id → personnel.id tidak
+      // terdefinisi di Supabase → embed join return 400. Plus column
+      // `full_name` tidak ada di personnel (canonical = `name`).
+      // Split jadi 2 query: atc_overtime tanpa embed, lalu personnel
+      // by IN ids, attach dengan shape { initial, full_name } supaya
+      // consumer (`entry.personnel?.full_name || entry.personnel?.initial`)
+      // tetap kerja tanpa perubahan UI.
+      const { data: rawEntries, error } = await supabase
         .from("atc_overtime")
-        .select("*, personnel:personnel(initial, full_name)")
+        .select("*")
         .eq("airport_code", airportCode)
         .eq("unit", unit)
         .gte("date", monthStart)
@@ -221,7 +229,32 @@ export default function OvertimeTab() {
         setEntries([])
         return
       }
-      setEntries((data as OvertimeEntry[]) || [])
+
+      // Lookup personnel names secara terpisah
+      const personnelIds = [
+        ...new Set((rawEntries || []).map((r: any) => r.personnel_id)),
+      ]
+      const personnelMap: Record<string, { initial: string; full_name: string }> = {}
+      if (personnelIds.length > 0) {
+        const { data: persons } = await supabase
+          .from("personnel")
+          .select("id, initial, name")
+          .in("id", personnelIds)
+          .abortSignal(signal)
+        if (signal.aborted) return
+        for (const p of (persons || []) as any[]) {
+          personnelMap[p.id] = {
+            initial: p.initial || "",
+            full_name: p.name || "",  // personnel.name → attach as full_name
+          }
+        }
+      }
+
+      const merged: OvertimeEntry[] = (rawEntries || []).map((r: any) => ({
+        ...r,
+        personnel: personnelMap[r.personnel_id] || { initial: "", full_name: "" },
+      }))
+      setEntries(merged)
     } catch (e: any) {
       if (e?.name === "AbortError" || signal.aborted) return
       toastRef.current?.error?.("Gagal memuat", e?.message || String(e))
