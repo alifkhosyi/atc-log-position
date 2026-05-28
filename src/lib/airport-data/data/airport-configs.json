@@ -423,37 +423,31 @@
           "shift_end_utc": "07:00",
           "positions": [
             [
-              "Asisten",
+              "Kontrol",
+              "Istirahat"
+            ],
+            [
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
-              "Istirahat",
-              "Kontrol",
-              "Asisten"
-            ],
-            [
-              "Asisten",
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Kontrol",
-              "Asisten"
+              "Kontrol"
             ]
           ],
-          "n_personnel": 3,
+          "n_personnel": 2,
           "slot_durations": [
             80,
             80,
@@ -1602,37 +1596,31 @@
           "shift_end_utc": "07:00",
           "positions": [
             [
-              "Asisten",
+              "Kontrol",
+              "Istirahat"
+            ],
+            [
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
-              "Istirahat",
-              "Kontrol",
-              "Asisten"
-            ],
-            [
-              "Asisten",
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Kontrol",
-              "Asisten"
+              "Kontrol"
             ]
           ],
-          "n_personnel": 3,
+          "n_personnel": 2,
           "slot_durations": [
             80,
             80,
@@ -11875,37 +11863,31 @@
           "shift_end_utc": "07:00",
           "positions": [
             [
-              "Asisten",
+              "Kontrol",
+              "Istirahat"
+            ],
+            [
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
-              "Istirahat",
-              "Kontrol",
-              "Asisten"
-            ],
-            [
-              "Asisten",
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Kontrol",
-              "Asisten"
+              "Kontrol"
             ]
           ],
-          "n_personnel": 3,
+          "n_personnel": 2,
           "slot_durations": [
             80,
             80,
@@ -27121,37 +27103,31 @@
           "shift_end_utc": "07:00",
           "positions": [
             [
-              "Asisten",
+              "Kontrol",
+              "Istirahat"
+            ],
+            [
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
-              "Istirahat",
-              "Kontrol",
-              "Asisten"
-            ],
-            [
-              "Asisten",
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Kontrol",
-              "Asisten"
+              "Kontrol"
             ]
           ],
-          "n_personnel": 3,
+          "n_personnel": 2,
           "slot_durations": [
             80,
             80,
@@ -28608,37 +28584,31 @@
           "shift_end_utc": "06:00",
           "positions": [
             [
-              "Asisten",
+              "Kontrol",
+              "Istirahat"
+            ],
+            [
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
-              "Istirahat",
-              "Kontrol",
-              "Asisten"
-            ],
-            [
-              "Asisten",
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Kontrol",
-              "Asisten"
+              "Kontrol"
             ]
           ],
-          "n_personnel": 3,
+          "n_personnel": 2,
           "slot_durations": [
             70,
             70,
@@ -29034,7 +29004,7 @@
           "efry_airnav@outlook.com"
         ],
         "rolling": {
-          "n_personnel": 3,
+          "n_personnel": 2,
           "n_slots": 6,
           "slot_duration_min": 80,
           "slot_durations": [
@@ -29049,34 +29019,28 @@
           "shift_end_utc": "07:00",
           "positions": [
             [
-              "Asisten",
+              "Kontrol",
+              "Istirahat"
+            ],
+            [
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
-              "Istirahat",
-              "Kontrol",
-              "Asisten"
-            ],
-            [
-              "Asisten",
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Kontrol",
-              "Asisten"
+              "Kontrol"
             ]
           ]
         }
@@ -43211,37 +43175,31 @@
           "shift_end_utc": "07:00",
           "positions": [
             [
-              "Asisten",
+              "Kontrol",
+              "Istirahat"
+            ],
+            [
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
-              "Istirahat",
-              "Kontrol",
-              "Asisten"
-            ],
-            [
-              "Asisten",
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Kontrol",
-              "Asisten"
+              "Kontrol"
             ]
           ],
-          "n_personnel": 3,
+          "n_personnel": 2,
           "slot_durations": [
             80,
             80,
@@ -44111,37 +44069,31 @@
           "shift_end_utc": "07:00",
           "positions": [
             [
-              "Asisten",
+              "Kontrol",
+              "Istirahat"
+            ],
+            [
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
-              "Istirahat",
-              "Kontrol",
-              "Asisten"
-            ],
-            [
-              "Asisten",
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Kontrol",
-              "Asisten"
+              "Kontrol"
             ]
           ],
-          "n_personnel": 3,
+          "n_personnel": 2,
           "slot_durations": [
             80,
             80,
@@ -44508,36 +44460,30 @@
           "positions": [
             [
               "Kontrol",
-              "Istirahat",
-              "Asisten"
-            ],
-            [
-              "Asisten",
-              "Kontrol",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Asisten",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Istirahat",
-              "Asisten"
+              "Istirahat"
             ],
             [
-              "Asisten",
+              "Istirahat",
+              "Kontrol"
+            ],
+            [
               "Kontrol",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Asisten",
               "Kontrol"
             ]
           ],
-          "n_personnel": 3,
+          "n_personnel": 2,
           "slot_durations": [
             90,
             90,
@@ -61242,7 +61188,7 @@
           "vindaadiah@gmail.com"
         ],
         "rolling": {
-          "n_personnel": 3,
+          "n_personnel": 2,
           "n_slots": 6,
           "slot_duration_min": 80,
           "slot_durations": [
@@ -61257,34 +61203,28 @@
           "shift_end_utc": "04:00",
           "positions": [
             [
-              "Asisten",
+              "Kontrol",
+              "Istirahat"
+            ],
+            [
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
-              "Istirahat",
-              "Kontrol",
-              "Asisten"
-            ],
-            [
-              "Asisten",
               "Istirahat",
               "Kontrol"
             ],
             [
               "Kontrol",
-              "Asisten",
               "Istirahat"
             ],
             [
               "Istirahat",
-              "Kontrol",
-              "Asisten"
+              "Kontrol"
             ]
           ]
         }
