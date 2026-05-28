@@ -75,6 +75,28 @@ const MONTHS = [
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
 
+/**
+ * Map internal engine mode → user-friendly status text.
+ * Engine internal names (baseline/baseline-multishift/template/greedy)
+ * TIDAK boleh muncul di UI — itu detail engineer.
+ */
+function friendlyModeMessage(mode: string): string {
+    if (mode === 'baseline' || mode === 'baseline-multishift') {
+        return 'Roster dibuat berdasarkan template standar cabang.';
+    }
+    if (mode === 'template') {
+        return 'Roster dibuat dari pola default.';
+    }
+    if (mode === 'greedy') {
+        // Greedy SEHARUSNYA jarang terjadi setelah baseline enforcement.
+        return 'Roster disesuaikan otomatis (template tidak tersedia).';
+    }
+    if (mode === 'tni') {
+        return 'Cabang TNI — semua hari diisi default.';
+    }
+    return 'berhasil di-generate.';
+}
+
 // ============================================================
 // TYPES (DB shape)
 // ============================================================
@@ -443,7 +465,7 @@ export default function RosterPage() {
             setRosterStatus('DRAFT');
             setMode(result.mode);
             validateRoster(result.roster);
-            setInfo(`Roster ${MONTHS[month - 1]} ${year} berhasil di-generate (mode: ${result.mode}).`);
+            setInfo(`Roster ${MONTHS[month - 1]} ${year}: ${friendlyModeMessage(result.mode)}`);
         } catch (e: any) {
             setError(e.message || String(e));
         } finally {
@@ -663,11 +685,14 @@ export default function RosterPage() {
                                     Roster · {rosterStatus === 'FINAL' ? 'FINAL' : 'DRAFT'}
                                 </span>
                                 <span className="rs-meta">
-                                    <b>{dbPersonnel.length}</b> personel
+                                    <b>{dbPersonnel.length}</b> personel × <b>{daysInMonth}</b> hari
                                     {!isAdmin && branchDisplayName && (
                                         <> · cabang <b>{branchDisplayName}</b></>
                                     )}
-                                    {mode && <> · mode <code>{mode}</code></>}
+                                    {/* Engine internal mode name (baseline / greedy / template)
+                                        sengaja TIDAK ditampilkan — user tidak perlu tahu
+                                        algoritma backend. Lihat friendlyModeMessage() di atas
+                                        untuk feedback yang user-friendly via toast. */}
                                 </span>
                             </div>
                             <div className="rs-strip-right">
