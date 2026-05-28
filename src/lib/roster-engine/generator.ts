@@ -362,9 +362,16 @@ export function generateRoster(opts: GenerateRosterOptions): GenerateResult {
     }
 
     // ---- PATH 1: airport-provided baseline (single-shift, PERMISSIVE) ----
-    if (baselinePattern && !hasPartialLeave
-        && fullyActive.length === personnel.length
-        && baselinePattern.length > 0) {
+    // Mirror MULTI-SHIFT path behavior: apply baseline pattern, preserve
+    // already-marked leave cells (cuti, sakit, diklat, dll). Engine tidak
+    // perlu fallback ke greedy hanya karena ada partial leave — baseline
+    // Excel template adalah operational source of truth, cuti adalah overlay.
+    //
+    // Sebelumnya require `!hasPartialLeave && fullyActive.length === personnel.length`,
+    // yang bikin ANY cuti trigger fallback ke greedy mode → roster shape berubah
+    // drastis dari template yang user expect. E2E test (scripts/test-1shift-e2e.ts)
+    // confirm pattern systemic: 100% cabang FAIL skenario B/D dengan condition lama.
+    if (baselinePattern && baselinePattern.length > 0) {
         let ok = true;
         for (let i = 0; i < orderedPersonnel.length; i++) {
             const p = orderedPersonnel[i];
@@ -372,7 +379,7 @@ export function generateRoster(opts: GenerateRosterOptions): GenerateResult {
             if (pat.length < daysInMonth) { ok = false; break; }
             for (let d = 1; d <= daysInMonth; d++) {
                 const cell = roster[p.id][d - 1];
-                if (isLeaveStatus(cell.status)) continue;
+                if (isLeaveStatus(cell.status)) continue;  // preserve leave (cuti/sakit/dst)
                 const src = pat[d - 1];
                 // Single-shift: preserve 'I' & '-', reset others
                 cell.status = (src === 'I' || src === '-') ? src : '-';
