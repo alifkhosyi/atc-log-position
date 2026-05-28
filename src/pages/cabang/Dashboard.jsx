@@ -29,6 +29,11 @@ import { I } from "../../components/Icons.jsx"
 import { AlertsPanel, computeAlerts } from "../../components/Dashboard/AlertsPanel.jsx"
 import { PositionCard } from "../../components/Dashboard/PositionCard.jsx"
 import { TrafficHarian, buildTraffic7 } from "../../components/Dashboard/TrafficHarian.jsx"
+import {
+  useScheduledTodayPersonnel,
+  detectCurrentShiftToken,
+  formatShiftTimeWib,
+} from "../../hooks/useScheduledTodayPersonnel"
 import "../../styles/dashboard.css"
 
 /* ----------------------------------------------------------------
@@ -92,40 +97,96 @@ const Stats = ({ activeCount, totalLogs, todayTraffic, coverage, coverageSub, sh
 )
 
 /* ----------------------------------------------------------------
-   ActivePositions — read-only grid of PositionCards
+   ScheduledTodayPositions — read-only display dari atc_roster_cells
+   ----------------------------------------------------------------
+   Replaces old ActivePositions yang read dari position_logs (sekarang
+   deprecated). Sumber data: roster yang sudah di-Mark FINAL.
    ---------------------------------------------------------------- */
-const ActivePositions = ({ logs, now, onSelect, goLog }) => (
-  <div className={`dash-panel${logs.length > 0 ? " is-glow" : ""}`}>
-    <div className="dash-panel-h">
-      <div className="dash-panel-t"><span className="dash-pulse"/> Posisi Aktif</div>
-      <span className="dash-panel-badge">● LIVE · {logs.length}</span>
-    </div>
-    {logs.length === 0 ? (
-      <div className="dash-pos-empty">
-        <I n="micOff" s={32}/>
-        <span>Belum ada ATC on mic untuk shift ini.</span>
-        <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>
-          Sesi dibuat otomatis dari{" "}
-          <button type="button" className="dash-link" onClick={goLog}>
-            <b>Roster ATC</b>
-          </button>{" "}
-          saat shift dimulai.
+const ScheduledTodayPositions = ({ byUnit, all, loading, error, goRoster }) => {
+  const currentShift = detectCurrentShiftToken(new Date())
+
+  return (
+    <div className={`dash-panel${all.length > 0 ? " is-glow" : ""}`}>
+      <div className="dash-panel-h">
+        <div className="dash-panel-t"><span className="dash-pulse"/> Posisi Aktif</div>
+        <span className="dash-panel-badge">
+          {all.length > 0 ? `● ${all.length} terjadwal` : "● 0 terjadwal"}
         </span>
       </div>
-    ) : (
-      <div className="dash-pos-grid">
-        {logs.map((l) => (
-          <PositionCard
-            key={l.id}
-            log={l}
-            now={now}
-            onClick={onSelect}
-          />
-        ))}
-      </div>
-    )}
-  </div>
-)
+
+      {loading && (
+        <div className="dash-pos-empty">
+          <span>Memuat jadwal hari ini…</span>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="dash-pos-empty">
+          <I n="alert" s={28}/>
+          <span>{error}</span>
+        </div>
+      )}
+
+      {!loading && !error && all.length === 0 && (
+        <div className="dash-pos-empty">
+          <I n="calendar" s={32}/>
+          <span>Tidak ada personel terjadwal untuk hari ini.</span>
+          <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>
+            Pastikan roster bulan ini sudah di-Mark FINAL di{" "}
+            <button type="button" className="dash-link" onClick={goRoster}>
+              <b>Roster ATC</b>
+            </button>.
+          </span>
+        </div>
+      )}
+
+      {!loading && !error && all.length > 0 && (
+        <div className="dash-sched-units">
+          {Object.entries(byUnit).map(([unitName, byShift]) => (
+            <div key={unitName} className="dash-sched-unit">
+              <div className="dash-sched-unit-h">
+                <span className="dash-sched-unit-name">{unitName}</span>
+                <span className="dash-sched-unit-count">
+                  {Object.values(byShift).reduce((s, arr) => s + arr.length, 0)} personel
+                </span>
+              </div>
+              {Object.entries(byShift).map(([shiftToken, personnels]) => {
+                const isActive = shiftToken === currentShift
+                const timeRange = personnels[0]?.shiftStartUtc
+                  ? formatShiftTimeWib(personnels[0].shiftStartUtc)
+                  : ""
+                return (
+                  <div
+                    key={shiftToken}
+                    className={`dash-sched-shift${isActive ? " is-active" : ""}`}
+                  >
+                    <div className="dash-sched-shift-h">
+                      <span className="dash-sched-shift-label">Shift {shiftToken}</span>
+                      {timeRange && (
+                        <span className="dash-sched-shift-time">mulai {timeRange}</span>
+                      )}
+                      {isActive && (
+                        <span className="dash-sched-shift-active">SEDANG BERJALAN</span>
+                      )}
+                    </div>
+                    <ul className="dash-sched-list">
+                      {personnels.map(p => (
+                        <li key={p.personnel_id} className="dash-sched-person">
+                          <span className="dash-sched-initial">{p.initial}</span>
+                          <span className="dash-sched-name">{p.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /* ----------------------------------------------------------------
    Timeline — read-only (click row → Daily Report)
@@ -215,6 +276,10 @@ export const CabangDash = () => {
   const ctx = useApp()
   const now = useNow(1000)
 
+  // Scheduled personnel today (read-only dari atc_roster_cells).
+  // Sumber data untuk section "Posisi Aktif" + alert "Tidak ada personnel".
+  const scheduled = useScheduledTodayPersonnel(ctx.user?.branch_code || null)
+
   const myBranches = useMemo(
     () => getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes),
     [ctx.user.branch_code, ctx.branches, ctx.moBranchCodes]
@@ -299,11 +364,12 @@ export const CabangDash = () => {
 
       <AlertsPanel items={alerts} onAct={onAlertAct} />
 
-      <ActivePositions
-        logs={active}
-        now={now}
-        onSelect={goRoster}
-        goLog={goRoster}
+      <ScheduledTodayPositions
+        byUnit={scheduled.byUnit}
+        all={scheduled.all}
+        loading={scheduled.loading}
+        error={scheduled.error}
+        goRoster={goRoster}
       />
 
       <TrafficHarian data={traffic7} />
