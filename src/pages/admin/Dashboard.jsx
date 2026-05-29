@@ -12,6 +12,13 @@ import { isStaleSince, getShift } from "../../lib/utils.js"
 import { I } from "../../components/Icons.jsx"
 import { Pulse } from "../../components/Pulse.jsx"
 import { BranchPicker, BranchFilterBadge } from "../../components/BranchPicker.jsx"
+// INMC roster visibility P1 — batch roster status + per-branch scheduled detail
+import { useAllRosterStatusByBranch } from "../../hooks/useAllRosterStatusByBranch"
+import {
+  useScheduledTodayPersonnel,
+  detectCurrentShiftToken,
+  formatShiftTimeWib,
+} from "../../hooks/useScheduledTodayPersonnel"
 // Phase 3+4 fix: CSS tokens untuk shift colors + region colors
 import "../../styles/roster-tokens.css"
 
@@ -162,7 +169,47 @@ const RegionCard = ({ region, branches, brAct, brTraffic, personnelCount }) => {
 }
 
 // ─── Branch Card (in region grid) ───
-const BranchCard = ({ b, brAct, brTraffic, personnelCount, alertsByBranch, children, moCodeSet, onClick }) => {
+// ─── Roster Status Badge (INMC P1) ───
+// Display kompak di BranchCard stats row. Color-coded per aggregate
+// status: FINAL hijau, DRAFT kuning, MISSING merah. Tooltip detail per unit.
+const RosterBadge = ({ rosterStatus }) => {
+  if (!rosterStatus || rosterStatus.expectedUnits === 0) {
+    return (
+      <span className="branch-stat" title="Cabang belum dikonfigurasi engine roster">
+        <I n="calendar" s={11}/>{" "}
+        <span style={{ color: "var(--text-faint)" }}>—</span>
+      </span>
+    )
+  }
+
+  const { aggregate, unitsWithRoster, expectedUnits, byUnit } = rosterStatus
+  const colorMap = {
+    FINAL: "var(--status-on)",      // hijau
+    DRAFT: "var(--status-warn)",    // kuning
+    MISSING: "var(--status-alert)", // merah
+  }
+  const labelMap = {
+    FINAL: `${expectedUnits}/${expectedUnits} FINAL`,
+    DRAFT: `${unitsWithRoster}/${expectedUnits} DRAFT`,
+    MISSING: `${unitsWithRoster}/${expectedUnits}`,
+  }
+
+  const tooltip = Object.entries(byUnit)
+    .map(([u, s]) => `${u}: ${s}`)
+    .join(" · ")
+
+  return (
+    <span
+      className="branch-stat"
+      style={{ color: colorMap[aggregate] }}
+      title={tooltip}
+    >
+      <I n="calendar" s={11}/> <strong>{labelMap[aggregate]}</strong>
+    </span>
+  )
+}
+
+const BranchCard = ({ b, brAct, brTraffic, personnelCount, alertsByBranch, rosterStatus, children, moCodeSet, onClick }) => {
   const onMicCount = brAct[b.code] || 0
   const traffic = brTraffic[b.code] || 0
   const persCount = personnelCount[b.code] || 0
@@ -201,6 +248,7 @@ const BranchCard = ({ b, brAct, brTraffic, personnelCount, alertsByBranch, child
           <span className="branch-stat">
             <I n="users" s={11}/> <strong>{persCount}</strong>
           </span>
+          <RosterBadge rosterStatus={rosterStatus}/>
         </div>
       </div>
       {children.length > 0 && (
@@ -225,10 +273,216 @@ const BranchCard = ({ b, brAct, brTraffic, personnelCount, alertsByBranch, child
   )
 }
 
+// ─── Roster Tab Content (INMC P1) ───
+// Per-branch detail: status per unit (FINAL/DRAFT/MISSING), personnel
+// terjadwal hari ini grouped per unit × shift token, plus "SEDANG
+// BERJALAN" highlight untuk shift aktif. Lazy-load via parent —
+// `sched` di-fetch hanya saat tab "roster" dibuka.
+const RosterTabContent = ({ branchCode, branchName, rosterStatus, sched, ctx, onClose }) => {
+  const currentShift = detectCurrentShiftToken(new Date())
+
+  const handleOpenRoster = () => {
+    if (ctx.setNavBranch) ctx.setNavBranch(branchCode)
+    ctx.goPage("roster")
+    onClose()
+  }
+
+  const STATUS_COLOR = {
+    FINAL: "var(--status-on)",
+    DRAFT: "var(--status-warn)",
+    MISSING: "var(--status-alert)",
+  }
+  const STATUS_SUB = {
+    FINAL: "Sudah di-publish",
+    DRAFT: "Belum di-Mark FINAL",
+    MISSING: "Belum ada roster",
+  }
+
+  return (
+    <>
+      {/* Status summary header */}
+      <div className="sp-section">
+        <div className="sp-section-h">Status Roster Bulan Ini</div>
+        {rosterStatus && rosterStatus.expectedUnits > 0 ? (
+          <div
+            className="sp-stat-grid"
+            style={{ gridTemplateColumns: "1fr 1fr" }}
+          >
+            {Object.entries(rosterStatus.byUnit).map(([unit, status]) => (
+              <div key={unit} className="sp-stat">
+                <div className="sp-stat-l">Unit {unit}</div>
+                <div
+                  className="sp-stat-v"
+                  style={{ fontSize: 16, color: STATUS_COLOR[status] }}
+                >
+                  {status}
+                </div>
+                <div className="sp-stat-sub">{STATUS_SUB[status]}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state" style={{ padding: "16px 0" }}>
+            <I n="alert" s={24}/>
+            <p style={{ fontSize: 12 }}>
+              Cabang ini belum dikonfigurasi di engine roster.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Personnel terjadwal hari ini */}
+      <div className="sp-section">
+        <div className="sp-section-h">
+          Personel Terjadwal Hari Ini ({sched.all.length})
+        </div>
+
+        {sched.loading && (
+          <div className="empty-state" style={{ padding: "16px 0" }}>
+            <span style={{ fontSize: 12 }}>Memuat jadwal…</span>
+          </div>
+        )}
+
+        {!sched.loading && sched.error && (
+          <div className="empty-state" style={{ padding: "16px 0" }}>
+            <I n="alert" s={24}/>
+            <p style={{ fontSize: 12 }}>{sched.error}</p>
+          </div>
+        )}
+
+        {!sched.loading && !sched.error && sched.all.length === 0 && (
+          <div className="empty-state" style={{ padding: "16px 0" }}>
+            <I n="calendar" s={24}/>
+            <p style={{ fontSize: 12 }}>
+              Tidak ada personel terjadwal hari ini.
+            </p>
+          </div>
+        )}
+
+        {!sched.loading && sched.all.length > 0 && (
+          <div className="sp-roster-units">
+            {Object.entries(sched.byUnit).map(([unit, byShift]) => {
+              const unitCount = Object.values(byShift).reduce(
+                (s, arr) => s + arr.length, 0,
+              )
+              return (
+                <div key={unit} className="sp-roster-unit" style={{ marginBottom: 12 }}>
+                  <div
+                    className="sp-roster-unit-h"
+                    style={{ fontSize: 12, marginBottom: 4 }}
+                  >
+                    <strong>{unit}</strong>
+                    <span style={{ color: "var(--text-faint)", marginLeft: 6 }}>
+                      · {unitCount} personel
+                    </span>
+                  </div>
+                  {Object.entries(byShift).map(([shiftToken, persons]) => {
+                    const isActive = shiftToken === currentShift
+                    const timeRange = persons[0]?.shiftStartUtc
+                      ? formatShiftTimeWib(persons[0].shiftStartUtc)
+                      : ""
+                    return (
+                      <div
+                        key={shiftToken}
+                        style={{
+                          marginTop: 8,
+                          padding: 8,
+                          borderRadius: 6,
+                          background: isActive
+                            ? "var(--status-on-soft)"
+                            : "var(--bg2)",
+                          border: isActive
+                            ? "1px solid var(--status-on)"
+                            : "1px solid var(--border)",
+                        }}
+                      >
+                        <div style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: 6,
+                          fontSize: 11,
+                        }}>
+                          <span>
+                            <b>Shift {shiftToken}</b>
+                            {timeRange && (
+                              <span style={{
+                                color: "var(--text-faint)",
+                                marginLeft: 6,
+                              }}>
+                                mulai {timeRange}
+                              </span>
+                            )}
+                          </span>
+                          {isActive && (
+                            <span style={{
+                              color: "var(--status-on)",
+                              fontWeight: 700,
+                              fontSize: 10,
+                            }}>
+                              SEDANG BERJALAN
+                            </span>
+                          )}
+                        </div>
+                        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                          {persons.map(p => (
+                            <li
+                              key={p.personnel_id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                padding: "4px 0",
+                                fontSize: 12,
+                              }}
+                            >
+                              <span style={{
+                                fontFamily: "var(--font-mono)",
+                                fontWeight: 700,
+                                color: "var(--accent)",
+                                minWidth: 28,
+                              }}>
+                                {p.initial}
+                              </span>
+                              <span>{p.name}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Action button */}
+      <div style={{ marginTop: 12 }}>
+        <button
+          className="btn btn-sm btn-primary"
+          onClick={handleOpenRoster}
+          style={{ width: "100%" }}
+          title={`Buka halaman Roster ATC dengan context cabang ${branchName || branchCode}`}
+        >
+          Buka Roster ATC →
+        </button>
+      </div>
+    </>
+  )
+}
+
 // ─── Side Panel (drill-down) ───
-const SidePanel = ({ branchCode, ctx, brAct, brTraffic, personnelCount, alertsByBranch, now, onClose }) => {
+const SidePanel = ({ branchCode, ctx, brAct, brTraffic, personnelCount, alertsByBranch, rosterStatus, now, onClose }) => {
   const [tab, setTab] = useState("overview")
   const b = ctx.branches.find(x => x.code === branchCode)
+
+  // Lazy-load scheduled personnel detail hanya saat tab "roster" dibuka.
+  // Pass null kalau tab lain — hook return empty state.
+  const sched = useScheduledTodayPersonnel(
+    tab === "roster" ? branchCode : null,
+  )
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose() }
@@ -282,6 +536,7 @@ const SidePanel = ({ branchCode, ctx, brAct, brTraffic, personnelCount, alertsBy
 
         <div className="side-panel-tabs">
           <button className={"sp-tab" + (tab === "overview" ? " active" : "")} onClick={() => setTab("overview")}>Overview</button>
+          <button className={"sp-tab" + (tab === "roster" ? " active" : "")} onClick={() => setTab("roster")}>Roster</button>
           <button className={"sp-tab" + (tab === "log" ? " active" : "")} onClick={() => setTab("log")}>Log Position</button>
           <button className={"sp-tab" + (tab === "handover" ? " active" : "")} onClick={() => setTab("handover")}>Handover</button>
           <button className={"sp-tab" + (tab === "reports" ? " active" : "")} onClick={() => setTab("reports")}>Reports</button>
@@ -347,6 +602,17 @@ const SidePanel = ({ branchCode, ctx, brAct, brTraffic, personnelCount, alertsBy
                 </div>
               </div>
             </>
+          )}
+
+          {tab === "roster" && (
+            <RosterTabContent
+              branchCode={branchCode}
+              branchName={b.name}
+              rosterStatus={rosterStatus}
+              sched={sched}
+              ctx={ctx}
+              onClose={onClose}
+            />
           )}
 
           {tab === "log" && (
@@ -470,6 +736,11 @@ export const AdminDash = () => {
     })
     return map
   }, [alerts])
+
+  // ─── Roster status (INMC P1) ───
+  // Single batch query atc_rosters bulan berjalan → Record<branch_code, ...>
+  // Re-fetched kalau ctx.branches berubah (jarang) atau bulan ganti.
+  const rosterStatus = useAllRosterStatusByBranch(ctx.branches)
 
   const critCount = alerts.filter(a => a.sev === "crit").length
   const totalAlerts = alerts.length
@@ -603,6 +874,7 @@ export const AdminDash = () => {
                             brAct={brAct} brTraffic={brTraffic}
                             personnelCount={personnelCount}
                             alertsByBranch={alertsByBranch}
+                            rosterStatus={rosterStatus.byBranch[b.code]}
                             children={getAllDescendants(b.code)}
                             moCodeSet={moCodeSet}
                             onClick={handleBranchClick}/>
@@ -623,6 +895,7 @@ export const AdminDash = () => {
                                 brAct={brAct} brTraffic={brTraffic}
                                 personnelCount={personnelCount}
                                 alertsByBranch={alertsByBranch}
+                                rosterStatus={rosterStatus.byBranch[b.code]}
                                 children={[]}
                                 moCodeSet={moCodeSet}
                                 onClick={handleBranchClick}/>
@@ -647,6 +920,7 @@ export const AdminDash = () => {
                             brAct={brAct} brTraffic={brTraffic}
                             personnelCount={personnelCount}
                             alertsByBranch={alertsByBranch}
+                            rosterStatus={rosterStatus.byBranch[b.code]}
                             children={getAllDescendants(b.code)}
                             moCodeSet={moCodeSet}
                             onClick={handleBranchClick}/>
@@ -667,6 +941,7 @@ export const AdminDash = () => {
                                 brAct={brAct} brTraffic={brTraffic}
                                 personnelCount={personnelCount}
                                 alertsByBranch={alertsByBranch}
+                                rosterStatus={rosterStatus.byBranch[b.code]}
                                 children={[]}
                                 moCodeSet={moCodeSet}
                                 onClick={handleBranchClick}/>
@@ -685,6 +960,7 @@ export const AdminDash = () => {
                    brAct={brAct} brTraffic={brTraffic}
                    personnelCount={personnelCount}
                    alertsByBranch={alertsByBranch}
+                   rosterStatus={rosterStatus.byBranch[drillBranch]}
                    now={now}
                    onClose={() => setDrillBranch(null)}/>
       )}
