@@ -358,6 +358,17 @@
 .or-pill-diklat{ background: var(--leave-diklat-soft); color: var(--leave-diklat); }
 .or-pill-others{ background: var(--leave-others-soft); color: var(--leave-others); }
 
+/* Personnel page pills — status + unit color coding (PersonnelPage.tsx) */
+.or-pill-active{   background: var(--status-on-soft);    color: var(--status-on); }
+.or-pill-inactive{ background: var(--surface-3, #2a2a2a); color: var(--text-faint); }
+.or-pill-twr{ background: var(--accent-soft); color: var(--accent); }
+.or-pill-app{ background: var(--status-warn-soft); color: var(--status-warn); }
+.or-pill-acc{ background: rgba(168,85,247,.15); color: rgb(168,85,247); }
+
+/* Soft-deleted row styling */
+.or-table tbody tr.is-inactive{ opacity: 0.55; }
+.or-table tbody tr.is-inactive td{ font-style: italic; }
+
 /* Icon buttons */
 .or-ic-btn{
   background: transparent;
