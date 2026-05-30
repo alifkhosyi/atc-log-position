@@ -32,12 +32,13 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
     {
       section: "Monitoring",
       items: [
-        { id:"dashboard",     label:"Dashboard INMC",   icon:"dashboard" },
-        { id:"mon_log",       label:"Log Position",     icon:"mic" },
-        { id:"mon_recap",     label:"Rekap Traffic",    icon:"chart" },
-        { id:"mon_personnel", label:"Personnel",        icon:"users" },
-        { id:"mon_handover",  label:"Handover",         icon:"checklist" },
-        { id:"mon_ho_to_mo",  label:"HO/TO MO",         icon:"shield" },
+        { id:"dashboard",     label:"Dashboard INMC",      icon:"dashboard" },
+        { id:"mon_log",       label:"Log Position",        icon:"mic" },
+        { id:"mon_recap",     label:"Rekap Traffic",       icon:"chart" },
+        { id:"personnel",     label:"Pengaturan Personel", icon:"users" },
+        { id:"mon_personnel", label:"Statistik Personel",  icon:"users" },
+        { id:"mon_handover",  label:"Handover",            icon:"checklist" },
+        { id:"mon_ho_to_mo",  label:"HO/TO MO",            icon:"shield" },
       ],
     },
     {
@@ -69,6 +70,7 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
         // Log Position deprecated — workflow merged into Daily Report → Section G.
         { id:"handover",        label:"Handover/Takeover", icon:"checklist" },
         { id:"ho_to_mo",        label:"HO/TO MO",          icon:"shield" },
+        { id:"personnel",       label:"Personel",          icon:"users" },
         { id:"rekap_personnel", label:"Rekap Personnel",   icon:"users" },
         { id:"rekap",           label:"Rekap Traffic",     icon:"chart" },
       ],

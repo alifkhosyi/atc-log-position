@@ -52,6 +52,8 @@ import RosterPage from "./pages/RosterPage/index.tsx"
 import TunjanganPage from "./pages/TunjanganPage.tsx"
 // === Rolling Harian (read-only MVP) ===
 import RollingPage from "./pages/RollingPage.tsx"
+// === Personnel CRUD (MO scoped + Admin full) ===
+import PersonnelPage from "./pages/PersonnelPage.tsx"
 
 // ── Page routing map ──
 const PAGES_CABANG = {
@@ -65,12 +67,14 @@ const PAGES_CABANG = {
   roster:           RosterPage,    // ← BARU
   tunjangan:        TunjanganPage, // ← BARU (step 4)
   rolling:          RollingPage,   // ← BARU (rolling step 2)
+  personnel:        PersonnelPage, // ← BARU (MO scoped CRUD master personnel)
 }
 const PAGES_ADMIN = {
   dashboard:     AdminDash,
   mon_log:       AdminMonLog,
   mon_recap:     AdminMonRecap,
-  mon_personnel: AdminMonPersonnel,
+  mon_personnel: AdminMonPersonnel,  // existing: operational stats (hours/sessions/traffic)
+  personnel:     PersonnelPage,      // ← BARU: master data CRUD (separate dari mon_personnel stats)
   mon_handover:  AdminMonHandover,
   mon_ho_to_mo:  AdminMonHoToMo,
   mon_reports:   AdminReportMonitoring,
