@@ -26,12 +26,6 @@ import { CabangRekap }           from "./pages/cabang/RekapTraffic.jsx"
 import { CabangRekapPersonnel }  from "./pages/cabang/RekapPersonnel.jsx"
 import { CabangHoToMo }          from "./pages/cabang/HoToMo.jsx"
 
-function LogPositionRedirect() {
-  const { goPage } = useApp()
-  React.useEffect(() => { goPage("log") }, [goPage])
-  return null
-}
-
 // Admin pages
 import { AdminDash }          from "./pages/admin/Dashboard.jsx"
 import { AdminMonLog }        from "./pages/admin/MonLog.jsx"
@@ -58,7 +52,6 @@ import PersonnelPage from "./pages/PersonnelPage.tsx"
 // ── Page routing map ──
 const PAGES_CABANG = {
   dashboard:        CabangDash,
-  log:              LogPositionRedirect,  // deprecated → forwards to Daily Report
   rekap_personnel:  CabangRekapPersonnel,
   rekap:            CabangRekap,
   handover:         CabangHandover,

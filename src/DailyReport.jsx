@@ -114,22 +114,9 @@ export default function DailyReport() {
   const appCtx = useApp();
   const toast  = useToast();
 
-  // If the user landed here via the deprecated `/log-position` redirect,
-  // show a one-time toast pointing them at Section G.
-  useEffect(() => {
-    if (appCtx?.logRedirectFlag) {
-      toast?.info(
-        'Halaman Log Position sudah dipindah',
-        'Sekarang ada di Daily Report → tab G · Personnel.',
-        6000,
-      );
-      appCtx.clearLogRedirectFlag?.();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // If the redirect requested Section G, jump straight to it.
-  const initialSection = appCtx?.logRedirectFlag ? 'G' : 'A';
+  // Log Position deprecated — workflow merged into Section G di sini.
+  // Phase 2 cleanup: removed logRedirectFlag intercept (zero callers now).
+  const initialSection = 'A';
 
   const [reportDate, setReportDate]         = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading]               = useState(false);
