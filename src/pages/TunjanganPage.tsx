@@ -43,6 +43,7 @@ import {
   type OvertimeInput,
 } from "../lib/ca-engine"
 import type { RosterCell } from "../lib/shared"
+import { deriveDisplayInitial, isUuidLike } from "../lib/shared"
 import "../styles/tunjangan.css"
 
 /* ----------------------------------------------------------------
@@ -83,15 +84,7 @@ const MONTHS = [
 /* ----------------------------------------------------------------
    Helpers
    ---------------------------------------------------------------- */
-const isUuidLike = (s: string | undefined): boolean =>
-  typeof s === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(s)
-
-const deriveDisplayInitial = (name: string | undefined, fallback = "P"): string => {
-  if (!name) return fallback
-  const words = name.trim().split(/\s+/).filter(w => w.length > 0)
-  if (words.length === 0) return fallback
-  return words[0][0].toUpperCase() + (words[1]?.[0]?.toUpperCase() || "")
-}
+// deriveDisplayInitial + isUuidLike → import dari ../lib/shared (Phase 4 dedup)
 
 const formatRp = (n: number): string =>
   "Rp " + Math.round(n).toLocaleString("id-ID")

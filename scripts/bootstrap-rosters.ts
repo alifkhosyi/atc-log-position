@@ -57,6 +57,7 @@ import type {
 } from "../src/lib/shared/index.ts"
 import {
   leaveRangeFromDates,
+  deriveDisplayInitial,
 } from "../src/lib/shared/index.ts"
 import type { AirportConfig } from "../src/lib/airport-data/types.ts"
 
@@ -125,14 +126,7 @@ interface BootstrapResult {
   personnel_count?: number
 }
 
-function deriveDisplayInitial(name: string, fallback = "P"): string {
-  if (!name) return fallback
-  const words = name.trim().split(/\s+/).filter(Boolean)
-  if (!words.length) return fallback
-  const a = words[0][0]?.toUpperCase() || ""
-  const b = words[1]?.[0]?.toUpperCase() || ""
-  return (a + b) || fallback
-}
+// deriveDisplayInitial → import dari ../src/lib/shared (Phase 4 dedup)
 
 // ============================================================
 // Bootstrap one (airport, unit, year, month)

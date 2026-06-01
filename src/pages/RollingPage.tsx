@@ -26,6 +26,8 @@ import {
   type DailyRolling,
 } from "../lib/rolling-engine"
 import type { RosterCell } from "../lib/shared"
+import { deriveDisplayInitial, isUuidLike } from "../lib/shared"
+import { useResolvedAirport } from "../hooks/useResolvedAirport"
 import type { GenerateResult } from "../lib/roster-engine"
 import { exportRollingPDF } from "../lib/rolling-pdf/exportRollingPDF"
 import "../styles/rolling.css"
@@ -60,15 +62,7 @@ const addDays = (iso: string, n: number): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-const isUuidLike = (s: string | undefined): boolean =>
-  typeof s === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(s)
-
-const deriveDisplayInitial = (name?: string, fallback = "P"): string => {
-  if (!name) return fallback
-  const words = name.trim().split(/\s+/).filter(Boolean)
-  if (!words.length) return fallback
-  return words[0][0].toUpperCase() + (words[1]?.[0]?.toUpperCase() || "")
-}
+// deriveDisplayInitial + isUuidLike → import dari ../lib/shared (Phase 4 dedup)
 
 /* ----------------------------------------------------------------
    DB types
@@ -92,30 +86,7 @@ type RosterStatusUi = "DRAFT" | "FINAL" | "NONE"
 /* ----------------------------------------------------------------
    Airport resolution (mirror RosterPage / TunjanganPage)
    ---------------------------------------------------------------- */
-function useResolvedAirport(branchCode: string, isAdmin: boolean) {
-  const allAirports = useMemo(() => listAirports(), [])
-  const ctx: any = useApp()
-  const resolved = useMemo(() => {
-    if (!branchCode) return null
-    const direct = getAirport(branchCode)
-    if (direct) return direct.airport_code
-    const branchObj = ctx?.branches?.find((b: any) => b.code === branchCode)
-    if (!branchObj) return null
-    const branchName = (branchObj.name || "").toLowerCase()
-    for (const a of allAirports) {
-      const engName = a.airport_name.toLowerCase()
-      if (engName === branchName) return a.airport_code
-      if (branchName.includes(engName)) return a.airport_code
-      if (engName.includes(branchName)) return a.airport_code
-    }
-    return null
-  }, [branchCode, ctx?.branches, allAirports])
-  const selectable = useMemo(() => {
-    if (isAdmin) return allAirports
-    return allAirports.filter(a => a.airport_code === (resolved || branchCode))
-  }, [isAdmin, allAirports, resolved, branchCode])
-  return { resolved, selectable }
-}
+// useResolvedAirport → import dari ../hooks/useResolvedAirport (Phase 4 dedup)
 
 /* ----------------------------------------------------------------
    Main

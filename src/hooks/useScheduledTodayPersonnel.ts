@@ -26,6 +26,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../supabase.js"
 import { getAirport } from "../lib/airport-data"
+import { deriveDisplayInitial } from "../lib/shared"
 
 // Shift token set untuk filter — skip '-' dan leave categories
 const SHIFT_TOKENS = new Set(["I", "II", "III", "IV", "V"])
@@ -183,7 +184,7 @@ export function useScheduledTodayPersonnel(
             const sp: ScheduledPerson = {
               personnel_id: pid,
               name: fullName,
-              initial: deriveInitial(fullName),
+              initial: deriveDisplayInitial(fullName),
               unit: unitCfg.unit,
               shiftToken: status,
               shiftStartUtc: unitCfg.rolling?.shift_start_utc,
@@ -231,18 +232,7 @@ export function useScheduledTodayPersonnel(
   return state
 }
 
-/**
- * Derive 2-letter display initial dari full name.
- * "AKHMAD NASUKHA" → "AN", "BUDI" → "B".
- */
-function deriveInitial(name: string): string {
-  if (!name) return "—"
-  const words = name.trim().split(/\s+/).filter(Boolean)
-  if (!words.length) return "—"
-  const a = words[0][0]?.toUpperCase() || ""
-  const b = words[1]?.[0]?.toUpperCase() || ""
-  return (a + b) || "—"
-}
+// deriveInitial removed → use deriveDisplayInitial dari ../lib/shared (Phase 4 dedup)
 
 /**
  * Helper: detect shift token untuk current time (WIB).

@@ -28,6 +28,7 @@ import { useToast } from "../components/Toast.jsx"
 import { useConfirm } from "../components/ConfirmDialog.jsx"
 import { I } from "../components/Icons.jsx"
 import { listAirports } from "../lib/airport-data"
+import { deriveDisplayInitial } from "../lib/shared"
 import "./RosterPage/roster-shell.css"  // OR classes (or-tab, or-stat, or-table, dst)
 
 interface DBPersonnel {
@@ -57,14 +58,7 @@ const blankForm = (defaultUnit: string): PersonnelFormState => ({
   is_active: true,
 })
 
-function deriveDisplayInitial(name: string): string {
-  if (!name) return "—"
-  const words = name.trim().split(/\s+/).filter(Boolean)
-  if (!words.length) return "—"
-  const a = words[0][0]?.toUpperCase() || ""
-  const b = words[1]?.[0]?.toUpperCase() || ""
-  return (a + b) || "—"
-}
+// deriveDisplayInitial → import dari ../lib/shared (Phase 4 dedup)
 
 export default function PersonnelPage() {
   const ctx: any = useApp()
