@@ -290,11 +290,25 @@ describe('Control Allowance — end to end', () => {
     });
 
     it('summarizeAllowance: total + avg', () => {
+        // Test fixture: PersonnelAllowance shape (Step 9 — Jam Tambahan
+        // additions to interface require advance/extend fields too).
         const rows = [
-            { personnel_id: 'a', initial: 'A', name: 'A', kontrol_minutes: 600,
-              kontrol_hours: 10, constant_per_hour: 50000, allowance_rp: 500000 },
-            { personnel_id: 'b', initial: 'B', name: 'B', kontrol_minutes: 1200,
-              kontrol_hours: 20, constant_per_hour: 50000, allowance_rp: 1000000 },
+            {
+                personnel_id: 'a', initial: 'A', name: 'A',
+                kontrol_minutes: 600, kontrol_hours: 10,
+                constant_per_hour: 50000, allowance_rp: 500000,
+                advance_minutes: 0, extend_minutes: 0,
+                advance_hours: 0, extend_hours: 0,
+                total_hours: 10, total_allowance_rp: 500000,
+            },
+            {
+                personnel_id: 'b', initial: 'B', name: 'B',
+                kontrol_minutes: 1200, kontrol_hours: 20,
+                constant_per_hour: 50000, allowance_rp: 1000000,
+                advance_minutes: 0, extend_minutes: 0,
+                advance_hours: 0, extend_hours: 0,
+                total_hours: 20, total_allowance_rp: 1000000,
+            },
         ];
         const s = summarizeAllowance(rows);
         expect(s.n_personnel).toBe(2);

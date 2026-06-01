@@ -8,6 +8,13 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "typecheck": "tsc --noEmit",
+    "e2e:1shift": "tsx scripts/test-1shift-e2e.ts",
+    "e2e:2shift": "tsx scripts/test-2shift-e2e.ts",
+    "e2e:multishift": "tsx scripts/test-multishift-tma-e2e.ts",
     "bootstrap:rosters": "tsx --env-file=.env.local scripts/bootstrap-rosters.ts",
     "bootstrap:rosters:dry": "tsx --env-file=.env.local scripts/bootstrap-rosters.ts --dry-run"
   },
@@ -18,14 +25,21 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@types/react": "^19.2.14",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.0",
+    "@vitest/ui": "^4.1.8",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
+    "happy-dom": "^20.9.0",
     "tsx": "^4.22.3",
-    "vite": "^8.0.0"
+    "typescript": "^6.0.3",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.8"
   }
 }

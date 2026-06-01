@@ -22,3 +22,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Cowork briefs (handed in by user, not part of repo)
+/*_BRIEF.md
+/AUDIT_FINAL_REPORT.md
+/BOOTSTRAP_ROSTERS_SCRIPT.md
+/FIX_*.md
+/FULL_REMEDIATION_EXECUTION.md
+/INMC_*.md
+/PERSONNEL_MANAGEMENT_PAGE.md
+/REKAP_*.md
+
+# Test artifacts (regenerable via npm run e2e:*)
+/outputs/E2E_TEST_RAW_*
+/outputs/E2E_TEST_REPORT_*
+/outputs/E2E_TEST_RAW_RESULTS_*.json
