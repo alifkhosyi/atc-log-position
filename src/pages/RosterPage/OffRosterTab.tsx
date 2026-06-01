@@ -466,7 +466,7 @@ export default function OffRosterTab() {
       {formOpen && (
         <div className="or-form-card">
           <h3>
-            {formEdit ? "✏ Edit Off-Roster" : "➕ Tambah Off-Roster"}
+            {formEdit ? (<><I n="edit" s={14}/> Edit Off-Roster</>) : (<><I n="plus" s={14}/> Tambah Off-Roster</>)}
             <button
               className="or-close-btn"
               type="button"
@@ -633,13 +633,13 @@ export default function OffRosterTab() {
                         type="button"
                         onClick={() => openEdit(lv)}
                         aria-label="Edit"
-                      >✏</button>
+                      ><I n="edit" s={14}/></button>
                       <button
                         className="or-ic-btn danger"
                         type="button"
                         onClick={() => handleDelete(lv)}
                         aria-label="Hapus"
-                      >🗑</button>
+                      ><I n="trash" s={14}/></button>
                     </td>
                   </tr>
                 )

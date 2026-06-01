@@ -546,7 +546,7 @@ export default function PersonnelPage() {
                       onClick={() => openEdit(p)}
                       aria-label="Edit"
                       title="Edit personel"
-                    >✏</button>
+                    ><I n="edit" s={14}/></button>
                     <button
                       className={"or-ic-btn" + (p.is_active ? " danger" : "")}
                       type="button"
@@ -554,7 +554,7 @@ export default function PersonnelPage() {
                       aria-label={p.is_active ? "Nonaktifkan" : "Aktifkan"}
                       title={p.is_active ? "Nonaktifkan (soft delete)" : "Aktifkan kembali"}
                     >
-                      {p.is_active ? "○" : "●"}
+                      <I n={p.is_active ? "x" : "check"} s={14}/>
                     </button>
                   </td>
                 </tr>

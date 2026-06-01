@@ -32,6 +32,12 @@ const ICONS = {
 
   // ── REDESIGN: added for new layouts ──
   trash:"M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6",
+  // Phase 10 — emoji elimination additions:
+  edit:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
+  ban:"M4.93 4.93l14.14 14.14M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20z",
+  "cloud-storm":"M19 16.9A5 5 0 0 0 18 7h-1.26a8 8 0 1 0-11.62 9M13 11l-4 6h6l-4 6",
+  "arrow-up-right":"M7 17 17 7M7 7h10v10",
+  "arrow-down-right":"M7 7l10 10M17 7v10H7",
   refresh:"M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   search:"M21 21l-4.35-4.35M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z",
   filter:"M22 3H2l8 9.46V19l4 2v-8.54L22 3z",

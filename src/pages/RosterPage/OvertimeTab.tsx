@@ -464,7 +464,7 @@ export default function OvertimeTab() {
       {formOpen && (
         <div className="or-form-card">
           <h3>
-            {formEdit ? "✏ Edit Jam Tambahan" : "➕ Catat Jam Tambahan"}
+            {formEdit ? (<><I n="edit" s={14}/> Edit Jam Tambahan</>) : (<><I n="plus" s={14}/> Catat Jam Tambahan</>)}
             <button
               className="or-close-btn"
               type="button"
@@ -515,7 +515,9 @@ export default function OvertimeTab() {
                       checked={form.type === t}
                       onChange={() => setForm({ ...form, type: t })}
                     />
-                    {t === "ADVANCE" ? "⤴ Advance" : "⤵ Extend"}
+                    {t === "ADVANCE"
+                      ? (<><I n="arrow-up-right" s={12}/> Advance</>)
+                      : (<><I n="arrow-down-right" s={12}/> Extend</>)}
                   </label>
                 ))}
               </div>
@@ -689,7 +691,9 @@ export default function OvertimeTab() {
                     </td>
                     <td>
                       <span className={`or-pill ot-pill-${e.type.toLowerCase()}`}>
-                        {e.type === "ADVANCE" ? "⤴ ADVANCE" : "⤵ EXTEND"}
+                        {e.type === "ADVANCE"
+                          ? (<><I n="arrow-up-right" s={11}/> ADVANCE</>)
+                          : (<><I n="arrow-down-right" s={11}/> EXTEND</>)}
                       </span>
                     </td>
                     <td className="mono">{formatDuration(e.duration_min)}</td>
@@ -704,13 +708,13 @@ export default function OvertimeTab() {
                             type="button"
                             onClick={() => openEdit(e)}
                             aria-label="Edit"
-                          >✏</button>
+                          ><I n="edit" s={14}/></button>
                           <button
                             className="or-ic-btn danger"
                             type="button"
                             onClick={() => handleDelete(e)}
                             aria-label="Hapus"
-                          >🗑</button>
+                          ><I n="trash" s={14}/></button>
                         </>
                       )}
                     </td>
