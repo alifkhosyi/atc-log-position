@@ -9,13 +9,25 @@
 //   - realtime subscription to Supabase
 //
 // Pages access via: const ctx = useApp();
+//
+// Phase 5 perf + data integrity:
+//   - Provider `value` wrapped in useMemo → child no longer re-mount tiap render
+//   - 120s polling DROPPED → realtime subscription handle it (existing channel)
+//   - position_logs `.limit(500)` → `.gte(on_time, -7 day window)`, no truncation
+//   - usePendingSessions etc consume ctx.logs (no duplicate subscription)
 // ============================================================
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react"
 import { supabase } from "../supabase.js"
 import { logAudit } from "./utils.js"
 
 const AppContext = createContext()
 export const useApp = () => useContext(AppContext)
+
+// Date window for dynamic data — 7 days ago at midnight UTC (sufficient
+// untuk Dashboard "current day" + "this week" view + handover history).
+// Realtime channel handle live updates beyond window edge.
+const SEVEN_DAYS_MS = 7 * 86400 * 1000
+const getDynamicSinceISO = () => new Date(Date.now() - SEVEN_DAYS_MS).toISOString()
 
 export const AppProvider = ({ children }) => {
   // ── Auth/user ──
@@ -104,11 +116,19 @@ export const AppProvider = ({ children }) => {
   }, [])
 
   // ── Load dynamic data on change ──
+  // Phase 5: replaced `.limit(500)` with date-window. Reasoning:
+  //   - 500 row hard cap silently truncate untuk admin INMC (73 cabang × N logs)
+  //   - 7-day window cover all Dashboard use cases (today + week view)
+  //   - Older data tetap accessible via dedicated query di Reports/Audit page
   const loadDynamicData = useCallback(async () => {
+    const sinceISO = getDynamicSinceISO()
     const [logRes, hoRes, hcRes] = await Promise.all([
-      supabase.from("position_logs").select("*").order("on_time", { ascending: false }).limit(500),
-      supabase.from("handover_notes").select("*").order("created_at", { ascending: false }).limit(200),
-      supabase.from("handover_checklists").select("*").order("created_at", { ascending: false }).limit(200),
+      supabase.from("position_logs")
+        .select("*").gte("on_time", sinceISO).order("on_time", { ascending: false }),
+      supabase.from("handover_notes")
+        .select("*").gte("created_at", sinceISO).order("created_at", { ascending: false }),
+      supabase.from("handover_checklists")
+        .select("*").gte("created_at", sinceISO).order("created_at", { ascending: false }),
     ])
     if (logRes.data) setLogs(logRes.data)
     if (hoRes.data) setHandovers(hoRes.data)
@@ -121,7 +141,9 @@ export const AppProvider = ({ children }) => {
     await loadDynamicData()
   }, [loadStaticData, loadDynamicData])
 
-  // ── Set up realtime + polling when user is loaded ──
+  // ── Set up realtime when user is loaded ──
+  // Phase 5: dropped 120s polling — realtime channel sudah subscribe ke
+  // semua 3 tabel dengan event="*", redundant.
   useEffect(() => {
     if (!user) return
 
@@ -133,30 +155,30 @@ export const AppProvider = ({ children }) => {
       .on("postgres_changes", { event: "*", schema: "public", table: "handover_checklists" }, () => loadDynamicData())
       .subscribe()
 
-    const i = setInterval(loadDynamicData, 120000) // fallback poll every 2 min
-
     return () => {
-      clearInterval(i)
       supabase.removeChannel(channel)
     }
   }, [user, loadStaticData, loadDynamicData])
 
   // ── Auth actions ──
-  const handleLogin = async (s) => {
+  const handleLogin = useCallback(async (s) => {
     setSession(s)
     setLoading(true)
     await loadProfile(s)
-  }
+  }, [loadProfile])
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     logAudit("LOGOUT", "Keluar dari sistem", user)
     await supabase.auth.signOut()
     setSession(null); setUser(null); setPage("dashboard")
     setBranches([]); setSectors([]); setLogs([])
     setHandovers([]); setHandoverChecklists([]); setPersonnel([])
-  }
+  }, [user])
 
-  const value = {
+  // Phase 5: memoize value untuk avoid child re-mount tiap render parent.
+  // Sebelumnya plain object literal → reference berubah tiap render → semua
+  // consumer (puluhan komponen) re-render walaupun nilai effective tetap.
+  const value = useMemo(() => ({
     // auth
     session, user, loading, handleLogin, handleLogout,
     // ui
@@ -166,7 +188,14 @@ export const AppProvider = ({ children }) => {
     branches, sectors, personnel, moBranchCodes,
     logs, handovers, handoverChecklists,
     reload: loadData,
-  }
+  }), [
+    session, user, loading, handleLogin, handleLogout,
+    page, goPage, col, navBranch,
+    globalBranch, setGlobalBranch,
+    branches, sectors, personnel, moBranchCodes,
+    logs, handovers, handoverChecklists,
+    loadData,
+  ])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

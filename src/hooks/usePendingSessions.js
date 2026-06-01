@@ -10,15 +10,19 @@
 // admin can pass null and we fall back to "ALL branches" (a
 // single broad count).
 //
+// Phase 5: hook tetap own count SQL query (need month-bounds, lebih
+// luas dari ctx.logs 7-day window). TAPI duplicate realtime channel
+// di-DROP — re-run query when ctx.logs reference changes (context
+// subscription sudah fire untuk position_logs INSERT/UPDATE/DELETE).
+//
 // Refresh strategy:
-//   - Initial fetch on mount / when deps change.
-//   - Subscribes to postgres_changes on `position_logs` so any
-//     edit anywhere re-runs the count.
-//   - Exposes `refresh()` for explicit invalidation after a
-//     local write (avoids waiting on realtime echo).
+//   - Initial fetch on mount / when branchCode changes
+//   - Re-run when ctx.logs reference changes (proxies realtime via context)
+//   - Exposes `refresh()` for explicit invalidation after a local write
 // ============================================================
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "../supabase.js"
+import { useApp } from "../lib/context.jsx"
 
 const monthBounds = (d = new Date()) => {
   const first = new Date(d.getFullYear(), d.getMonth(), 1)
@@ -29,6 +33,7 @@ const monthBounds = (d = new Date()) => {
 }
 
 export const usePendingSessions = (branchCode) => {
+  const ctx = useApp()
   const [count, setCount]     = useState(0)
   const [loading, setLoading] = useState(false)
 
@@ -49,19 +54,10 @@ export const usePendingSessions = (branchCode) => {
     setLoading(false)
   }, [branchCode])
 
-  useEffect(() => { refresh() }, [refresh])
-
-  useEffect(() => {
-    const ch = supabase
-      .channel(`pending-sessions-${branchCode || "all"}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "position_logs" },
-        () => refresh(),
-      )
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [refresh, branchCode])
+  // Re-fetch when branchCode changes OR when ctx.logs reference changes.
+  // Context subscription fires on any position_logs INSERT/UPDATE/DELETE,
+  // jadi ctx.logs reference berubah → hook auto-refresh count.
+  useEffect(() => { refresh() }, [refresh, ctx?.logs])
 
   return { count, loading, refresh }
 }
