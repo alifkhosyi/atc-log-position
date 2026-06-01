@@ -1,0 +1,112 @@
+/**
+ * src/styles/tokens.css — design tokens (single source of truth).
+ *
+ * Phase 9 — token consolidation. Define semantic + atomic scale yang
+ * konsisten lintas CSS files. Existing index.css + per-page CSS pakai
+ * mix dari `--accent`, `--status-on`, `--surface` etc — TIDAK di-remove,
+ * tetap supaya backward-compatible. Tokens baru di sini extend +
+ * normalize.
+ *
+ * Strategi migration (gradual, defer ke Phase 9 follow-up codemod):
+ *   1. Step ini: bikin tokens.css, import globally → tokens AVAILABLE
+ *      tapi belum dipakai semua CSS file
+ *   2. Phase 9.x: per CSS file, replace literal value with token reference
+ *      (mis. `padding: 16px` → `padding: var(--sp-4)`). Visual regression
+ *      check per file
+ *   3. Step 3: inline `style={{...}}` di JSX (39 instances per audit) di
+ *      replace dengan CSS class yang pakai tokens
+ *
+ * Coverage di tokens.css ini: spacing, font-size, radius, transition,
+ * shadow, color semantic (re-map ke existing --accent/--status-*).
+ */
+
+:root {
+  /* ────────────────────────────────────────────────────
+     SPACING SCALE (4px base unit)
+     ──────────────────────────────────────────────────── */
+  --sp-0: 0;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* ────────────────────────────────────────────────────
+     FONT-SIZE SCALE
+     ──────────────────────────────────────────────────── */
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 13px;
+  --text-md:   14px;
+  --text-lg:   16px;
+  --text-xl:   18px;
+  --text-2xl:  22px;
+  --text-3xl:  28px;
+
+  /* ────────────────────────────────────────────────────
+     BORDER-RADIUS SCALE
+     ──────────────────────────────────────────────────── */
+  --r-sm:   4px;
+  --r-md:   6px;
+  --r-lg:   8px;
+  --r-xl:   12px;
+  --r-full: 999px;
+
+  /* ────────────────────────────────────────────────────
+     TRANSITION TIMING
+     ──────────────────────────────────────────────────── */
+  --t-fast:    100ms;
+  --t-medium:  200ms;
+  --t-slow:    300ms;
+
+  /* ────────────────────────────────────────────────────
+     SHADOW SCALE
+     ──────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.3);
+
+  /* ────────────────────────────────────────────────────
+     FONT-WEIGHT
+     ──────────────────────────────────────────────────── */
+  --fw-normal:   400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* ────────────────────────────────────────────────────
+     SEMANTIC COLOR ALIASES
+     Re-map existing tokens. Phase 9 follow-up: replace usages.
+     ──────────────────────────────────────────────────── */
+  --color-fg-primary:    var(--text, #ddd);
+  --color-fg-secondary:  var(--text-muted, #aaa);
+  --color-fg-tertiary:   var(--text-faint, #888);
+
+  --color-bg-base:       var(--bg, #0d0d0d);
+  --color-bg-surface:    var(--surface, #1a1a1a);
+  --color-bg-elevated:   var(--surface-2, #222);
+
+  --color-border-base:    var(--border, #2a2a2a);
+  --color-border-subtle:  var(--border-soft, #1f1f1f);
+
+  --color-accent:        var(--accent, #2563eb);
+  --color-accent-soft:   var(--accent-soft, rgba(37, 99, 235, 0.15));
+
+  --color-status-on:        var(--status-on, #10b981);
+  --color-status-on-soft:   var(--status-on-soft, rgba(16, 185, 129, 0.15));
+  --color-status-warn:      var(--status-warn, #f59e0b);
+  --color-status-warn-soft: var(--status-warn-soft, rgba(245, 158, 11, 0.15));
+  --color-status-alert:     var(--status-alert, #dc2626);
+  --color-status-alert-soft:var(--status-alert-soft, rgba(220, 38, 38, 0.15));
+
+  /* ────────────────────────────────────────────────────
+     LAYOUT
+     ──────────────────────────────────────────────────── */
+  --sidebar-w:           240px;
+  --sidebar-w-collapsed: 56px;
+  --main-max:            1400px;
+}
