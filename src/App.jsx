@@ -30,7 +30,8 @@ import { CabangHoToMo }          from "./pages/cabang/HoToMo.jsx"
 import { AdminDash }          from "./pages/admin/Dashboard.jsx"
 import { AdminMonLog }        from "./pages/admin/MonLog.jsx"
 import { AdminMonRecap }      from "./pages/admin/MonRecap.jsx"
-import { AdminMonPersonnel }  from "./pages/admin/MonPersonnel.jsx"
+// AdminMonPersonnel — Phase 6 dipakai DI DALAM PersonnelHub (admin/PersonnelHub.tsx),
+// tidak lagi di-route langsung di App.jsx
 import { AdminMonHandover }   from "./pages/admin/MonHandover.jsx"
 import { AdminMonHoToMo }     from "./pages/admin/MonHoToMo.jsx"
 import { AdminExport }        from "./pages/admin/Export.jsx"
@@ -48,6 +49,8 @@ import TunjanganPage from "./pages/TunjanganPage.tsx"
 import RollingPage from "./pages/RollingPage.tsx"
 // === Personnel CRUD (MO scoped + Admin full) ===
 import PersonnelPage from "./pages/PersonnelPage.tsx"
+// === Admin Personnel Hub (Phase 6 — merge master + stats jadi 2-tab) ===
+import PersonnelHub from "./pages/admin/PersonnelHub.tsx"
 
 // ── Page routing map ──
 const PAGES_CABANG = {
@@ -66,8 +69,11 @@ const PAGES_ADMIN = {
   dashboard:     AdminDash,
   mon_log:       AdminMonLog,
   mon_recap:     AdminMonRecap,
-  mon_personnel: AdminMonPersonnel,  // existing: operational stats (hours/sessions/traffic)
-  personnel:     PersonnelPage,      // ← BARU: master data CRUD (separate dari mon_personnel stats)
+  // Phase 6: personnel route admin → PersonnelHub (2-tab: master + stats).
+  // mon_personnel kept as legacy alias yang juga route ke PersonnelHub
+  // supaya old bookmark / deep link tetap work.
+  personnel:     PersonnelHub,
+  mon_personnel: PersonnelHub,
   mon_handover:  AdminMonHandover,
   mon_ho_to_mo:  AdminMonHoToMo,
   mon_reports:   AdminReportMonitoring,

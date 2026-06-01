@@ -32,13 +32,13 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
     {
       section: "Monitoring",
       items: [
-        { id:"dashboard",     label:"Dashboard INMC",      icon:"dashboard" },
-        { id:"mon_log",       label:"Log Position",        icon:"mic" },
-        { id:"mon_recap",     label:"Rekap Traffic",       icon:"chart" },
-        { id:"personnel",     label:"Pengaturan Personel", icon:"users" },
-        { id:"mon_personnel", label:"Statistik Personel",  icon:"users" },
-        { id:"mon_handover",  label:"Handover",            icon:"checklist" },
-        { id:"mon_ho_to_mo",  label:"HO/TO MO",            icon:"shield" },
+        { id:"dashboard",     label:"Dashboard INMC",   icon:"dashboard" },
+        { id:"mon_log",       label:"Log Position",     icon:"mic" },
+        { id:"mon_recap",     label:"Rekap Traffic",    icon:"chart" },
+        // Phase 6: merge 2 menu Personel jadi 1 → PersonnelHub embed 2 tab
+        { id:"personnel",     label:"Personel",         icon:"users" },
+        { id:"mon_handover",  label:"Handover",         icon:"checklist" },
+        { id:"mon_ho_to_mo",  label:"HO/TO MO",         icon:"shield" },
       ],
     },
     {
@@ -66,13 +66,14 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
     {
       section: "Operasional",
       items: [
-        { id:"dashboard",       label:"Dashboard",         icon:"dashboard" },
+        { id:"dashboard",       label:"Dashboard",                icon:"dashboard" },
         // Log Position deprecated — workflow merged into Daily Report → Section G.
-        { id:"handover",        label:"Handover/Takeover", icon:"checklist" },
-        { id:"ho_to_mo",        label:"HO/TO MO",          icon:"shield" },
-        { id:"personnel",       label:"Personel",          icon:"users" },
-        { id:"rekap_personnel", label:"Rekap Personnel",   icon:"users" },
-        { id:"rekap",           label:"Rekap Traffic",     icon:"chart" },
+        { id:"handover",        label:"Handover/Takeover",        icon:"checklist" },
+        { id:"ho_to_mo",        label:"HO/TO MO",                 icon:"shield" },
+        { id:"personnel",       label:"Personel",                 icon:"users" },
+        // Phase 6: rename Rekap labels untuk clarity vs Daily Report
+        { id:"rekap_personnel", label:"Rekap Personel · Bulanan", icon:"users" },
+        { id:"rekap",           label:"Rekap Traffic · Bulanan",  icon:"chart" },
       ],
     },
     {
@@ -86,7 +87,8 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
     {
       section: "Laporan",
       items: [
-        { id:"reports", label:"Report", icon:"note", badge: pendingCount },
+        // Phase 6: rename "Report" → "Daily Report" untuk clarity
+        { id:"reports", label:"Daily Report", icon:"note", badge: pendingCount },
       ],
     },
   ]

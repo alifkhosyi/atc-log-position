@@ -1,0 +1,53 @@
+/**
+ * src/pages/admin/personnel-hub.css
+ * Styling untuk PersonnelHub 2-tab shell (Phase 6).
+ * Minimal — pakai existing tokens, tidak introduce new color.
+ */
+
+.ph-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.ph-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 20px 0;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+  background: var(--surface, #1a1a1a);
+}
+
+.ph-tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-faint, #888);
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms;
+  min-height: 44px;
+}
+
+.ph-tab:hover:not(.is-active) {
+  color: var(--text, #ddd);
+}
+
+.ph-tab.is-active {
+  color: var(--accent, #2563eb);
+  border-bottom-color: var(--accent, #2563eb);
+}
+
+.ph-tab:focus-visible {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: -2px;
+}
+
+.ph-body {
+  flex: 1;
+  min-height: 0;
+}
