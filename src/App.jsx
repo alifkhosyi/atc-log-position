@@ -7,7 +7,7 @@
 //   - pages/cabang/* and pages/admin/*
 // This file now only orchestrates them.
 // ============================================================
-import React from "react"
+import React, { Suspense, lazy } from "react"
 import { AppProvider, useApp } from "./lib/context.jsx"
 import { ToastProvider } from "./components/Toast.jsx"
 import { ConfirmProvider } from "./components/ConfirmDialog.jsx"
@@ -15,42 +15,47 @@ import { ThemeToggle } from "./components/ThemeToggle.jsx"
 import { Login } from "./components/Login.jsx"
 import { Sidebar } from "./components/Sidebar.jsx"
 import { RadarLogo, I } from "./components/Icons.jsx"
+import { Loading } from "./components/ui"
 
-// Cabang pages
-import { CabangDash }            from "./pages/cabang/Dashboard.jsx"
-// CabangLog (Log Position) deprecated — workflow now lives in Daily Report → Section G.
-// The "log" page id is intercepted by context.goPage(); this stub catches any
-// remaining direct state writes (e.g. restored from localStorage).
-import { CabangHandover }        from "./pages/cabang/Handover.jsx"
-import { CabangRekap }           from "./pages/cabang/RekapTraffic.jsx"
-import { CabangRekapPersonnel }  from "./pages/cabang/RekapPersonnel.jsx"
-import { CabangHoToMo }          from "./pages/cabang/HoToMo.jsx"
+// ────────────────────────────────────────────────────────────────────
+// Phase 11 — Code-split per route via React.lazy().
+// Sebelumnya semua page di-import eager → initial bundle 1,157 KB.
+// Sekarang per-route chunk lazy-load saat first visit → main bundle
+// turun ~40%. Suspense fallback pakai design system Loading.
+//
+// Helper untuk named-export (CabangDash, AdminDash, dst).
+// React.lazy expects default-export module shape; kita wrap untuk
+// translate named export jadi { default: Component }.
+// ────────────────────────────────────────────────────────────────────
+const namedLazy = (importer, exportName) =>
+  lazy(() => importer().then(m => ({ default: m[exportName] })))
 
-// Admin pages
-import { AdminDash }          from "./pages/admin/Dashboard.jsx"
-import { AdminMonLog }        from "./pages/admin/MonLog.jsx"
-import { AdminMonRecap }      from "./pages/admin/MonRecap.jsx"
-// AdminMonPersonnel — Phase 6 dipakai DI DALAM PersonnelHub (admin/PersonnelHub.tsx),
-// tidak lagi di-route langsung di App.jsx
-import { AdminMonHandover }   from "./pages/admin/MonHandover.jsx"
-import { AdminMonHoToMo }     from "./pages/admin/MonHoToMo.jsx"
-import { AdminExport }        from "./pages/admin/Export.jsx"
-import { AdminAudit }         from "./pages/admin/Audit.jsx"
+// Cabang pages (lazy)
+const CabangDash           = namedLazy(() => import("./pages/cabang/Dashboard.jsx"), "CabangDash")
+const CabangHandover       = namedLazy(() => import("./pages/cabang/Handover.jsx"), "CabangHandover")
+const CabangRekap          = namedLazy(() => import("./pages/cabang/RekapTraffic.jsx"), "CabangRekap")
+const CabangRekapPersonnel = namedLazy(() => import("./pages/cabang/RekapPersonnel.jsx"), "CabangRekapPersonnel")
+const CabangHoToMo         = namedLazy(() => import("./pages/cabang/HoToMo.jsx"), "CabangHoToMo")
 
-// Reports (existing files)
-import Reports from "./Reports.jsx"
-import AdminReportMonitoring from "./AdminReportMonitoring.jsx"
+// Admin pages (lazy)
+const AdminDash          = namedLazy(() => import("./pages/admin/Dashboard.jsx"), "AdminDash")
+const AdminMonLog        = namedLazy(() => import("./pages/admin/MonLog.jsx"), "AdminMonLog")
+const AdminMonRecap      = namedLazy(() => import("./pages/admin/MonRecap.jsx"), "AdminMonRecap")
+const AdminMonHandover   = namedLazy(() => import("./pages/admin/MonHandover.jsx"), "AdminMonHandover")
+const AdminMonHoToMo     = namedLazy(() => import("./pages/admin/MonHoToMo.jsx"), "AdminMonHoToMo")
+const AdminExport        = namedLazy(() => import("./pages/admin/Export.jsx"), "AdminExport")
+const AdminAudit         = namedLazy(() => import("./pages/admin/Audit.jsx"), "AdminAudit")
 
-// === Roster (BARU — atc_roster engine, 3-tab shell) ===
-import RosterPage from "./pages/RosterPage/index.tsx"
-// === Tunjangan ATC (extract dari CAPanel) ===
-import TunjanganPage from "./pages/TunjanganPage.tsx"
-// === Rolling Harian (read-only MVP) ===
-import RollingPage from "./pages/RollingPage.tsx"
-// === Personnel CRUD (MO scoped + Admin full) ===
-import PersonnelPage from "./pages/PersonnelPage.tsx"
-// === Admin Personnel Hub (Phase 6 — merge master + stats jadi 2-tab) ===
-import PersonnelHub from "./pages/admin/PersonnelHub.tsx"
+// Reports (existing files, default export — lazy)
+const Reports                = lazy(() => import("./Reports.jsx"))
+const AdminReportMonitoring  = lazy(() => import("./AdminReportMonitoring.jsx"))
+
+// Roster / Tunjangan / Rolling / Personnel (default export — lazy)
+const RosterPage     = lazy(() => import("./pages/RosterPage/index.tsx"))
+const TunjanganPage  = lazy(() => import("./pages/TunjanganPage.tsx"))
+const RollingPage    = lazy(() => import("./pages/RollingPage.tsx"))
+const PersonnelPage  = lazy(() => import("./pages/PersonnelPage.tsx"))
+const PersonnelHub   = lazy(() => import("./pages/admin/PersonnelHub.tsx"))
 
 // ── Page routing map ──
 const PAGES_CABANG = {
@@ -60,10 +65,10 @@ const PAGES_CABANG = {
   handover:         CabangHandover,
   ho_to_mo:         CabangHoToMo,
   reports:          Reports,
-  roster:           RosterPage,    // ← BARU
-  tunjangan:        TunjanganPage, // ← BARU (step 4)
-  rolling:          RollingPage,   // ← BARU (rolling step 2)
-  personnel:        PersonnelPage, // ← BARU (MO scoped CRUD master personnel)
+  roster:           RosterPage,
+  tunjangan:        TunjanganPage,
+  rolling:          RollingPage,
+  personnel:        PersonnelPage,
 }
 const PAGES_ADMIN = {
   dashboard:     AdminDash,
@@ -79,9 +84,9 @@ const PAGES_ADMIN = {
   mon_reports:   AdminReportMonitoring,
   export:        AdminExport,
   audit:         AdminAudit,
-  roster:        RosterPage,       // ← BARU
-  tunjangan:     TunjanganPage,    // ← BARU (step 4)
-  rolling:       RollingPage,      // ← BARU (rolling step 2)
+  roster:        RosterPage,
+  tunjangan:     TunjanganPage,
+  rolling:       RollingPage,
 }
 
 // ── App shell (inside providers) ──
@@ -150,7 +155,11 @@ function AppShell() {
         onClick={closeMobile}
         aria-hidden="true"
       />
-      <main className="main-area"><CurrentPage/></main>
+      <main className="main-area">
+        <Suspense fallback={<Loading text="Memuat halaman…" size="lg" />}>
+          <CurrentPage/>
+        </Suspense>
+      </main>
       <ThemeToggle/>
     </div>
   )
