@@ -1,0 +1,152 @@
+/**
+ * src/styles/mobile-ux.css
+ * Phase 7 — mobile UX foundations.
+ *
+ * 1. Sidebar burger + backdrop untuk viewport < 768px
+ * 2. Touch target minimum 44×44px (WCAG 2.5.5)
+ * 3. Form input height min 44px
+ *
+ * Konsumen: import dari src/index.css atau App.jsx supaya global.
+ */
+
+/* ────────────────────────────────────────────────────────
+   1. SIDEBAR — Mobile overlay
+   ──────────────────────────────────────────────────────── */
+
+/* Burger button — visible only on mobile, opens sidebar */
+.mobile-burger {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--border, #2a2a2a);
+  color: var(--text, #ddd);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.mobile-burger:focus-visible {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 2px;
+}
+
+/* Backdrop — visible when sidebar open on mobile, click to close */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 25;
+  opacity: 0;
+  transition: opacity 200ms;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-burger {
+    display: inline-flex;
+  }
+
+  /* Sidebar: drawer style — slide from left, fixed position */
+  .sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 30;
+    width: 280px !important;
+    transform: translateX(-100%);
+    transition: transform 240ms ease-out;
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.4);
+  }
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+  /* Hide collapse toggle on mobile — burger replaces it */
+  .sidebar-toggle {
+    display: none;
+  }
+  /* Backdrop visible when sidebar open */
+  .sidebar.sidebar-open ~ .sidebar-backdrop,
+  .sidebar-backdrop.is-active {
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  /* Push burger to top of stack when sidebar open (close icon visual) */
+  .sidebar.sidebar-open + .mobile-burger {
+    left: 296px;
+  }
+}
+
+/* ────────────────────────────────────────────────────────
+   2. TOUCH TARGETS — WCAG 2.5.5 (min 44×44px)
+   ──────────────────────────────────────────────────────── */
+
+/* Apply broadly — semua interactive element */
+.sidebar-item,
+.sidebar-toggle,
+.mobile-burger,
+.or-btn,
+.or-ic-btn,
+.ph-tab,
+.btn,
+.tab {
+  min-height: 44px;
+}
+
+/* Icon-only buttons need explicit min-width too */
+.or-ic-btn,
+.sidebar-toggle,
+.mobile-burger {
+  min-width: 44px;
+}
+
+/* Form inputs — match touch target requirement */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="date"],
+input[type="time"],
+input[type="search"],
+input[type="tel"],
+select,
+textarea {
+  min-height: 44px;
+}
+
+/* Smaller inputs (e.g. inline cell editors) opt-out via .input-sm */
+.input-sm,
+.input-inline {
+  min-height: 32px !important;
+}
+
+/* ────────────────────────────────────────────────────────
+   3. RESPONSIVE GENERAL — Form column stack on mobile
+   ──────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  /* OR form row → stack vertikal */
+  .or-form-row {
+    grid-template-columns: 1fr !important;
+  }
+  /* Action buttons → full width on mobile */
+  .or-form-actions .or-btn,
+  .or-form-actions .btn {
+    width: 100%;
+  }
+  /* Toolbar items wrap */
+  .or-toolbar {
+    flex-wrap: wrap;
+  }
+  .or-field {
+    min-width: 140px;
+  }
+}

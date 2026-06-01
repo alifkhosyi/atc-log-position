@@ -11,7 +11,7 @@ import { useOffRosterCount } from "../hooks/useOffRosterCount.js"
 import { useOvertimeCount } from "../hooks/useOvertimeCount.js"
 import "../styles/section-g.css"
 
-export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
+export const Sidebar = ({ page, go, user, logout, col, toggle, mobileOpen = false }) => {
   // Pending Section G sessions for the user's branch (cabang only).
   // Admins skip the query — they don't see the cabang report flow.
   const { count: pendingCount } = usePendingSessions(
@@ -94,7 +94,7 @@ export const Sidebar = ({ page, go, user, logout, col, toggle }) => {
   ]
 
   return (
-    <aside className={"sidebar" + (col ? " sidebar-collapsed" : "")}>
+    <aside className={"sidebar" + (col ? " sidebar-collapsed" : "") + (mobileOpen ? " sidebar-open" : "")}>
       <div className="sidebar-header">
         {!col && (
           <div className="sidebar-brand">

@@ -14,7 +14,7 @@ import { ConfirmProvider } from "./components/ConfirmDialog.jsx"
 import { ThemeToggle } from "./components/ThemeToggle.jsx"
 import { Login } from "./components/Login.jsx"
 import { Sidebar } from "./components/Sidebar.jsx"
-import { RadarLogo } from "./components/Icons.jsx"
+import { RadarLogo, I } from "./components/Icons.jsx"
 
 // Cabang pages
 import { CabangDash }            from "./pages/cabang/Dashboard.jsx"
@@ -89,6 +89,17 @@ function AppShell() {
   const ctx = useApp()
   const { loading, session, user, page, goPage, col, setCol, handleLogin, handleLogout } = ctx
 
+  // Phase 7: mobile sidebar drawer state. On mobile (<768px), sidebar
+  // hidden by default; burger button opens it. Click backdrop / nav item
+  // closes it. Desktop perilaku tidak terpengaruh (sidebar always visible).
+  const [mobileOpen, setMobileOpen] = React.useState(false)
+  const isMobile = typeof window !== "undefined"
+    && window.matchMedia?.("(max-width: 768px)").matches
+  const closeMobile = React.useCallback(() => setMobileOpen(false), [])
+
+  // Auto-close mobile sidebar saat page change (navigate)
+  React.useEffect(() => { setMobileOpen(false) }, [page])
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -121,6 +132,23 @@ function AppShell() {
         logout={handleLogout}
         col={col}
         toggle={() => setCol(!col)}
+        mobileOpen={mobileOpen}
+      />
+      {/* Phase 7: mobile burger + backdrop. Hidden by default via CSS, only
+          visible at < 768px breakpoint. */}
+      <button
+        type="button"
+        className="mobile-burger"
+        onClick={() => setMobileOpen(o => !o)}
+        aria-label={mobileOpen ? "Tutup navigasi" : "Buka navigasi"}
+        aria-expanded={mobileOpen}
+      >
+        <I n={mobileOpen ? "x" : "menu"} s={20}/>
+      </button>
+      <div
+        className={"sidebar-backdrop" + (mobileOpen ? " is-active" : "")}
+        onClick={closeMobile}
+        aria-hidden="true"
       />
       <main className="main-area"><CurrentPage/></main>
       <ThemeToggle/>
