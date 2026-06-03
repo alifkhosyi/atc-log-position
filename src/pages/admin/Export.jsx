@@ -13,6 +13,19 @@ import { Stat } from "../../components/Stat.jsx"
 
 export const AdminExport = () => {
   const ctx = useApp()
+  const SHIFTS = ["Morning", "Afternoon", "Night"]
+  
+  const logAudit = (action, detail="", user=null) => {
+    try {
+      supabase.from("audit_logs").insert({
+        user_id: user?.id || null,
+        user_name: user?.display_name || user?.username || "-",
+        branch_code: user?.branch_code || (user?.role==="admin"?"ADMIN":"-"),
+        action,
+        detail: typeof detail === "object" ? JSON.stringify(detail) : String(detail),
+      }).then(({error}) => { if(error) console.warn("[AUDIT]",error.message) })
+    } catch(e) { console.warn("[AUDIT catch]",e) }
+  }
   const [br,setBr] = useState("ALL")
   const [dateFrom,setDateFrom] = useState(new Date().toISOString().slice(0,10))
   const [dateTo,setDateTo] = useState(new Date().toISOString().slice(0,10))
