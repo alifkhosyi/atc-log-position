@@ -74,7 +74,7 @@ export const CabangLog = () => {
   const onMic = async () => {
     if (!nm.trim() || saving) return
     if (!shift.trim()) {
-      toast.warn("Shift belum diisi", "Ketik nama shift sebelum on mic.")
+      toast.warn("Shift belum dipilih", "Pilih shift dulu sebelum on mic.")
       return
     }
     setSaving(true)
@@ -274,7 +274,12 @@ export const CabangLog = () => {
                 </select>
               </div>
               <div className="field"><label>Shift</label>
-                <input type="text" value={shift} onChange={e => setShift(e.target.value)} placeholder="Ketik shift..." autoComplete="off"/>
+                <select value={shift} onChange={e => setShift(e.target.value)}>
+                  <option value="">— Pilih shift —</option>
+                  <option value="Morning">Pagi</option>
+                  <option value="Afternoon">Siang</option>
+                  <option value="Night">Malam</option>
+                </select>
               </div>
             </div>
             <button className="btn btn-primary" onClick={onMic} style={{ marginTop:16 }} disabled={!nm.trim() || !shift.trim() || saving}>
@@ -308,7 +313,7 @@ export const CabangLog = () => {
                         <td><span className="unit-tag">{l.unit}</span></td>
                         <td>{l.sector}</td>
                         <td>{l.cwp}</td>
-                        <td>{l.shift}</td>
+                        <td>{({Morning:"Pagi",Afternoon:"Siang",Night:"Malam"})[l.shift] || l.shift}</td>
                         <td>{fmtT(l.on_time)}</td>
                         <td>{l.off_time ? fmtT(l.off_time) : "-"}</td>
                         <td>{l.off_time ? durMin(l.on_time, l.off_time) + "m" : "..."}</td>
