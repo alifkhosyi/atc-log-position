@@ -43,6 +43,7 @@ export const CabangLog = () => {
   const [arr, setArr] = useState("")
   const [ovf, setOvf] = useState("")
   const [saving, setSaving] = useState(false)
+  const [shift, setShift] = useState("")
 
   const unitSectors = mySectors.filter(s => s.unit === unit)
   const [si, setSi] = useState(0)
@@ -55,6 +56,10 @@ export const CabangLog = () => {
 
   const onMic = async () => {
     if (!nm.trim() || saving) return
+    if (!shift.trim()) {
+      toast.warn("Shift belum diisi", "Ketik nama shift sebelum on mic.")
+      return
+    }
     setSaving(true)
     const { error } = await supabase.from("position_logs").insert({
       branch_code: ctx.user.branch_code,
@@ -62,7 +67,7 @@ export const CabangLog = () => {
       unit,
       sector: unitSectors[si]?.name || "Sector 1",
       cwp: cwps[ci] || "Controller",
-      shift: getShift(),
+      shift: shift.trim(),
       on_time: new Date().toISOString(),
       logged_by: ctx.user.id,
     })
@@ -247,10 +252,10 @@ export const CabangLog = () => {
                 </select>
               </div>
               <div className="field"><label>Shift</label>
-                <input value={getShift()} disabled/>
+                <input type="text" value={shift} onChange={e => setShift(e.target.value)} placeholder="Ketik shift..." autoComplete="off"/>
               </div>
             </div>
-            <button className="btn btn-primary" onClick={onMic} style={{ marginTop:16 }} disabled={!nm.trim() || saving}>
+            <button className="btn btn-primary" onClick={onMic} style={{ marginTop:16 }} disabled={!nm.trim() || !shift.trim() || saving}>
               <I n="mic" s={16}/> {saving ? "Menyimpan..." : "On Mic Sekarang"}
             </button>
           </div>
