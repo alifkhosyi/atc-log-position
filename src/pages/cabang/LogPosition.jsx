@@ -13,7 +13,6 @@ import { useToast } from "../../components/Toast.jsx"
 export const CabangLog = () => {
   const ctx = useApp()
   const toast = useToast()
-  const br = ctx.branches.find(b => b.code === ctx.user.branch_code) || { units: ["TWR"] }
   const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
   const mySectors = ctx.sectors.filter(s => myBranches.includes(s.branch_code))
   const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
@@ -35,7 +34,16 @@ export const CabangLog = () => {
 
   const selectPerson = (name) => { setNm(name); setNmSearch(name); setNmOpen(false) }
 
-  const [unit, setUnit] = useState(br.units[0] || "TWR")
+  // === LOKASI: cabang yang sedang diinput (default = cabang MO sendiri) ===
+  const [loc, setLoc] = useState(ctx.user.branch_code)
+  const locBranch = ctx.branches.find(b => b.code === loc) || { units: ["TWR"] }
+  // daftar lokasi = semua cabang se-wilayah MO (myBranches) + nama dari ctx.branches
+  const locOptions = myBranches
+    .map(code => ctx.branches.find(b => b.code === code))
+    .filter(Boolean)
+    .sort((a, b) => (a.name || a.code).localeCompare(b.name || b.code))
+
+  const [unit, setUnit] = useState(locBranch.units?.[0] || "TWR")
   const [nm, setNm]     = useState("")
   const [show, setShow] = useState(false)
   const [offId, setOffId] = useState(null)
@@ -45,10 +53,19 @@ export const CabangLog = () => {
   const [saving, setSaving] = useState(false)
   const [shift, setShift] = useState("")
 
-  const unitSectors = mySectors.filter(s => s.unit === unit)
+  // sektor disaring berdasarkan LOKASI terpilih + unit
+  const unitSectors = mySectors.filter(s => s.branch_code === loc && s.unit === unit)
   const [si, setSi] = useState(0)
   const cwps = unitSectors[si] ? unitSectors[si].cwps : ["Controller", "Assistant"]
   const [ci, setCi] = useState(0)
+
+  // pas ganti Lokasi → reset unit ke unit pertama cabang itu + reset sektor/cwp
+  const onLoc = (code) => {
+    setLoc(code)
+    const nb = ctx.branches.find(b => b.code === code)
+    setUnit((nb?.units?.[0]) || "TWR")
+    setSi(0); setCi(0)
+  }
 
   const active = ctx.logs.filter(l => !l.off_time && myBranches.includes(l.branch_code))
   const today  = ctx.logs.filter(l => myBranches.includes(l.branch_code)
@@ -62,7 +79,7 @@ export const CabangLog = () => {
     }
     setSaving(true)
     const { error } = await supabase.from("position_logs").insert({
-      branch_code: ctx.user.branch_code,
+      branch_code: loc,                              // <- pakai lokasi terpilih, bukan cabang MO
       atc_name: nm.trim(),
       unit,
       sector: unitSectors[si]?.name || "Sector 1",
@@ -74,8 +91,8 @@ export const CabangLog = () => {
     if (error) {
       toast.error("Gagal input on mic", error.message)
     } else {
-      logAudit("ON_MIC", nm.trim() + " — " + unit + " " + unitSectors[si]?.name + " (" + cwps[ci] + ")", ctx.user)
-      toast.success("On mic berhasil", nm.trim() + " — " + unit + " " + (unitSectors[si]?.name || ""))
+      logAudit("ON_MIC", nm.trim() + " — " + loc + " " + unit + " " + unitSectors[si]?.name + " (" + cwps[ci] + ")", ctx.user)
+      toast.success("On mic berhasil", nm.trim() + " — " + loc + " " + unit + " " + (unitSectors[si]?.name || ""))
       await ctx.reload()
       setNm(""); setNmSearch(""); setShow(false)
     }
@@ -113,7 +130,7 @@ export const CabangLog = () => {
 
   return (
     <div className="page-content">
-      <Header title="Log Position" sub={"Input posisi ATC — " + ctx.user.branch_code}/>
+      <Header title="Log Position" sub={"Input posisi ATC — " + loc}/>
 
       {active.length > 0 && (
         <div className="panel panel-glow">
@@ -126,7 +143,7 @@ export const CabangLog = () => {
               return (
                 <div key={l.id} className="active-position">
                   <div className="active-position-info">
-                    {[["Nama",l.atc_name],["Unit",l.unit],["Sektor",l.sector],["CWP",l.cwp],
+                    {[["Lokasi",l.branch_code],["Nama",l.atc_name],["Unit",l.unit],["Sektor",l.sector],["CWP",l.cwp],
                       ["On",fmtT(l.on_time)],["Durasi", durMin(l.on_time, new Date().toISOString()) + "m"]
                     ].map(([k,v]) => (
                       <div key={k} className="active-pos-row">
@@ -204,6 +221,11 @@ export const CabangLog = () => {
           <div className="panel-header"><h2 className="panel-title">Form On Mic</h2></div>
           <div className="panel-body">
             <div className="form-grid">
+              <div className="field"><label>Lokasi</label>
+                <select value={loc} onChange={e => onLoc(e.target.value)}>
+                  {locOptions.map(b => <option key={b.code} value={b.code}>{b.code} — {b.name}</option>)}
+                </select>
+              </div>
               <div className="field">
                 <label>Nama ATC</label>
                 <div ref={nmRef} style={{ position:"relative" }}>
@@ -238,7 +260,7 @@ export const CabangLog = () => {
               </div>
               <div className="field"><label>Unit</label>
                 <select value={unit} onChange={e => { setUnit(e.target.value); setSi(0); setCi(0) }}>
-                  {br.units.map(u => <option key={u}>{u}</option>)}
+                  {locBranch.units.map(u => <option key={u}>{u}</option>)}
                 </select>
               </div>
               <div className="field"><label>Sektor</label>
@@ -274,13 +296,14 @@ export const CabangLog = () => {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Nama</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>Shift</th>
+                      <th>Lokasi</th><th>Nama</th><th>Unit</th><th>Sektor</th><th>CWP</th><th>Shift</th>
                       <th>On</th><th>Off</th><th>Durasi</th><th>DEP</th><th>ARR</th><th>OVF</th><th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {today.map(l => (
                       <tr key={l.id}>
+                        <td><span className="unit-tag">{l.branch_code}</span></td>
                         <td><strong>{l.atc_name}</strong></td>
                         <td><span className="unit-tag">{l.unit}</span></td>
                         <td>{l.sector}</td>
