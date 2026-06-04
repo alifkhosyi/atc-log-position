@@ -15,14 +15,27 @@ export const CabangLog = () => {
   const toast = useToast()
   const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
   const mySectors = ctx.sectors.filter(s => myBranches.includes(s.branch_code))
-  const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
+  // LOKASI yang sedang diinput (default = cabang MO sendiri)
+  const [loc, setLoc] = useState(ctx.user.branch_code)
+  // Nama ATC = personel di lokasi terpilih; kalau station itu KOSONG, ambil dari induknya
+  // (naik lewat parent_code, mis. substation kosong → personel Banjarmasin). Tetap di dalam wilayah MO.
+  const personnelForLoc = (code) => {
+    let cur = code
+    for (let i = 0; i < 12 && cur && myBranches.includes(cur); i++) {
+      const list = ctx.personnel.filter(p => p.branch_code === cur)
+      if (list.length) return list
+      cur = ctx.branches.find(b => b.code === cur)?.parent_code
+    }
+    return []
+  }
+  const locPersonnel = personnelForLoc(loc)
 
   const [nmSearch, setNmSearch] = useState("")
   const [nmOpen, setNmOpen] = useState(false)
   const nmRef = useRef(null)
   const filteredPersonnel = [
-    ...myPersonnel.filter(p => p.name.toLowerCase().startsWith(nmSearch.toLowerCase())),
-    ...myPersonnel.filter(p => !p.name.toLowerCase().startsWith(nmSearch.toLowerCase())
+    ...locPersonnel.filter(p => p.name.toLowerCase().startsWith(nmSearch.toLowerCase())),
+    ...locPersonnel.filter(p => !p.name.toLowerCase().startsWith(nmSearch.toLowerCase())
                             && p.name.toLowerCase().includes(nmSearch.toLowerCase())),
   ]
 
@@ -34,8 +47,7 @@ export const CabangLog = () => {
 
   const selectPerson = (name) => { setNm(name); setNmSearch(name); setNmOpen(false) }
 
-  // === LOKASI: cabang yang sedang diinput (default = cabang MO sendiri) ===
-  const [loc, setLoc] = useState(ctx.user.branch_code)
+  // === LOKASI: cabang yang sedang diinput (loc dideklarasi di atas) ===
   const locBranch = ctx.branches.find(b => b.code === loc) || { units: ["TWR"] }
   // daftar lokasi = semua cabang se-wilayah MO (myBranches) + nama dari ctx.branches
   const locOptions = myBranches
@@ -59,12 +71,13 @@ export const CabangLog = () => {
   const cwps = unitSectors[si] ? unitSectors[si].cwps : ["Controller", "Assistant"]
   const [ci, setCi] = useState(0)
 
-  // pas ganti Lokasi → reset unit ke unit pertama cabang itu + reset sektor/cwp
+  // pas ganti Lokasi → reset unit ke unit pertama cabang itu + reset sektor/cwp + reset Nama ATC
   const onLoc = (code) => {
     setLoc(code)
     const nb = ctx.branches.find(b => b.code === code)
     setUnit((nb?.units?.[0]) || "TWR")
     setSi(0); setCi(0)
+    setNm(""); setNmSearch("")   // nama ATC ikut station, jadi dikosongin
   }
 
   const active = ctx.logs.filter(l => !l.off_time && myBranches.includes(l.branch_code))
