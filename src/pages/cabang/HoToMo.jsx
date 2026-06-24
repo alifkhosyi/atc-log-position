@@ -11,6 +11,10 @@ import { Header } from "../../components/Header.jsx"
 import { useToast } from "../../components/Toast.jsx"
 import { useConfirm } from "../../components/ConfirmDialog.jsx"
 
+// MATSC (WAAA) & JATSC (WIII): bandara tersibuk, sub-cabang sudah punya MO sendiri
+// → di form HO/TO MO hanya lihat cabang sendiri, tidak rekursif ke bawahan.
+const HQ_BRANCHES = ["WAAA", "WIII"]
+
 export const CabangHoToMo = () => {
   const ctx = useApp()
   const toast = useToast()
@@ -31,7 +35,9 @@ export const CabangHoToMo = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const myBranches = HQ_BRANCHES.includes(ctx.user.branch_code)
+    ? [ctx.user.branch_code]
+    : getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
 
   useEffect(() => {
     const load = async () => {

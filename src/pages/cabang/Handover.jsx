@@ -18,11 +18,17 @@ const STATUS_CLR = {
   "N/A":    { bg: "var(--status-off-soft)",   fg: "var(--text-muted)",   bd: "var(--border)" },
 }
 
+// MATSC (WAAA) & JATSC (WIII): bandara tersibuk, sub-cabang sudah punya MO sendiri
+// → di form handover hanya lihat cabang sendiri, tidak rekursif ke bawahan.
+const HQ_BRANCHES = ["WAAA", "WIII"]
+
 export const CabangHandover = () => {
   const ctx = useApp()
   const toast = useToast()
   const confirm = useConfirm()
-  const myBranches = getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
+  const myBranches = HQ_BRANCHES.includes(ctx.user.branch_code)
+    ? [ctx.user.branch_code]
+    : getAccessibleBranches(ctx.user.branch_code, ctx.branches, ctx.moBranchCodes)
   const myPersonnel = ctx.personnel.filter(p => myBranches.includes(p.branch_code))
   const [moAccounts, setMoAccounts] = useState([])
 
