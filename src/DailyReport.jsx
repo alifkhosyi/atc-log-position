@@ -201,6 +201,41 @@ export default function DailyReport() {
   const [incidents, setIncidents]   = useState([emptyIncident()]);
   const [notes, setNotes]           = useState('');
 
+  // ── Auto-save draft ke localStorage (anti-hilang saat pindah menu / refresh) ──
+  const draftKey = userInfo ? `draft_${userInfo.branch_code}_${reportDate}` : null;
+  const [restoredKey, setRestoredKey] = useState(null); // cegah auto-save nimpa sebelum restore
+
+  // Kumpulkan semua field jadi 1 objek
+  const collectDraft = () => ({ secA, secB, movements, hourly, otp, secD, incidents, notes });
+
+  // Restore dari localStorage saat draftKey siap (setelah load DB)
+  useEffect(() => {
+    if (!draftKey || loading) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.secA) setSecA(d.secA);
+        if (d.secB) setSecB(d.secB);
+        if (d.movements) setMovements(d.movements);
+        if (d.hourly) setHourly(d.hourly);
+        if (d.otp) setOtp(d.otp);
+        if (d.secD) setSecD(d.secD);
+        if (d.incidents) setIncidents(d.incidents);
+        if (typeof d.notes === 'string') setNotes(d.notes);
+      }
+    } catch {}
+    setRestoredKey(draftKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey, loading]);
+
+  // Auto-save tiap ada perubahan (hanya setelah restore selesai utk key ini)
+  useEffect(() => {
+    if (!draftKey || restoredKey !== draftKey) return;
+    try { localStorage.setItem(draftKey, JSON.stringify(collectDraft())); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey, restoredKey, secA, secB, movements, hourly, otp, secD, incidents, notes]);
+
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -340,6 +375,12 @@ export default function DailyReport() {
       if (iRows.length) { const incErr = (await supabase.from('incident_reports').insert(iRows)).error; if (incErr) throw new Error('Insiden: ' + incErr.message); }
 
       setExistingStatus(status);
+      // Setelah SUBMIT sukses: hapus draft lokal + bersihkan form
+      if (status === 'submitted' && draftKey) {
+        try { localStorage.removeItem(draftKey); } catch {}
+        setRestoredKey(null);
+        resetForm();
+      }
       setSaveMsg({ ok: true, text: status === 'submitted' ? '✅ Laporan berhasil dikirim ke INMC!' : '💾 Draft tersimpan.' });
       // Audit log
       if (status === 'submitted') {
