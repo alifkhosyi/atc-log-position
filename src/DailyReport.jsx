@@ -309,6 +309,26 @@ export default function DailyReport() {
   const colTotal  = (ck) => TRAFFIC_TYPES.reduce((s, t) => s + (parseInt(movements[t.key][ck]) || 0), 0);
   const grandTotal = ()  => TRAFFIC_TYPES.reduce((s, t) => s + rowTotal(t.key), 0);
 
+  // Konfirmasi sebelum submit (cegah salah pencet) + cek jika sudah pernah submit
+  const confirmSubmit = () => {
+    const total = grandTotal();
+    if (existingStatus === 'submitted') {
+      const lanjut = window.confirm(
+        'Laporan tanggal ini SUDAH pernah di-submit.\n\nKirim ulang akan menimpa data sebelumnya. Lanjutkan?'
+      );
+      if (!lanjut) return;
+    } else {
+      const lanjut = window.confirm(
+        'Kirim Daily Report sekarang?\n\n' +
+        'Tanggal   : ' + reportDate + '\n' +
+        'Total traffic: ' + total + '\n\n' +
+        'Pastikan semua data sudah benar. Setelah dikirim, laporan masuk ke INMC.'
+      );
+      if (!lanjut) return;
+    }
+    handleSave('submitted');
+  };
+
   const handleSave = async (status = 'draft') => {
     if (!userInfo) return;
     setSaving(true); setSaveMsg(null);
@@ -453,6 +473,12 @@ export default function DailyReport() {
       </div>
 
       {/* ── Save Message ── */}
+      {existingStatus === 'submitted' && !saveMsg && (
+        <div style={{
+          padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13, fontWeight: 600,
+          background: 'rgba(16,185,129,0.1)', color: 'var(--status-on)', border: '1px solid #10b98133',
+        }}>✅ Laporan tanggal ini sudah terkirim (submitted) ke INMC.</div>
+      )}
       {saveMsg && (
         <div style={{
           padding: '12px 18px', borderRadius: 10, marginBottom: 16, fontSize: 13, fontWeight: 600,
@@ -773,7 +799,7 @@ export default function DailyReport() {
             padding: '9px 20px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent',
             color: 'var(--fg)', fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer',
           }}>💾 {saving ? 'Menyimpan...' : 'Simpan Draft'}</button>
-          <button type="button" onClick={() => handleSave('submitted')} disabled={saving} style={{
+          <button type="button" onClick={confirmSubmit} disabled={saving} style={{
             padding: '9px 26px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
             color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 0 16px rgba(37,99,235,0.4)',
           }}>📤 {saving ? 'Mengirim...' : 'Submit Laporan'}</button>
