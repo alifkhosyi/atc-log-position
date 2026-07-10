@@ -31,9 +31,39 @@ export const CabangHoToMo = () => {
   const initChecks = () => currentTab.items.reduce((a, it) => ({ ...a, [it.no]: null }), {})
   const [checks, setChecks] = useState(initChecks())
 
-  useEffect(() => { setChecks(initChecks()); setShowForm(false)
+  // ── No 32: Auto-save draft HO/TO MO ke localStorage (per cabang + tab) ──
+  const moDraftKey = ctx.user ? `ho_mo_draft_${ctx.user.branch_code}_${activeTab}` : null
+  const [moRestored, setMoRestored] = useState(false)
+
+  // Saat ganti tab: reset checks lalu restore draft tab tsb (kalau ada)
+  useEffect(() => {
+    setShowForm(false)
+    setMoRestored(false)
+    const key = ctx.user ? `ho_mo_draft_${ctx.user.branch_code}_${activeTab}` : null
+    let restored = false
+    try {
+      const raw = key ? localStorage.getItem(key) : null
+      if (raw) {
+        const d = JSON.parse(raw)
+        setChecks(d.checks || initChecks())
+        if (d.shift) setShift(d.shift)
+        if (typeof d.notes === "string") setNotes(d.notes)
+        if (d.checkDate) setCheckDate(d.checkDate)
+        if (d.showForm) setShowForm(true)
+        restored = true
+      }
+    } catch {}
+    if (!restored) { setChecks(initChecks()) }
+    setMoRestored(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
+
+  // Auto-save tiap perubahan
+  useEffect(() => {
+    if (!moDraftKey || !moRestored) return
+    try { localStorage.setItem(moDraftKey, JSON.stringify({ checks, shift, notes, checkDate, showForm })) } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moDraftKey, moRestored, checks, shift, notes, checkDate, showForm])
 
   const myBranches = HQ_BRANCHES.includes(ctx.user.branch_code)
     ? [ctx.user.branch_code]
@@ -90,6 +120,7 @@ export const CabangHoToMo = () => {
     }
     logAudit("MO_CHECKLIST", "Submit " + activeTab + " checklist — shift " + shift, ctx.user)
     toast.success("Checklist tersimpan", `${currentTab.label} · shift ${shift}`)
+    try { if (moDraftKey) localStorage.removeItem(moDraftKey) } catch {}
     setChecks(initChecks()); setNotes(""); setShift(""); setShowForm(false); setSaving(false)
   }
 
