@@ -61,7 +61,6 @@ export const CabangHandover = () => {
   const [f, setF] = useState(initForm())
   const set = (k, v) => setF(p => ({ ...p, [k]: v }))
 
-  const allSelected = [...f.incoming_list, ...f.outgoing_list].filter(n => n.trim())
   const setListItem = (listKey, idx, val) => {
     setF(p => { const arr = [...p[listKey]]; arr[idx] = val; return { ...p, [listKey]: arr } })
   }
@@ -73,7 +72,10 @@ export const CabangHandover = () => {
   }
   const availablePersonnel = (listKey, idx) => {
     const currentVal = f[listKey][idx]
-    return myPersonnel.filter(p => !allSelected.includes(p.name) || p.name === currentVal)
+    // Bug fix: exclude hanya dari LIST YANG SAMA, supaya 1 orang bisa muncul di
+    // Incoming DAN Outgoing sekaligus (mis. hadir di 2 shift).
+    const selectedInSameList = f[listKey].filter((n, i) => i !== idx && n.trim())
+    return myPersonnel.filter(p => !selectedInSameList.includes(p.name) || p.name === currentVal)
   }
 
   const myChecklists = ctx.handoverChecklists.filter(c => {
@@ -98,7 +100,9 @@ export const CabangHandover = () => {
     } else {
       logAudit("CHECKLIST_CREATE", "Shift " + f.shift + " MOD:" + f.manager_on_duty, ctx.user)
       toast.success("Checklist tersimpan", "Shift " + f.shift + " · " + f.manager_on_duty)
-      setF(initForm()); setShowForm(false); await ctx.reload()
+      setF(initForm()); setShowForm(false)
+      try { if (hoDraftKey) localStorage.removeItem(hoDraftKey) } catch {}
+      await ctx.reload()
     }
     setSavingCL(false)
   }
@@ -120,6 +124,33 @@ export const CabangHandover = () => {
   const [txt, setTxt] = useState("")
   const [pri, setPri] = useState("normal")
   const [savingN, setSavingN] = useState(false)
+
+  // ── No 32: Auto-save draft HO/TO ke localStorage (anti-hilang saat pindah menu) ──
+  const hoDraftKey = ctx.user ? `ho_draft_${ctx.user.branch_code}` : null
+  const [hoRestored, setHoRestored] = useState(false)
+
+  // Restore saat mount
+  useEffect(() => {
+    if (!hoDraftKey) return
+    try {
+      const raw = localStorage.getItem(hoDraftKey)
+      if (raw) {
+        const d = JSON.parse(raw)
+        if (d.f) { setF(d.f); if (d.showForm) setShowForm(true) }
+        if (typeof d.txt === "string") setTxt(d.txt)
+        if (d.pri) setPri(d.pri)
+      }
+    } catch {}
+    setHoRestored(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoDraftKey])
+
+  // Auto-save tiap perubahan form / notes
+  useEffect(() => {
+    if (!hoDraftKey || !hoRestored) return
+    try { localStorage.setItem(hoDraftKey, JSON.stringify({ f, txt, pri, showForm })) } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoDraftKey, hoRestored, f, txt, pri, showForm])
   const addNote = async () => {
     if (!txt.trim() || savingN) return
     setSavingN(true)
