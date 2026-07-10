@@ -201,6 +201,41 @@ export default function DailyReport() {
   const [incidents, setIncidents]   = useState([emptyIncident()]);
   const [notes, setNotes]           = useState('');
 
+  // ── Auto-save draft ke localStorage (anti-hilang saat pindah menu / refresh) ──
+  const draftKey = userInfo ? `draft_${userInfo.branch_code}_${reportDate}` : null;
+  const [restoredKey, setRestoredKey] = useState(null); // cegah auto-save nimpa sebelum restore
+
+  // Kumpulkan semua field jadi 1 objek
+  const collectDraft = () => ({ secA, secB, movements, hourly, otp, secD, incidents, notes });
+
+  // Restore dari localStorage saat draftKey siap (setelah load DB)
+  useEffect(() => {
+    if (!draftKey || loading) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.secA) setSecA(d.secA);
+        if (d.secB) setSecB(d.secB);
+        if (d.movements) setMovements(d.movements);
+        if (d.hourly) setHourly(d.hourly);
+        if (d.otp) setOtp(d.otp);
+        if (d.secD) setSecD(d.secD);
+        if (d.incidents) setIncidents(d.incidents);
+        if (typeof d.notes === 'string') setNotes(d.notes);
+      }
+    } catch {}
+    setRestoredKey(draftKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey, loading]);
+
+  // Auto-save tiap ada perubahan (hanya setelah restore selesai utk key ini)
+  useEffect(() => {
+    if (!draftKey || restoredKey !== draftKey) return;
+    try { localStorage.setItem(draftKey, JSON.stringify(collectDraft())); } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey, restoredKey, secA, secB, movements, hourly, otp, secD, incidents, notes]);
+
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -258,7 +293,11 @@ export default function DailyReport() {
     }
     if (data.communication_systems?.length) {
       const d = initSecD();
-      data.communication_systems.forEach(s => { if (d[s.system_key]) d[s.system_key] = { status: s.status, notes: s.notes || '' }; });
+      const byLabel = Object.fromEntries(COMM_SYSTEMS.map(c => [c.label, c.key]));
+      data.communication_systems.forEach(s => {
+        const key = byLabel[s.system_name];
+        if (key && d[key]) d[key] = { status: s.status, notes: s.notes || '' };
+      });
       setSecD(d);
     }
     if (data.incident_reports?.length) {
@@ -313,21 +352,35 @@ export default function DailyReport() {
       }
       if (!reportId) throw new Error('Gagal mendapatkan ID laporan. Cek koneksi Supabase dan RLS policy.');
 
+      // Map camelCase form keys -> snake_case DB columns
+      const COL_MAP = { depDom:'dep_dom', depInt:'dep_int', arrDom:'arr_dom', arrInt:'arr_int' };
+      const dbCol = (k) => COL_MAP[k] || k;
       await supabase.from('traffic_movements').delete().eq('daily_report_id', reportId);
-      await supabase.from('traffic_movements').insert(TRAFFIC_TYPES.map(t => ({ daily_report_id: reportId, movement_type: t.key, ...ALL_COLS.reduce((a, c) => ({ ...a, [c.key]: parseInt(movements[t.key][c.key]) || 0 }), {}) })));
+      const tmErr = (await supabase.from('traffic_movements').insert(
+        TRAFFIC_TYPES.map(t => ({ daily_report_id: reportId, movement_type: t.key,
+          ...ALL_COLS.reduce((a, c) => ({ ...a, [dbCol(c.key)]: parseInt(movements[t.key][c.key]) || 0 }), {}) }))
+      )).error;
+      if (tmErr) throw new Error('Traffic: ' + tmErr.message);
 
       const hRows = hourly.map((v, i) => ({ daily_report_id: reportId, hour_utc: i, total_traffic: parseInt(v) || 0 })).filter(r => r.total_traffic > 0);
       await supabase.from('hourly_traffic').delete().eq('daily_report_id', reportId);
-      if (hRows.length) await supabase.from('hourly_traffic').insert(hRows);
+      if (hRows.length) { const hErr = (await supabase.from('hourly_traffic').insert(hRows)).error; if (hErr) throw new Error('Hourly: ' + hErr.message); }
 
       await supabase.from('communication_systems').delete().eq('daily_report_id', reportId);
-      await supabase.from('communication_systems').insert(commSystems.map(s => ({ daily_report_id: reportId, system_key: s.key, system_name: s.label, status: secD[s.key]?.status || 'Normal', notes: secD[s.key]?.notes || '' })));
+      const csErr = (await supabase.from('communication_systems').insert(commSystems.map(cs => ({ daily_report_id: reportId, system_name: cs.label, status: secD[cs.key]?.status || 'Normal', notes: secD[cs.key]?.notes || '' })))).error;
+      if (csErr) throw new Error('Peralatan: ' + csErr.message);
 
       await supabase.from('incident_reports').delete().eq('daily_report_id', reportId);
-      const iRows = incidents.filter(i => i.jenis || i.waktu).map(i => ({ daily_report_id: reportId, incident_time: i.waktu || null, incident_type: i.jenis, affected_system: i.sistem, duration_minutes: parseInt(i.durasi) || null, follow_up_action: i.tindakLanjut, notes: i.keterangan }));
-      if (iRows.length) await supabase.from('incident_reports').insert(iRows);
+      const iRows = incidents.filter(i => i.jenis || i.waktu).map(i => ({ daily_report_id: reportId, incident_time: i.waktu || '00:00', incident_type: i.jenis || '-', affected_system: i.sistem, duration_minutes: parseInt(i.durasi) || null, follow_up_action: i.tindakLanjut, notes: i.keterangan }));
+      if (iRows.length) { const incErr = (await supabase.from('incident_reports').insert(iRows)).error; if (incErr) throw new Error('Insiden: ' + incErr.message); }
 
       setExistingStatus(status);
+      // Setelah SUBMIT sukses: hapus draft lokal + bersihkan form
+      if (status === 'submitted' && draftKey) {
+        try { localStorage.removeItem(draftKey); } catch {}
+        setRestoredKey(null);
+        resetForm();
+      }
       setSaveMsg({ ok: true, text: status === 'submitted' ? '✅ Laporan berhasil dikirim ke INMC!' : '💾 Draft tersimpan.' });
       // Audit log
       if (status === 'submitted') {
@@ -716,6 +769,10 @@ export default function DailyReport() {
           Step {sIdx + 1} / {SECTIONS.length} — {SECTIONS[sIdx].icon} {SECTIONS[sIdx].label}
         </span>
         <div style={{ display: 'flex', gap: 10 }}>
+          <button type="button" onClick={() => handleSave('draft')} disabled={saving} style={{
+            padding: '9px 20px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent',
+            color: 'var(--fg)', fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer',
+          }}>💾 {saving ? 'Menyimpan...' : 'Simpan Draft'}</button>
           <button type="button" onClick={() => handleSave('submitted')} disabled={saving} style={{
             padding: '9px 26px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
             color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 0 16px rgba(37,99,235,0.4)',
