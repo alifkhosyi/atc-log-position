@@ -728,6 +728,10 @@ export default function DailyReport() {
           Step {sIdx + 1} / {SECTIONS.length} — {SECTIONS[sIdx].icon} {SECTIONS[sIdx].label}
         </span>
         <div style={{ display: 'flex', gap: 10 }}>
+          <button type="button" onClick={() => handleSave('draft')} disabled={saving} style={{
+            padding: '9px 20px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent',
+            color: 'var(--fg)', fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer',
+          }}>💾 {saving ? 'Menyimpan...' : 'Simpan Draft'}</button>
           <button type="button" onClick={() => handleSave('submitted')} disabled={saving} style={{
             padding: '9px 26px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
             color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 0 16px rgba(37,99,235,0.4)',
